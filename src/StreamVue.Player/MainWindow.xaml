@@ -513,6 +513,12 @@
                         <StackPanel Grid.Column="2" Margin="16,0" VerticalAlignment="Center">
                             <TextBlock x:Name="PlaybackStatusText" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="IDLE" />
                             <TextBlock x:Name="PlaybackDetailText" Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" Text="No channel selected" TextTrimming="CharacterEllipsis" />
+                            <Grid x:Name="RecordingSeekPanel" Margin="0,5,0,0" Visibility="Collapsed">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <TextBlock x:Name="RecordingPositionText" VerticalAlignment="Center" Foreground="#8E9DB1" FontSize="8.5" Text="0:00" />
+                                <Slider x:Name="PlaybackSeekSlider" Grid.Column="1" Height="15" Margin="9,0" Minimum="0" Maximum="1" IsMoveToPointEnabled="True" PreviewMouseLeftButtonDown="PlaybackSeekSlider_PreviewMouseLeftButtonDown" PreviewMouseLeftButtonUp="PlaybackSeekSlider_PreviewMouseLeftButtonUp" KeyUp="PlaybackSeekSlider_KeyUp" Foreground="{StaticResource AccentBrush}" />
+                                <TextBlock x:Name="RecordingDurationText" Grid.Column="2" VerticalAlignment="Center" Foreground="#8E9DB1" FontSize="8.5" Text="0:00" />
+                            </Grid>
                         </StackPanel>
                         <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                             <Button Style="{StaticResource IconButton}" Click="Mute_Click" ToolTip="Mute">
@@ -1078,7 +1084,7 @@
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
                     <TextBlock Foreground="#566176" FontSize="9" Text="↑↓ CHANNELS • BACKSPACE LAST" />
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
-                    <TextBlock Foreground="#566176" FontSize="9" Text="3.3 DVR PREVIEW" />
+                    <TextBlock Foreground="#566176" FontSize="9" Text="3.4 DVR LIBRARY" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -1704,7 +1710,7 @@
                                     <TextBlock Foreground="#FF7184" FontSize="8" FontWeight="Bold" Text="DIRECT TRANSPORT STREAM" />
                                 </Border>
                             </StackPanel>
-                            <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Record live channels now or schedule a program from the TV Guide." />
+                            <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Record live channels, schedule from the TV Guide, and play your saved library without leaving StreamVue." />
                         </StackPanel>
                         <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseDvr_Click" ToolTip="Close"><TextBlock FontSize="18" Text="×" /></Button>
                     </Grid>
@@ -1739,6 +1745,8 @@
                                     <StackPanel>
                                         <TextBlock Foreground="#718198" FontSize="8.5" FontWeight="Bold" Text="RECORDINGS FOLDER" />
                                         <TextBox x:Name="RecordingFolderBox" Height="38" Margin="0,8,12,0" Padding="11,8" ToolTip="Where StreamVue saves .ts recordings" />
+                                        <TextBlock x:Name="DvrStorageText" Margin="0,8,12,0" Foreground="#8090A6" FontSize="9" Text="Storage information will appear here" />
+                                        <ProgressBar x:Name="DvrStorageProgress" Height="3" Margin="0,6,12,0" Minimum="0" Maximum="100" Value="0" Foreground="{StaticResource AccentBrush}" Background="#253145" />
                                     </StackPanel>
                                     <Button Grid.Column="1" Margin="0,23,8,0" VerticalAlignment="Top" Style="{StaticResource SecondaryButton}" Click="BrowseRecordingsFolder_Click" Content="Browse…" />
                                     <Button Grid.Column="2" Margin="0,23,0,0" VerticalAlignment="Top" Style="{StaticResource SecondaryButton}" Click="OpenRecordingsFolder_Click" Content="Open folder" />
@@ -1747,7 +1755,7 @@
 
                             <Grid Margin="0,18,0,8">
                                 <TextBlock Foreground="#7E8DA3" FontSize="9" FontWeight="Bold" Text="SCHEDULED FROM THE TV GUIDE" />
-                                <TextBlock HorizontalAlignment="Right" Foreground="#66758B" FontSize="9" Text="RIGHT-CLICK A GUIDE PROGRAM" />
+                                <TextBlock x:Name="DvrConflictText" HorizontalAlignment="Right" Foreground="#D4B47D" FontSize="9" FontWeight="SemiBold" Text="RIGHT-CLICK A GUIDE PROGRAM" />
                             </Grid>
                             <Border CornerRadius="14" Background="#0D131D" BorderBrush="#273247" BorderThickness="1" ClipToBounds="True">
                                 <Grid>
@@ -1794,8 +1802,20 @@
                                                         <StackPanel>
                                                             <TextBlock Foreground="#E0E7F1" FontSize="10.5" FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                                                             <TextBlock Margin="0,4,0,0" Foreground="#6E7D92" FontSize="8.5" Text="{Binding Detail}" />
+                                                            <ProgressBar Height="3" Margin="0,7,18,0" Maximum="100" Value="{Binding ProgressPercent, Mode=OneWay}" Foreground="{StaticResource AccentBrush}" Background="#253145">
+                                                                <ProgressBar.Style>
+                                                                    <Style TargetType="ProgressBar">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                        <Style.Triggers><DataTrigger Binding="{Binding ShowProgress}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers>
+                                                                    </Style>
+                                                                </ProgressBar.Style>
+                                                            </ProgressBar>
                                                         </StackPanel>
-                                                        <Button Grid.Column="1" Padding="10,6" VerticalAlignment="Center" Style="{StaticResource SecondaryButton}" Click="OpenRecordingFileLocation_Click" Content="Show in folder" />
+                                                        <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center" Orientation="Horizontal">
+                                                            <Button MinWidth="66" Padding="10,6" Style="{StaticResource PrimaryButton}" Click="PlayRecording_Click" IsEnabled="{Binding CanDelete}" Content="{Binding ActionLabel}" />
+                                                            <Button Margin="7,0,0,0" Padding="10,6" Style="{StaticResource SecondaryButton}" Click="OpenRecordingFileLocation_Click" Content="Show" ToolTip="Show this recording in File Explorer" />
+                                                            <Button Margin="7,0,0,0" Padding="10,6" Style="{StaticResource SecondaryButton}" Foreground="#FF7184" Click="DeleteRecording_Click" IsEnabled="{Binding CanDelete}" Content="Delete" />
+                                                        </StackPanel>
                                                     </Grid>
                                                 </Border>
                                             </DataTemplate>

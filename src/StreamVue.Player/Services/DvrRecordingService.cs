@@ -1,4 +1,5 @@
 using System.IO;
+using System.Security.Cryptography;
 using System.Text;
 using LibVLCSharp.Shared;
 using StreamVue.Player.Models;
@@ -137,7 +138,7 @@ public sealed class DvrRecordingService : IDisposable
         }
     }
 
-    public IReadOnlyList<DvrLibraryItem> ListRecentRecordings(string? recordingsFolder, int maximum = 8)
+    public IReadOnlyList<DvrLibraryItem> ListRecentRecordings(string? recordingsFolder, int maximum = 30)
     {
         var folder = NormalizeRecordingsFolder(recordingsFolder);
         if (!Directory.Exists(folder)) return [];
@@ -159,6 +160,81 @@ public sealed class DvrRecordingService : IDisposable
         {
             return [];
         }
+    }
+
+    public DvrStorageSnapshot GetStorageSnapshot(string? recordingsFolder)
+    {
+        var folder = NormalizeRecordingsFolder(recordingsFolder);
+        try
+        {
+            var files = Directory.Exists(folder)
+                ? Directory.EnumerateFiles(folder, "*.ts", SearchOption.TopDirectoryOnly)
+                    .Select(path => new FileInfo(path))
+                    .Where(file => file.Length > 0)
+                    .ToList()
+                : [];
+            var root = Path.GetPathRoot(folder);
+            if (string.IsNullOrWhiteSpace(root)) return new DvrStorageSnapshot(false, 0, 0, files.Sum(file => file.Length), files.Count);
+            var drive = new DriveInfo(root);
+            return new DvrStorageSnapshot(
+                drive.IsReady,
+                drive.IsReady ? drive.TotalSize : 0,
+                drive.IsReady ? drive.AvailableFreeSpace : 0,
+                files.Sum(file => file.Length),
+                files.Count);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return new DvrStorageSnapshot(false, 0, 0, 0, 0);
+        }
+    }
+
+    public void DeleteRecording(string filePath, string? recordingsFolder)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var folder = NormalizeRecordingsFolder(recordingsFolder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var candidate = Path.GetFullPath(filePath);
+        var parent = Path.GetDirectoryName(candidate)?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (!string.Equals(parent, folder, StringComparison.OrdinalIgnoreCase) ||
+            !Path.GetExtension(candidate).Equals(".ts", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("StreamVue only deletes transport-stream files from the selected recordings folder.");
+
+        lock (_gate)
+        {
+            if (_snapshot.IsActive && string.Equals(_snapshot.OutputPath, candidate, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Stop and save the active recording before deleting it.");
+            if (!File.Exists(candidate)) throw new FileNotFoundException("That recording no longer exists.", candidate);
+            File.Delete(candidate);
+        }
+    }
+
+    public static string CreateLibraryKey(string filePath)
+    {
+        var normalized = Path.GetFullPath(filePath).Trim().ToUpperInvariant();
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)));
+    }
+
+    public static bool SchedulesOverlap(ScheduledRecording first, ScheduledRecording second) =>
+        first.StartUtc < second.StopUtc && second.StartUtc < first.StopUtc;
+
+    public static IReadOnlySet<Guid> FindConflictingScheduleIds(IEnumerable<ScheduledRecording> recordings)
+    {
+        var active = recordings
+            .Where(recording => recording.Status is "Scheduled" or "Recording")
+            .OrderBy(recording => recording.StartUtc)
+            .ToList();
+        var conflicts = new HashSet<Guid>();
+        for (var firstIndex = 0; firstIndex < active.Count; firstIndex++)
+        {
+            for (var secondIndex = firstIndex + 1; secondIndex < active.Count; secondIndex++)
+            {
+                if (active[secondIndex].StartUtc >= active[firstIndex].StopUtc) break;
+                if (!SchedulesOverlap(active[firstIndex], active[secondIndex])) continue;
+                conflicts.Add(active[firstIndex].Id);
+                conflicts.Add(active[secondIndex].Id);
+            }
+        }
+        return conflicts;
     }
 
     public static string NormalizeRecordingsFolder(string? folder)

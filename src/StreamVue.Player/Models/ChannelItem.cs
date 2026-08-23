@@ -10,7 +10,8 @@ public enum ChannelKind
 {
     Live,
     Movie,
-    Series
+    Series,
+    Recording
 }
 
 public sealed class ChannelItem : INotifyPropertyChanged
@@ -134,6 +135,7 @@ public sealed class ChannelItem : INotifyPropertyChanged
     {
         ChannelKind.Movie => "MOVIE",
         ChannelKind.Series => "SERIES",
+        ChannelKind.Recording => "RECORDING",
         _ => "LIVE"
     };
 

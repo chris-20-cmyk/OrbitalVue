@@ -9,9 +9,9 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>StreamVue</AssemblyName>
     <RootNamespace>StreamVue.Player</RootNamespace>
-    <Version>3.3.0-alpha.1</Version>
-    <FileVersion>3.3.0.1</FileVersion>
-    <AssemblyVersion>3.3.0.0</AssemblyVersion>
+    <Version>3.4.0-alpha.1</Version>
+    <FileVersion>3.4.0.1</FileVersion>
+    <AssemblyVersion>3.4.0.0</AssemblyVersion>
     <Product>StreamVue</Product>
     <Company>Chris</Company>
     <Description>StreamVue — a premium native IPTV player for Windows.</Description>

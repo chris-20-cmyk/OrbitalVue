@@ -143,6 +143,15 @@ try
                 StopUtc = DateTimeOffset.UtcNow.AddHours(3)
             }
         ],
+        RecordingPlaybackProgress = new Dictionary<string, DvrPlaybackProgress>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["RECORDING-PROBE"] = new DvrPlaybackProgress
+            {
+                PositionMilliseconds = 420_000,
+                DurationMilliseconds = 3_600_000,
+                UpdatedUtc = DateTimeOffset.UtcNow
+            }
+        },
         Multiview = new MultiviewPreferences
         {
             Layout = MultiviewLayout.Quad.ToString(),
@@ -196,8 +205,10 @@ try
         throw new InvalidOperationException("Program reminders did not persist.");
     if (actual.RecordingsFolder != Path.Combine(testRoot, "recordings") ||
         actual.ScheduledRecordings.Count != 1 || actual.ScheduledRecordings[0].ProgramTitle != "Late Report" ||
-        actual.ScheduledRecordings[0].Status != "Scheduled")
-        throw new InvalidOperationException("DVR folder or scheduled recordings did not persist.");
+        actual.ScheduledRecordings[0].Status != "Scheduled" ||
+        !actual.RecordingPlaybackProgress.TryGetValue("RECORDING-PROBE", out var playbackProgress) ||
+        playbackProgress.PositionMilliseconds != 420_000 || playbackProgress.DurationMilliseconds != 3_600_000)
+        throw new InvalidOperationException("DVR folder, schedule, or recording resume position did not persist.");
     if (actual.Multiview.Layout != MultiviewLayout.Quad.ToString() || actual.Multiview.ActiveSlot != 2 ||
         actual.Multiview.AudioSlot != 1 || actual.Multiview.ChannelKeys.Count != MultiviewSession.MaximumTiles ||
         actual.Multiview.ChannelKeys[0] != first.StableKey || actual.Multiview.ChannelKeys[2] != distinct.StableKey ||
@@ -462,7 +473,56 @@ try
         var recent = dvrLibrary.ListRecentRecordings(Path.GetDirectoryName(recordingPath));
         if (recent.Count != 1 || recent[0].Bytes != 4_096 || recent[0].FilePath != recordingPath)
             throw new InvalidOperationException("DVR recording library indexing failed.");
+        var storage = dvrLibrary.GetStorageSnapshot(Path.GetDirectoryName(recordingPath));
+        if (!storage.IsAvailable || storage.RecordingCount != 1 || storage.RecordingBytes != 4_096 || storage.FreeBytes <= 0)
+            throw new InvalidOperationException("DVR storage reporting failed.");
+        var firstKey = DvrRecordingService.CreateLibraryKey(recordingPath);
+        var secondKey = DvrRecordingService.CreateLibraryKey(recordingPath.ToUpperInvariant());
+        if (firstKey.Length != 64 || !firstKey.Equals(secondKey, StringComparison.Ordinal))
+            throw new InvalidOperationException("DVR recording identity is not stable or privacy-safe.");
+
+        var deletePath = Path.Combine(Path.GetDirectoryName(recordingPath)!, "delete-me.ts");
+        await File.WriteAllBytesAsync(deletePath, [1, 2, 3]);
+        dvrLibrary.DeleteRecording(deletePath, Path.GetDirectoryName(recordingPath));
+        if (File.Exists(deletePath)) throw new InvalidOperationException("DVR safe delete did not remove the selected recording.");
+        try
+        {
+            dvrLibrary.DeleteRecording(settingsPath, Path.GetDirectoryName(recordingPath));
+            throw new InvalidOperationException("DVR safe delete accepted a file outside the recordings folder.");
+        }
+        catch (InvalidOperationException exception) when (exception.Message.Contains("selected recordings folder", StringComparison.Ordinal))
+        {
+        }
     }
+
+    var conflictStart = DateTimeOffset.UtcNow.AddHours(4);
+    var conflictFirst = new ScheduledRecording
+    {
+        ChannelKey = first.StableKey,
+        ChannelName = first.Name,
+        ProgramTitle = "Game One",
+        StartUtc = conflictStart,
+        StopUtc = conflictStart.AddHours(2)
+    };
+    var conflictSecond = new ScheduledRecording
+    {
+        ChannelKey = distinct.StableKey,
+        ChannelName = distinct.Name,
+        ProgramTitle = "News Special",
+        StartUtc = conflictStart.AddMinutes(30),
+        StopUtc = conflictStart.AddHours(1)
+    };
+    var noConflict = new ScheduledRecording
+    {
+        ChannelKey = first.StableKey,
+        ChannelName = first.Name,
+        ProgramTitle = "Later Show",
+        StartUtc = conflictStart.AddHours(2),
+        StopUtc = conflictStart.AddHours(3)
+    };
+    var conflictIds = DvrRecordingService.FindConflictingScheduleIds([conflictFirst, conflictSecond, noConflict]);
+    if (conflictIds.Count != 2 || !conflictIds.Contains(conflictFirst.Id) || !conflictIds.Contains(conflictSecond.Id) || conflictIds.Contains(noConflict.Id))
+        throw new InvalidOperationException("DVR schedule conflict detection failed.");
 
     var castService = new WindowsCastService();
     if (!castService.IsSupported || WindowsCastService.NearbyDisplayShortcut != "Windows + K" ||
@@ -538,6 +598,9 @@ try
     Console.WriteLine("DVR schedule persistence: PASS");
     Console.WriteLine("Safe transport-stream recording output: PASS");
     Console.WriteLine("DVR recording library indexing: PASS");
+    Console.WriteLine("DVR playback resume persistence: PASS");
+    Console.WriteLine("DVR storage reporting and safe delete: PASS");
+    Console.WriteLine("DVR schedule conflict detection: PASS");
     Console.WriteLine("Persistent four-view assignments: PASS");
     Console.WriteLine("Saved multiview layouts: PASS");
     Console.WriteLine("Single-audio multiview policy: PASS");
@@ -622,7 +685,34 @@ static async Task<int> RunDvrSelfTestAsync()
                 $"(state={snapshot.State}, bytes={snapshot.BytesWritten:N0}, exists={File.Exists(snapshot.OutputPath)}, " +
                 $"message={snapshot.Message ?? "none"}).");
 
+        var recordingChannel = new ChannelItem
+        {
+            Number = 0,
+            Name = "DVR Playback Probe",
+            Group = "DVR Library",
+            Url = new Uri(snapshot.OutputPath).AbsoluteUri,
+            Kind = ChannelKind.Recording
+        };
+        using (var playback = new NativePlaybackEngine(new PlaybackPreferences()))
+        {
+            if (!playback.Play(recordingChannel))
+                throw new InvalidOperationException("The native player rejected the saved DVR recording.");
+            var playbackDeadline = DateTimeOffset.UtcNow.AddSeconds(6);
+            PlaybackSnapshot playbackSnapshot;
+            do
+            {
+                await Task.Delay(120);
+                playbackSnapshot = playback.GetSnapshot();
+            } while (!playbackSnapshot.IsPlaying && DateTimeOffset.UtcNow < playbackDeadline);
+            if (!playbackSnapshot.IsPlaying || playbackSnapshot.TuneStrategy != "Local recording")
+                throw new InvalidOperationException("The saved DVR recording did not enter local-recording playback mode.");
+            if (playbackSnapshot.Length > 500 && !playback.SeekTo(playbackSnapshot.Length / 2))
+                throw new InvalidOperationException("The saved DVR recording could not be seeked.");
+            playback.Stop();
+        }
+
         Console.WriteLine($"Live DVR transport-stream recording: PASS ({snapshot.BytesWritten:N0} bytes)");
+        Console.WriteLine("Native DVR library playback and seeking: PASS");
         return 0;
     }
     finally

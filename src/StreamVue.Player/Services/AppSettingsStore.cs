@@ -20,6 +20,7 @@ public sealed class AppSettings
     public List<ProgramReminder> ProgramReminders { get; set; } = [];
     public string? RecordingsFolder { get; set; }
     public List<ScheduledRecording> ScheduledRecordings { get; set; } = [];
+    public Dictionary<string, DvrPlaybackProgress> RecordingPlaybackProgress { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public MultiviewPreferences Multiview { get; set; } = new();
 }
 

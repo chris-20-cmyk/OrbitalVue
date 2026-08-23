@@ -1,35 +1,35 @@
-# StreamVue 3.3.0 Live DVR
+# StreamVue 3.4.0 DVR Library
 
-StreamVue 3.3 adds original-quality live recording and TV Guide scheduling while preserving the native playback, casting, and multi-monitor improvements from 3.2.
+StreamVue 3.4 turns the Live DVR foundation into a complete in-app recordings library while preserving the native playback, casting, multi-monitor, guide, and Playback IQ improvements from earlier releases.
 
-## Record live TV
+## Watch saved recordings
 
-- Start or stop a recording from the Watch controls, the new DVR center, or Ctrl+Shift+R
-- Capture the provider's live transport stream directly without retuning or interrupting playback
-- Keep visible elapsed-time, file-size, channel, program, and save-status feedback
-- Save recordings as broadly compatible `.ts` files without quality-reducing video transcoding
-- Record the active Multiview tile while leaving the rest of the signal grid undisturbed
+- Play saved `.ts` recordings directly inside StreamVue through the native LibVLC renderer
+- Keep live-stream reconnect and stall recovery isolated from local recording playback
+- Seek through a recording from the Watch controls with elapsed and total time feedback
+- Resume each recording automatically from its last meaningful position
+- Clear the saved resume point after playback reaches the end
 
-## Schedule from the TV Guide
+## Manage the DVR library
 
-- Right-click a current or upcoming guide program to schedule or cancel its recording
-- Start and stop scheduled recordings automatically while StreamVue is open
-- Preserve upcoming schedules across restarts and clearly label completed, missed, or failed events
-- Enforce one active recording at a time to avoid uncontrolled provider connections
+- See recording date, time, file size, resume point, and watched progress in one compact row
+- Review drive capacity, available space, total recording size, and recording count
+- Reveal a recording in Windows File Explorer without leaving the library
+- Delete recordings only after confirmation, with deletion constrained to `.ts` files inside the selected recordings folder
+- Protect the active recording and the file currently being played from accidental deletion
 
-## Recordings center
+## Catch schedule conflicts early
 
-- Choose a recordings folder or open it directly in Windows Explorer
-- Review recent recordings with date, time, and file size
-- Reveal any saved recording in its folder with one click
-- Warn when a provider may count recording as an additional simultaneous stream
+- Detect overlapping TV Guide recording schedules before they begin
+- Warn before adding a new conflicting schedule and let the viewer cancel the change
+- Label every affected schedule clearly in the DVR center
+- Continue enforcing one simultaneous recorder to avoid unexpected provider connection use
 
-## Safe lifecycle and verification
+## Verification
 
-- Prevent an in-app update restart until the active recording has been stopped and finalized
-- Confirm before closing StreamVue during a recording
-- Remove empty failed outputs instead of adding unusable files to the recordings library
-- Verify direct MPEG-TS remuxing with a real local transport-stream fixture
-- Pass the complete existing playlist, guide, updater, fullscreen, Multiview, multi-monitor, backup, casting, and Playback IQ feature suite
+- Exercise a real recorded transport stream through native library playback and seeking
+- Verify resume persistence, stable privacy-safe recording identity, storage reporting, guarded deletion, and overlap detection
+- Pass the complete playlist, guide, updater, fullscreen, Multiview, multi-monitor, backup, casting, and Playback IQ feature suite
+- Visually verify the window-sized DVR center with storage, conflicts, resume progress, and management controls populated
 
-This build installs in place through StreamVue's UPDATE button. Existing settings, playlists, favorites, guide data, reminders, channel profiles, backups, Cast behavior, and Multiview assignments are preserved.
+This build installs in place through StreamVue's UPDATE button. Existing settings, playlists, favorites, guide data, reminders, channel profiles, recordings, backups, Cast behavior, and Multiview assignments are preserved.

@@ -4,10 +4,15 @@ StreamVue is a Windows-native IPTV player built with .NET, WPF, LibVLCSharp, the
 
 ## Current preview
 
+- Native in-app playback for saved DVR recordings with a compact seek bar and original-quality local-file rendering
+- Automatic per-recording resume positions, a visible watched-progress indicator, and completed-playback cleanup
+- Safe confirmed recording deletion constrained to the selected recordings folder
+- DVR storage reporting with free space, total capacity, library size, and recording count
+- Advance warnings and visible conflict labels when TV Guide recording schedules overlap
 - One-click live DVR recording from the player controls or Ctrl+Shift+R, with elapsed-time, file-size, and save status
 - Independent direct-stream capture that records original-quality MPEG-TS without retuning or interrupting the channel being watched
 - TV Guide scheduling with automatic start and stop while StreamVue is open
-- Configurable recordings folder plus a built-in recent-recordings library
+- Configurable recordings folder plus a playable built-in recordings library
 - Recording-safe updates and shutdown confirmation so active transport-stream files close cleanly
 - Native CAST control that opens Windows nearby-display discovery for powered-on Miracast TVs, projectors, adapters, and receiving PCs—even when they have not been paired before
 - Privacy-preserving screen-and-audio mirroring that keeps playlist addresses, decoding, subtitles, aspect ratio, and Playback IQ on the PC
@@ -95,7 +100,7 @@ The application targets Windows x64 and the current .NET 10 LTS release.
 ## Verification tools
 
 - `StreamVue.PlaylistProbe` validates large-list parsing and favorite-key uniqueness.
-- `StreamVue.FeatureProbe` checks DVR transport-stream capture, scheduling persistence, privacy-safe favorite identity, settings persistence, encrypted backup/restore, diagnostic redaction, nearby-display casting entry points, and Multiview policies.
+- `StreamVue.FeatureProbe` checks DVR transport-stream capture and native playback, resume persistence, storage reporting, safe deletion, schedule conflicts, privacy-safe favorite identity, settings persistence, encrypted backup/restore, diagnostic redaction, nearby-display casting entry points, and Multiview policies.
 - `StreamVue.PlaybackProbe` checks native live playback and bounded reconnect behavior.
 
 ## Privacy

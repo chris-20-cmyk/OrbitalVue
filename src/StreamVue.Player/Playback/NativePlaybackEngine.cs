@@ -71,7 +71,11 @@ public sealed class NativePlaybackEngine : IDisposable
         MediaPlayer.Playing += (_, _) => HandlePlaying();
         MediaPlayer.Paused += (_, _) => Publish(PlaybackState.Paused, "Paused");
         MediaPlayer.Stopped += (_, _) => Publish(PlaybackState.Stopped, "Stopped");
-        MediaPlayer.EndReached += (_, _) => HandleUnexpectedTermination("The live stream ended unexpectedly.");
+        MediaPlayer.EndReached += (_, _) =>
+        {
+            if (_currentChannel?.Kind == ChannelKind.Recording) HandleRecordingEnded();
+            else HandleUnexpectedTermination("The live stream ended unexpectedly.");
+        };
         MediaPlayer.EncounteredError += (_, _) => HandleUnexpectedTermination(
             "The provider closed the stream or returned media LibVLC could not decode.");
 
@@ -135,19 +139,32 @@ public sealed class NativePlaybackEngine : IDisposable
         ReleaseMedia();
         ResetProgressMonitor();
 
-        _currentPlan = PlaybackIntelligencePolicy.CreatePlan(
-            _preferences,
-            channel.Url,
-            _currentProfile,
-            _channelInstability.GetValueOrDefault(channel.StableKey),
-            _softwareFallbackActive);
+        _currentPlan = channel.Kind == ChannelKind.Recording
+            ? new PlaybackTunePlan(
+                1_000,
+                EffectiveHardwareDecoding && !_softwareFallbackActive,
+                "Local recording",
+                "Playing the original saved transport stream directly from this PC.")
+            : PlaybackIntelligencePolicy.CreatePlan(
+                _preferences,
+                channel.Url,
+                _currentProfile,
+                _channelInstability.GetValueOrDefault(channel.StableKey),
+                _softwareFallbackActive);
         _activeCacheMilliseconds = _currentPlan.CacheMilliseconds;
 
         _currentMedia = new Media(_libVlc, new Uri(channel.Url));
-        _currentMedia.AddOption($":network-caching={_activeCacheMilliseconds}");
-        _currentMedia.AddOption($":live-caching={_activeCacheMilliseconds}");
-        _currentMedia.AddOption($":file-caching={Math.Max(1_000, _activeCacheMilliseconds / 2)}");
-        _currentMedia.AddOption(":http-reconnect");
+        if (channel.Kind == ChannelKind.Recording)
+        {
+            _currentMedia.AddOption(":file-caching=1000");
+        }
+        else
+        {
+            _currentMedia.AddOption($":network-caching={_activeCacheMilliseconds}");
+            _currentMedia.AddOption($":live-caching={_activeCacheMilliseconds}");
+            _currentMedia.AddOption($":file-caching={Math.Max(1_000, _activeCacheMilliseconds / 2)}");
+            _currentMedia.AddOption(":http-reconnect");
+        }
         _currentMedia.AddOption(_currentPlan.UseHardwareDecoding ? ":avcodec-hw=any" : ":avcodec-hw=none");
         if (!string.IsNullOrWhiteSpace(channel.UserAgent))
             _currentMedia.AddOption($":http-user-agent={channel.UserAgent}");
@@ -167,6 +184,15 @@ public sealed class NativePlaybackEngine : IDisposable
     {
         ThrowIfDisposed();
         MediaPlayer.Pause();
+    }
+
+    public bool SeekTo(long milliseconds)
+    {
+        ThrowIfDisposed();
+        var length = MediaPlayer.Length;
+        if (!MediaPlayer.IsSeekable || length <= 0) return false;
+        MediaPlayer.Time = Math.Clamp(milliseconds, 0, Math.Max(0, length - 250));
+        return true;
     }
 
     public void Stop()
@@ -392,20 +418,38 @@ public sealed class NativePlaybackEngine : IDisposable
         ApplyDeinterlaceToPlayer(EffectiveDeinterlaceMode);
         if (_currentProfile?.AudioTrackId is int audioTrackId) MediaPlayer.SetAudioTrack(audioTrackId);
         if (_currentProfile?.SubtitleTrackId is int subtitleTrackId) MediaPlayer.SetSpu(subtitleTrackId);
+        var recordingPlayback = _currentChannel?.Kind == ChannelKind.Recording;
         Publish(
             PlaybackState.Playing,
-            _softwareFallbackActive ? "Live • software fallback" : $"Live • {_currentPlan?.Strategy ?? "Smart tune"}",
+            recordingPlayback
+                ? "Recording • original quality"
+                : _softwareFallbackActive ? "Live • software fallback" : $"Live • {_currentPlan?.Strategy ?? "Smart tune"}",
             technicalDetail: _currentPlan?.Explanation);
 
         _stabilityCancellation?.Cancel();
         _stabilityCancellation?.Dispose();
-        _stabilityCancellation = new CancellationTokenSource();
-        _ = ResetRecoveryBudgetAfterStablePlaybackAsync(_currentChannel, _stabilityCancellation.Token);
+        _stabilityCancellation = null;
+        if (_currentChannel?.Kind == ChannelKind.Live)
+        {
+            _stabilityCancellation = new CancellationTokenSource();
+            _ = ResetRecoveryBudgetAfterStablePlaybackAsync(_currentChannel, _stabilityCancellation.Token);
+        }
+    }
+
+    private void HandleRecordingEnded()
+    {
+        if (_disposed || DateTimeOffset.UtcNow < _ignoreTerminationUntilUtc) return;
+        Publish(PlaybackState.Stopped, "Recording finished", technicalDetail: "Playback reached the end of the saved recording.");
     }
 
     private void HandleUnexpectedTermination(string technicalDetail)
     {
         if (_disposed || DateTimeOffset.UtcNow < _ignoreTerminationUntilUtc) return;
+        if (_currentChannel?.Kind == ChannelKind.Recording)
+        {
+            Publish(PlaybackState.Error, "Recording playback error", technicalDetail: technicalDetail);
+            return;
+        }
 
         if (_currentChannel is not null) RaiseInstability(_currentChannel);
         _networkFailureCount++;

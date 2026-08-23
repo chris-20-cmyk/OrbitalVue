@@ -113,6 +113,11 @@ public partial class MainWindow : Window
     private string _learnedProfileSignature = string.Empty;
     private string _handledDvrTerminalSignature = string.Empty;
     private string _dvrLibrarySignature = string.Empty;
+    private string? _currentRecordingPath;
+    private bool _recordingResumeApplied = true;
+    private bool _seekingRecording;
+    private DateTimeOffset _lastRecordingProgressSaveUtc = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastDvrLibraryRefreshUtc = DateTimeOffset.MinValue;
     private System.Windows.Point _dragStartPoint;
     private MultiviewLayout _multiviewLayout = MultiviewLayout.Quad;
     private DateTimeOffset? _sleepDeadline;
@@ -167,6 +172,14 @@ public partial class MainWindow : Window
         _settings.PlaylistHealth ??= new PlaylistHealthPreferences();
         _settings.ProgramReminders ??= [];
         _settings.ScheduledRecordings ??= [];
+        _settings.RecordingPlaybackProgress = _settings.RecordingPlaybackProgress is null
+            ? new Dictionary<string, DvrPlaybackProgress>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, DvrPlaybackProgress>(_settings.RecordingPlaybackProgress, StringComparer.OrdinalIgnoreCase);
+        foreach (var staleKey in _settings.RecordingPlaybackProgress
+                     .Where(pair => pair.Value is null || pair.Value.UpdatedUtc < DateTimeOffset.UtcNow.AddDays(-180))
+                     .Select(pair => pair.Key)
+                     .ToList())
+            _settings.RecordingPlaybackProgress.Remove(staleKey);
         _settings.RecordingsFolder = ResolveRecordingsFolder(_settings.RecordingsFolder);
         _settings.Multiview ??= new MultiviewPreferences();
         _settings.Multiview.ChannelKeys ??= [null, null, null, null];
@@ -487,12 +500,41 @@ public partial class MainWindow : Window
                         ProgramTitle = "Prime Time Live",
                         StartUtc = previewStart,
                         StopUtc = previewStart.AddHours(2)
+                    },
+                    new ScheduledRecording
+                    {
+                        ChannelKey = _channels[Math.Min(1, _channels.Count - 1)].StableKey,
+                        ChannelName = _channels[Math.Min(1, _channels.Count - 1)].Name,
+                        ProgramTitle = "Championship Pregame",
+                        StartUtc = previewStart.AddMinutes(30),
+                        StopUtc = previewStart.AddHours(1.5)
                     }
                 ];
             }
             if (commandLineArguments.Contains("--maximized", StringComparer.OrdinalIgnoreCase))
                 WindowState = WindowState.Maximized;
             OpenDvrPanel();
+            var previewRecording = new DvrLibraryItem(
+                Path.Combine(Path.GetTempPath(), "Prime Time Live.ts"),
+                DateTimeOffset.UtcNow.AddDays(-1),
+                4_831_838_208);
+            DvrLibraryList.ItemsSource = new[]
+            {
+                new DvrLibraryRow(
+                    previewRecording,
+                    DvrRecordingService.CreateLibraryKey(previewRecording.FilePath),
+                    new DvrPlaybackProgress
+                    {
+                        PositionMilliseconds = 2_145_000,
+                        DurationMilliseconds = 6_720_000,
+                        UpdatedUtc = DateTimeOffset.UtcNow
+                    },
+                    false,
+                    true)
+            };
+            DvrLibraryEmptyText.Visibility = Visibility.Collapsed;
+            DvrStorageText.Text = "186.4 GB free of 930.9 GB  •  12 recordings use 41.7 GB";
+            DvrStorageProgress.Value = 80;
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
             await Task.Delay(500);
             CaptureWindow(commandLineArguments[dvrCaptureArgumentIndex + 1]);
@@ -1269,7 +1311,7 @@ public partial class MainWindow : Window
         }
 
         var channel = _currentChannel;
-        HudChannelNumber.Text = $"CH {channel.Number}";
+        HudChannelNumber.Text = channel.Kind == ChannelKind.Recording ? "DVR" : $"CH {channel.Number}";
         HudChannelName.Text = channel.Name;
         HudGroupName.Text = $"• {channel.Group}";
         HudChannelInitials.Text = channel.Initials;
@@ -1291,7 +1333,9 @@ public partial class MainWindow : Window
             HudProgramProgress.Value = 0;
             HudNowTitle.Text = channel.Kind == ChannelKind.Live ? "Live television" : channel.KindLabel;
             HudProgramTime.Text = string.Empty;
-            HudNextTitle.Text = "Guide information unavailable";
+            HudNextTitle.Text = channel.Kind == ChannelKind.Recording
+                ? "SAVED LOCALLY  •  ORIGINAL QUALITY"
+                : "Guide information unavailable";
         }
 
         if (snapshot is not null)
@@ -1827,13 +1871,17 @@ public partial class MainWindow : Window
         TuneChannel(channel);
     }
 
-    private void TuneChannel(ChannelItem channel)
+    private void TuneChannel(ChannelItem channel, string? recordingPath = null)
     {
-        if (ReferenceEquals(channel, _currentChannel)) return;
+        if (ReferenceEquals(channel, _currentChannel) &&
+            string.Equals(recordingPath, _currentRecordingPath, StringComparison.OrdinalIgnoreCase)) return;
+        SaveCurrentRecordingProgress(force: true);
         _displayRefreshRate?.Restore();
-        if (_currentChannel is not null) _previousChannel = _currentChannel;
+        if (_currentChannel is not null && string.IsNullOrWhiteSpace(_currentRecordingPath)) _previousChannel = _currentChannel;
+        _currentRecordingPath = string.IsNullOrWhiteSpace(recordingPath) ? null : Path.GetFullPath(recordingPath);
+        _recordingResumeApplied = _currentRecordingPath is null;
         _currentChannel = channel;
-        _settings.LastChannelKey = channel.StableKey;
+        if (_currentRecordingPath is null) _settings.LastChannelKey = channel.StableKey;
         _learnedProfileSignature = string.Empty;
         NowPlayingHeading.Text = channel.Name;
         NowPlayingSubheading.Text = channel.Group;
@@ -1850,7 +1898,7 @@ public partial class MainWindow : Window
         SelectComboByContent(AspectBox, profile.AspectRatio ?? _settings.Playback.AspectRatio);
         _applyingChannelProfile = false;
         _playback?.Play(channel, profile);
-        TouchRecentChannel(channel);
+        if (_currentRecordingPath is null) TouchRecentChannel(channel);
         UpdateFullscreenHud();
     }
 
@@ -1919,7 +1967,9 @@ public partial class MainWindow : Window
                     _showRecoveryOverlay = false;
                     RefreshPlayerSurfaceVisibility();
                     FooterStatusDot.Fill = LiveBrush;
-                    FooterStatusText.Text = $"Native playback • {_currentChannel?.Name}";
+                    FooterStatusText.Text = _currentRecordingPath is null
+                        ? $"Native playback • {_currentChannel?.Name}"
+                        : $"DVR playback • {_currentChannel?.Name}";
                     LiveDot.Fill = LiveBrush;
                     PlayPauseGlyph.Text = "Ⅱ";
                     break;
@@ -1928,9 +1978,19 @@ public partial class MainWindow : Window
                     LiveDot.Fill = WarningBrush;
                     PlayPauseGlyph.Text = "▶";
                     break;
+                case PlaybackState.Stopped when _currentRecordingPath is not null && status.Message == "Recording finished":
+                    _settings.RecordingPlaybackProgress.Remove(DvrRecordingService.CreateLibraryKey(_currentRecordingPath));
+                    _ = _settingsStore.SaveAsync(_settings);
+                    FooterStatusDot.Fill = LiveBrush;
+                    FooterStatusText.Text = $"Recording finished • {_currentChannel?.Name}";
+                    LiveDot.Fill = IdleBrush;
+                    PlayPauseGlyph.Text = "▶";
+                    break;
                 case PlaybackState.Error:
                     FooterStatusDot.Fill = ErrorBrush;
-                    FooterStatusText.Text = "Playback error — try Stable buffer or another channel";
+                    FooterStatusText.Text = _currentRecordingPath is null
+                        ? "Playback error — try Stable buffer or another channel"
+                        : "Recording playback error — the saved file may be unavailable or damaged";
                     LiveDot.Fill = ErrorBrush;
                     PlayPauseGlyph.Text = "▶";
                     break;
@@ -1974,6 +2034,7 @@ public partial class MainWindow : Window
             ? "No interventions"
             : $"{snapshot.DecoderFallbacks} decode • {snapshot.StallRecoveries} stall";
         UpdateFullscreenHud(snapshot);
+        UpdateRecordingPlayback(snapshot);
         LearnCurrentChannelProfile(snapshot);
         CheckProgramReminders();
         var dvrSnapshot = _dvrRecording.Poll(DateTimeOffset.UtcNow);
@@ -1993,7 +2054,7 @@ public partial class MainWindow : Window
 
     private void LearnCurrentChannelProfile(PlaybackSnapshot snapshot)
     {
-        if (_currentChannel is null || !snapshot.IsPlaying || !_settings.Playback.PlaybackIntelligence) return;
+        if (_currentChannel is null || _currentRecordingPath is not null || !snapshot.IsPlaying || !_settings.Playback.PlaybackIntelligence) return;
         var signature = $"{_currentChannel.StableKey}:{snapshot.DecoderFallbacks}:{snapshot.StallRecoveries}:{snapshot.ReconnectAttempts}:{snapshot.StartupMilliseconds}";
         if (signature == _learnedProfileSignature) return;
         _learnedProfileSignature = signature;
@@ -2016,6 +2077,101 @@ public partial class MainWindow : Window
                 : profile.LearnedInstability;
         profile.UpdatedUtc = DateTimeOffset.UtcNow;
         _ = _settingsStore.SaveAsync(_settings);
+    }
+
+    private void UpdateRecordingPlayback(PlaybackSnapshot snapshot)
+    {
+        var isRecordingPlayback = _currentRecordingPath is not null && _currentChannel?.Kind == ChannelKind.Recording;
+        RecordingSeekPanel.Visibility = isRecordingPlayback ? Visibility.Visible : Visibility.Collapsed;
+        if (!isRecordingPlayback) return;
+
+        var length = Math.Max(0, snapshot.Length);
+        var position = Math.Clamp(snapshot.Time, 0, Math.Max(0, length));
+        if (!_recordingResumeApplied && length > 0)
+        {
+            _recordingResumeApplied = true;
+            var key = DvrRecordingService.CreateLibraryKey(_currentRecordingPath!);
+            if (_settings.RecordingPlaybackProgress.TryGetValue(key, out var progress) &&
+                progress.PositionMilliseconds >= 30_000 &&
+                progress.PositionMilliseconds < length - 30_000 &&
+                _playback?.SeekTo(progress.PositionMilliseconds) == true)
+            {
+                position = progress.PositionMilliseconds;
+                FooterStatusDot.Fill = LiveBrush;
+                FooterStatusText.Text = $"Resumed recording at {FormatPlaybackTime(position)} • {_currentChannel?.Name}";
+            }
+        }
+
+        if (!_seekingRecording)
+        {
+            PlaybackSeekSlider.Maximum = Math.Max(1, length);
+            PlaybackSeekSlider.Value = position;
+        }
+        RecordingPositionText.Text = FormatPlaybackTime(position);
+        RecordingDurationText.Text = FormatPlaybackTime(length);
+
+        if (DateTimeOffset.UtcNow - _lastRecordingProgressSaveUtc >= TimeSpan.FromSeconds(10))
+            SaveCurrentRecordingProgress(force: false, snapshot);
+    }
+
+    private void SaveCurrentRecordingProgress(bool force, PlaybackSnapshot? snapshot = null)
+    {
+        if (_currentRecordingPath is null || _playback is null) return;
+        snapshot ??= _playback.GetSnapshot();
+        if (snapshot.Length <= 0 || snapshot.Time < 0) return;
+
+        var key = DvrRecordingService.CreateLibraryKey(_currentRecordingPath);
+        var position = Math.Clamp(snapshot.Time, 0, snapshot.Length);
+        var changed = false;
+        if (position >= snapshot.Length - 30_000 || force && position < 30_000)
+        {
+            changed = _settings.RecordingPlaybackProgress.Remove(key);
+        }
+        else if (position >= 30_000)
+        {
+            if (!_settings.RecordingPlaybackProgress.TryGetValue(key, out var existing) ||
+                Math.Abs(existing.PositionMilliseconds - position) >= 1_000 ||
+                existing.DurationMilliseconds != snapshot.Length)
+            {
+                _settings.RecordingPlaybackProgress[key] = new DvrPlaybackProgress
+                {
+                    PositionMilliseconds = position,
+                    DurationMilliseconds = snapshot.Length,
+                    UpdatedUtc = DateTimeOffset.UtcNow
+                };
+                changed = true;
+            }
+        }
+
+        _lastRecordingProgressSaveUtc = DateTimeOffset.UtcNow;
+        if (changed) _ = _settingsStore.SaveAsync(_settings);
+    }
+
+    private void PlaybackSeekSlider_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) =>
+        _seekingRecording = _currentRecordingPath is not null;
+
+    private void PlaybackSeekSlider_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_currentRecordingPath is null) return;
+        _seekingRecording = false;
+        _playback?.SeekTo((long)PlaybackSeekSlider.Value);
+        RecordingPositionText.Text = FormatPlaybackTime((long)PlaybackSeekSlider.Value);
+        _lastRecordingProgressSaveUtc = DateTimeOffset.MinValue;
+    }
+
+    private void PlaybackSeekSlider_KeyUp(object sender, KeyEventArgs e)
+    {
+        if (_currentRecordingPath is null || e.Key is not (Key.Left or Key.Right or Key.Home or Key.End or Key.PageUp or Key.PageDown)) return;
+        _playback?.SeekTo((long)PlaybackSeekSlider.Value);
+        _lastRecordingProgressSaveUtc = DateTimeOffset.MinValue;
+    }
+
+    private static string FormatPlaybackTime(long milliseconds)
+    {
+        var duration = TimeSpan.FromMilliseconds(Math.Max(0, milliseconds));
+        return duration.TotalHours >= 1
+            ? $"{(int)duration.TotalHours}:{duration.Minutes:00}:{duration.Seconds:00}"
+            : $"{duration.Minutes}:{duration.Seconds:00}";
     }
 
     private void CheckProgramReminders()
@@ -2623,11 +2779,13 @@ public partial class MainWindow : Window
 
     private async void ToggleCurrentFavorite_Click(object sender, RoutedEventArgs e)
     {
-        if (_currentChannel is not null) await ToggleFavoriteAsync(_currentChannel);
+        if (_currentChannel is not null && _currentChannel.Kind != ChannelKind.Recording)
+            await ToggleFavoriteAsync(_currentChannel);
     }
 
     private async Task ToggleFavoriteAsync(ChannelItem channel)
     {
+        if (channel.Kind == ChannelKind.Recording) return;
         channel.IsFavorite = !channel.IsFavorite;
         if (channel.IsFavorite) _favoriteKeys.Add(channel.StableKey);
         else _favoriteKeys.Remove(channel.StableKey);
@@ -2644,8 +2802,10 @@ public partial class MainWindow : Window
 
     private void UpdateCurrentFavoriteButton(ChannelItem? channel)
     {
-        CurrentFavoriteButton.Visibility = channel is null ? Visibility.Collapsed : Visibility.Visible;
-        if (channel is null) return;
+        CurrentFavoriteButton.Visibility = channel is null || channel.Kind == ChannelKind.Recording
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        if (channel is null || channel.Kind == ChannelKind.Recording) return;
         CurrentFavoriteButton.Content = channel.IsFavorite ? "★ Favorited" : "☆ Add favorite";
     }
 
@@ -2921,13 +3081,18 @@ public partial class MainWindow : Window
         }
 
         if (_playback?.MediaPlayer.Media is null)
+        {
+            if (_currentRecordingPath is not null) _recordingResumeApplied = false;
             _playback?.Play(_currentChannel, GetOrCreateChannelProfile(_currentChannel));
+        }
         else _playback?.TogglePause();
     }
 
     private void Stop_Click(object sender, RoutedEventArgs e)
     {
+        SaveCurrentRecordingProgress(force: true);
         _playback?.Stop();
+        if (_currentRecordingPath is not null) _recordingResumeApplied = false;
         _displayRefreshRate?.Restore();
     }
 
@@ -2947,6 +3112,12 @@ public partial class MainWindow : Window
         if (_currentChannel is null)
         {
             ShowModal(ImportOverlay);
+            return;
+        }
+        if (_currentRecordingPath is not null)
+        {
+            FooterStatusDot.Fill = WarningBrush;
+            FooterStatusText.Text = "Stable buffer is only needed for live channels";
             return;
         }
 
@@ -3796,14 +3967,35 @@ public partial class MainWindow : Window
         }
         else
         {
-            _settings.ScheduledRecordings.Add(new ScheduledRecording
+            var candidate = new ScheduledRecording
             {
                 ChannelKey = block.Channel.StableKey,
                 ChannelName = block.Channel.Name,
                 ProgramTitle = block.Programme.Title,
                 StartUtc = block.Programme.Start,
                 StopUtc = block.Programme.Stop
-            });
+            };
+            var overlap = _settings.ScheduledRecordings.FirstOrDefault(recording =>
+                (recording.Status is "Scheduled" or "Recording") &&
+                DvrRecordingService.SchedulesOverlap(recording, candidate));
+            if (overlap is not null)
+            {
+                var result = MessageBox.Show(
+                    this,
+                    $"{candidate.ProgramTitle} overlaps {overlap.ProgramTitle}. StreamVue can record one channel at a time, so one program may be missed.\n\nSchedule it anyway?",
+                    "Recording schedule conflict",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.No);
+                if (result != MessageBoxResult.Yes)
+                {
+                    FooterStatusDot.Fill = WarningBrush;
+                    FooterStatusText.Text = $"Schedule unchanged • conflict with {overlap.ProgramTitle}";
+                    return;
+                }
+            }
+
+            _settings.ScheduledRecordings.Add(candidate);
             FooterStatusDot.Fill = LiveBrush;
             FooterStatusText.Text = block.Programme.Start <= now
                 ? $"Recording queued now • {block.Programme.Title}"
@@ -3973,10 +4165,11 @@ public partial class MainWindow : Window
             }
             else
             {
-                DvrCurrentTitle.Text = recordableChannel is null ? "Ready to record" : $"Ready • {recordableChannel.Name}";
-                DvrCurrentDetail.Text = recordableChannel is null
-                    ? "Choose a live channel, then press Record."
-                    : "Record the current live channel without interrupting playback.";
+                var canRecordCurrentChannel = recordableChannel?.Kind == ChannelKind.Live;
+                DvrCurrentTitle.Text = canRecordCurrentChannel ? $"Ready • {recordableChannel!.Name}" : "Ready to record";
+                DvrCurrentDetail.Text = canRecordCurrentChannel
+                    ? "Record the current live channel without interrupting playback."
+                    : "Choose a live channel, then press Record.";
                 DvrStateBadge.Background = new SolidColorBrush(Color.FromRgb(23, 36, 50));
                 DvrStateBadgeText.Foreground = new SolidColorBrush(Color.FromRgb(117, 185, 255));
                 DvrStateBadgeText.Text = "READY";
@@ -3984,24 +4177,46 @@ public partial class MainWindow : Window
         }
 
         if (snapshot.IsActive) DvrActionButton.IsEnabled = true;
+        var conflictingIds = DvrRecordingService.FindConflictingScheduleIds(_settings.ScheduledRecordings ?? []);
         var scheduleRows = (_settings.ScheduledRecordings ?? [])
             .OrderBy(recording => recording.Status is "Scheduled" or "Recording" ? 0 : 1)
             .ThenBy(recording => recording.StartUtc)
             .Take(20)
-            .Select(recording => new DvrScheduleRow(recording))
+            .Select(recording => new DvrScheduleRow(recording, conflictingIds.Contains(recording.Id)))
             .ToList();
         DvrScheduleList.ItemsSource = scheduleRows;
         DvrScheduleEmptyText.Visibility = scheduleRows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        DvrConflictText.Text = conflictingIds.Count == 0
+            ? "RIGHT-CLICK A GUIDE PROGRAM"
+            : $"⚠ {conflictingIds.Count:N0} OVERLAPPING SCHEDULE{(conflictingIds.Count == 1 ? string.Empty : "S")}";
 
-        var librarySignature = $"{snapshot.State}:{snapshot.OutputPath}:{snapshot.BytesWritten}:{_settings.RecordingsFolder}";
-        if (DvrOverlay.Visibility == Visibility.Visible ||
-            ((snapshot.State is DvrRecordingState.Completed or DvrRecordingState.Failed) &&
-             !string.Equals(_dvrLibrarySignature, librarySignature, StringComparison.Ordinal)))
+        var librarySignature = $"{snapshot.State}:{snapshot.OutputPath}:{snapshot.BytesWritten}:{_settings.RecordingsFolder}:{_currentRecordingPath}";
+        var terminalChanged = (snapshot.State is DvrRecordingState.Completed or DvrRecordingState.Failed) &&
+                              !string.Equals(_dvrLibrarySignature, librarySignature, StringComparison.Ordinal);
+        var visibleRefreshDue = DvrOverlay.Visibility == Visibility.Visible &&
+                                now - _lastDvrLibraryRefreshUtc >= TimeSpan.FromSeconds(2);
+        if (visibleRefreshDue || terminalChanged)
         {
             var library = _dvrRecording.ListRecentRecordings(_settings.RecordingsFolder);
-            DvrLibraryList.ItemsSource = library;
-            DvrLibraryEmptyText.Visibility = library.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            var activeOutput = snapshot.IsActive ? snapshot.OutputPath : null;
+            var rows = library.Select(recording =>
+            {
+                var key = DvrRecordingService.CreateLibraryKey(recording.FilePath);
+                _settings.RecordingPlaybackProgress.TryGetValue(key, out var progress);
+                var isPlaying = string.Equals(_currentRecordingPath, recording.FilePath, StringComparison.OrdinalIgnoreCase);
+                var canDelete = !isPlaying && !string.Equals(activeOutput, recording.FilePath, StringComparison.OrdinalIgnoreCase);
+                return new DvrLibraryRow(recording, key, progress, isPlaying, canDelete);
+            }).ToList();
+            DvrLibraryList.ItemsSource = rows;
+            DvrLibraryEmptyText.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+            var storage = _dvrRecording.GetStorageSnapshot(_settings.RecordingsFolder);
+            DvrStorageText.Text = storage.IsAvailable
+                ? $"{FormatDvrBytes(storage.FreeBytes)} free of {FormatDvrBytes(storage.TotalBytes)}  •  {storage.RecordingCount:N0} recording{(storage.RecordingCount == 1 ? string.Empty : "s")} use {FormatDvrBytes(storage.RecordingBytes)}"
+                : "Storage information is unavailable for this folder";
+            DvrStorageProgress.Value = storage.DriveUsedPercent;
             _dvrLibrarySignature = librarySignature;
+            _lastDvrLibraryRefreshUtc = now;
         }
     }
 
@@ -4029,6 +4244,7 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog(this) != true) return;
         RecordingFolderBox.Text = dialog.FolderName;
         _settings.RecordingsFolder = ResolveRecordingsFolder(dialog.FolderName);
+        _lastDvrLibraryRefreshUtc = DateTimeOffset.MinValue;
         await _settingsStore.SaveAsync(_settings);
         UpdateDvrUi(_dvrRecording.Snapshot);
     }
@@ -4052,10 +4268,62 @@ public partial class MainWindow : Window
 
     private void OpenRecordingFileLocation_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is not DvrLibraryItem item || !File.Exists(item.FilePath)) return;
+        if ((sender as FrameworkElement)?.DataContext is not DvrLibraryRow item || !File.Exists(item.FilePath)) return;
         var startInfo = new ProcessStartInfo("explorer.exe") { UseShellExecute = true };
         startInfo.ArgumentList.Add($"/select,{item.FilePath}");
         Process.Start(startInfo);
+    }
+
+    private void PlayRecording_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not DvrLibraryRow item || !File.Exists(item.FilePath)) return;
+        if (_multiviewMode) SetMultiviewMode(false);
+        HideModal(DvrOverlay);
+        WatchNavigation.IsChecked = true;
+        ChannelList.SelectedItem = null;
+        var channel = new ChannelItem
+        {
+            Number = 0,
+            Name = item.Name,
+            Group = "DVR Library",
+            Url = new Uri(Path.GetFullPath(item.FilePath)).AbsoluteUri,
+            Kind = ChannelKind.Recording
+        };
+        TuneChannel(channel, item.FilePath);
+        FooterStatusDot.Fill = LiveBrush;
+        FooterStatusText.Text = item.CanResume
+            ? $"Opening saved recording • resume ready at {FormatPlaybackTime(item.Progress!.PositionMilliseconds)}"
+            : $"Opening saved recording • {item.Name}";
+    }
+
+    private async void DeleteRecording_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not DvrLibraryRow item) return;
+        var result = MessageBox.Show(
+            this,
+            $"Delete {item.Name}?\n\nThis permanently removes the saved recording from this PC.",
+            "Delete recording",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No);
+        if (result != MessageBoxResult.Yes) return;
+
+        try
+        {
+            _dvrRecording.DeleteRecording(item.FilePath, _settings.RecordingsFolder);
+            _settings.RecordingPlaybackProgress.Remove(item.LibraryKey);
+            await _settingsStore.SaveAsync(_settings);
+            _dvrLibrarySignature = string.Empty;
+            _lastDvrLibraryRefreshUtc = DateTimeOffset.MinValue;
+            UpdateDvrUi(_dvrRecording.Poll(DateTimeOffset.UtcNow));
+            FooterStatusDot.Fill = LiveBrush;
+            FooterStatusText.Text = $"Recording deleted • {item.Name}";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            FooterStatusDot.Fill = ErrorBrush;
+            FooterStatusText.Text = exception.Message;
+        }
     }
 
     private string PersistRecordingsFolder()
@@ -4065,6 +4333,7 @@ public partial class MainWindow : Window
         if (!string.Equals(_settings.RecordingsFolder, folder, StringComparison.OrdinalIgnoreCase))
         {
             _settings.RecordingsFolder = folder;
+            _lastDvrLibraryRefreshUtc = DateTimeOffset.MinValue;
             _ = _settingsStore.SaveAsync(_settings);
         }
         return folder;
@@ -4679,6 +4948,7 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
+        SaveCurrentRecordingProgress(force: true);
         PersistRecordingsFolder();
         if (_dvrRecording.Snapshot.IsActive)
         {
