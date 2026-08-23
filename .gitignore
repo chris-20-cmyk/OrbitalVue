@@ -3,6 +3,7 @@
 **/bin/
 **/obj/
 artifacts/
+.qa/
 *.user
 *.suo
 *.log

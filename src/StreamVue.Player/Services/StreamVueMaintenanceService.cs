@@ -99,6 +99,15 @@ public sealed class StreamVueMaintenanceService
                     RecentChannelCount = settings.RecentChannelKeys?.Count ?? 0,
                     ChannelProfileCount = settings.ChannelProfiles?.Count ?? 0,
                     ReminderCount = settings.ProgramReminders?.Count ?? 0,
+                    ScheduledRecordingCount = settings.ScheduledRecordings?.Count ?? 0,
+                    SeriesRecordingRuleCount = settings.SeriesRecordingRules?.Count ?? 0,
+                    SmartDvr = new
+                    {
+                        settings.SmartDvr?.StartPaddingMinutes,
+                        settings.SmartDvr?.EndPaddingMinutes,
+                        settings.SmartDvr?.StorageReserveGigabytes,
+                        DefaultPriority = settings.SmartDvr?.DefaultPriority.ToString()
+                    },
                     SavedMultiviewLayoutCount = settings.Multiview?.SavedLayouts?.Count ?? 0,
                     PlaylistHealth = new
                     {

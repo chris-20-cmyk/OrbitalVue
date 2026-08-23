@@ -844,6 +844,7 @@
                                                                         <Separator Background="#344158" />
                                                                         <MenuItem Header="Set or remove reminder" Click="GuideContextReminder_Click" />
                                                                         <MenuItem Header="Schedule or cancel recording" Click="GuideContextRecording_Click" />
+                                                                        <MenuItem Header="Record or stop recording this series" Click="GuideContextSeriesRecording_Click" />
                                                                     </ContextMenu>
                                                                 </Button.ContextMenu>
                                                                 <StackPanel>
@@ -1084,7 +1085,7 @@
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
                     <TextBlock Foreground="#566176" FontSize="9" Text="↑↓ CHANNELS • BACKSPACE LAST" />
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
-                    <TextBlock Foreground="#566176" FontSize="9" Text="3.4 DVR LIBRARY" />
+                    <TextBlock Foreground="#566176" FontSize="9" Text="3.5 SMART DVR" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -1753,6 +1754,79 @@
                                 </Grid>
                             </Border>
 
+                            <Border Margin="0,14,0,0" Padding="17" CornerRadius="14" Background="#101822" BorderBrush="#2B3C53" BorderThickness="1">
+                                <StackPanel>
+                                    <Grid>
+                                        <StackPanel>
+                                            <TextBlock Foreground="{StaticResource AccentBrush}" FontSize="8.5" FontWeight="Bold" Text="SMART DVR DEFAULTS" />
+                                            <TextBlock Margin="0,4,0,0" Foreground="#73839A" FontSize="9" Text="Applied to new one-time and series schedules" />
+                                        </StackPanel>
+                                        <Button HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource PrimaryButton}" Click="DvrApplySmartSettings_Click" Content="Save defaults" />
+                                    </Grid>
+                                    <Grid Margin="0,13,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Margin="0,0,8,0">
+                                            <TextBlock Foreground="#7E8DA3" FontSize="8" Text="START EARLY" />
+                                            <ComboBox x:Name="DvrStartPaddingBox" Height="34" Margin="0,6,0,0" Padding="9,5">
+                                                <ComboBoxItem Tag="0" Content="No padding" /><ComboBoxItem Tag="1" Content="1 minute" /><ComboBoxItem Tag="2" Content="2 minutes" /><ComboBoxItem Tag="5" Content="5 minutes" /><ComboBoxItem Tag="10" Content="10 minutes" /><ComboBoxItem Tag="15" Content="15 minutes" /><ComboBoxItem Tag="30" Content="30 minutes" />
+                                            </ComboBox>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                                            <TextBlock Foreground="#7E8DA3" FontSize="8" Text="END LATE" />
+                                            <ComboBox x:Name="DvrEndPaddingBox" Height="34" Margin="0,6,0,0" Padding="9,5">
+                                                <ComboBoxItem Tag="0" Content="No padding" /><ComboBoxItem Tag="1" Content="1 minute" /><ComboBoxItem Tag="2" Content="2 minutes" /><ComboBoxItem Tag="5" Content="5 minutes" /><ComboBoxItem Tag="10" Content="10 minutes" /><ComboBoxItem Tag="15" Content="15 minutes" /><ComboBoxItem Tag="30" Content="30 minutes" />
+                                            </ComboBox>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" Margin="0,0,8,0">
+                                            <TextBlock Foreground="#7E8DA3" FontSize="8" Text="PROTECT FREE SPACE" />
+                                            <ComboBox x:Name="DvrStorageReserveBox" Height="34" Margin="0,6,0,0" Padding="9,5">
+                                                <ComboBoxItem Tag="0" Content="Disabled" /><ComboBoxItem Tag="2" Content="2 GB" /><ComboBoxItem Tag="5" Content="5 GB" /><ComboBoxItem Tag="10" Content="10 GB" /><ComboBoxItem Tag="20" Content="20 GB" /><ComboBoxItem Tag="50" Content="50 GB" />
+                                            </ComboBox>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="3">
+                                            <TextBlock Foreground="#7E8DA3" FontSize="8" Text="DEFAULT PRIORITY" />
+                                            <ComboBox x:Name="DvrDefaultPriorityBox" Height="34" Margin="0,6,0,0" Padding="9,5">
+                                                <ComboBoxItem Tag="Low" Content="Low" /><ComboBoxItem Tag="Normal" Content="Normal" /><ComboBoxItem Tag="High" Content="High" />
+                                            </ComboBox>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Grid Margin="0,18,0,8">
+                                <TextBlock Foreground="#7E8DA3" FontSize="9" FontWeight="Bold" Text="SERIES RECORDING RULES" />
+                                <TextBlock x:Name="DvrSeriesRuleCountText" HorizontalAlignment="Right" Foreground="#57D8CC" FontSize="9" FontWeight="SemiBold" Text="RIGHT-CLICK A GUIDE PROGRAM" />
+                            </Grid>
+                            <Border CornerRadius="14" Background="#0D131D" BorderBrush="#273247" BorderThickness="1" ClipToBounds="True">
+                                <Grid>
+                                    <TextBlock x:Name="DvrSeriesRuleEmptyText" Margin="18" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#66758B" FontSize="10.5" Text="No recurring series rules" />
+                                    <ListBox x:Name="DvrSeriesRuleList" MaxHeight="150" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Padding="15,11" BorderBrush="#202B3B" BorderThickness="0,0,0,1">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                        <StackPanel>
+                                                            <TextBlock Foreground="#E0E7F1" FontSize="10.5" FontWeight="SemiBold" Text="{Binding ProgramTitle}" TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Margin="0,4,0,0" Foreground="#8494AA" FontSize="8.5" Text="{Binding ChannelName}" TextTrimming="CharacterEllipsis" />
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="1" Margin="16,0" VerticalAlignment="Center">
+                                                            <TextBlock HorizontalAlignment="Right" Foreground="{StaticResource AccentBrush}" FontSize="8.5" FontWeight="Bold" Text="{Binding PriorityText}" />
+                                                            <TextBlock Margin="0,4,0,0" Foreground="#66758B" FontSize="8" Text="{Binding DetailText}" />
+                                                        </StackPanel>
+                                                        <Button Grid.Column="2" Margin="0,0,7,0" Padding="10,6" VerticalAlignment="Center" Style="{StaticResource SecondaryButton}" Click="PrioritizeSeriesRule_Click" Content="{Binding PriorityActionLabel}" />
+                                                        <Button Grid.Column="3" Padding="10,6" VerticalAlignment="Center" Style="{StaticResource SecondaryButton}" Foreground="#FF7184" Click="RemoveSeriesRule_Click" Content="Remove" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </Grid>
+                            </Border>
+
                             <Grid Margin="0,18,0,8">
                                 <TextBlock Foreground="#7E8DA3" FontSize="9" FontWeight="Bold" Text="SCHEDULED FROM THE TV GUIDE" />
                                 <TextBlock x:Name="DvrConflictText" HorizontalAlignment="Right" Foreground="#D4B47D" FontSize="9" FontWeight="SemiBold" Text="RIGHT-CLICK A GUIDE PROGRAM" />
@@ -1766,17 +1840,25 @@
                                             <DataTemplate>
                                                 <Border Padding="15,12" BorderBrush="#202B3B" BorderThickness="0,0,0,1">
                                                     <Grid>
-                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                                         <StackPanel>
                                                             <TextBlock Foreground="#E0E7F1" FontSize="11" FontWeight="SemiBold" Text="{Binding ProgramTitle}" TextTrimming="CharacterEllipsis" />
                                                             <TextBlock Margin="0,4,0,0" Foreground="#8494AA" FontSize="9" Text="{Binding ChannelName}" TextTrimming="CharacterEllipsis" />
                                                             <TextBlock Margin="0,3,0,0" Foreground="#66758B" FontSize="8.5" Text="{Binding TimeText}" />
+                                                            <StackPanel Margin="0,5,0,0" Orientation="Horizontal">
+                                                                <TextBlock Foreground="#57D8CC" FontSize="7.5" FontWeight="Bold" Text="{Binding PriorityText}" />
+                                                                <TextBlock Margin="7,0" Foreground="#46566D" FontSize="7.5" Text="•" />
+                                                                <TextBlock Foreground="#718198" FontSize="7.5" Text="{Binding SourceText}" />
+                                                                <TextBlock Margin="7,0" Foreground="#46566D" FontSize="7.5" Text="•" />
+                                                                <TextBlock Foreground="#718198" FontSize="7.5" Text="{Binding PaddingText}" />
+                                                            </StackPanel>
                                                         </StackPanel>
                                                         <StackPanel Grid.Column="1" Margin="16,0" VerticalAlignment="Center">
                                                             <TextBlock HorizontalAlignment="Right" Foreground="#FF7184" FontSize="8.5" FontWeight="Bold" Text="{Binding StatusText}" />
                                                             <TextBlock Margin="0,4,0,0" MaxWidth="220" Foreground="#66758B" FontSize="8" Text="{Binding DetailText}" TextTrimming="CharacterEllipsis" />
                                                         </StackPanel>
-                                                        <Button Grid.Column="2" Padding="10,6" VerticalAlignment="Center" Style="{StaticResource SecondaryButton}" Click="CancelScheduledRecording_Click" IsEnabled="{Binding CanCancel}" Content="Cancel" />
+                                                        <Button Grid.Column="2" Margin="0,0,7,0" Padding="10,6" VerticalAlignment="Center" Style="{StaticResource SecondaryButton}" Click="PrioritizeScheduledRecording_Click" IsEnabled="{Binding CanAdjustPriority}" Content="{Binding PriorityActionLabel}" />
+                                                        <Button Grid.Column="3" Padding="10,6" VerticalAlignment="Center" Style="{StaticResource SecondaryButton}" Click="CancelScheduledRecording_Click" IsEnabled="{Binding CanCancel}" Content="Cancel" />
                                                     </Grid>
                                                 </Border>
                                             </DataTemplate>

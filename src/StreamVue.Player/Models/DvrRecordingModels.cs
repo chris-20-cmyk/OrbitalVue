@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json.Serialization;
 
 namespace StreamVue.Player.Models;
 
@@ -10,6 +11,34 @@ public enum DvrRecordingState
     Stopping,
     Completed,
     Failed
+}
+
+public enum DvrSchedulePriority
+{
+    Low = 0,
+    Normal = 1,
+    High = 2
+}
+
+public sealed class SmartDvrPreferences
+{
+    public int StartPaddingMinutes { get; set; } = 1;
+    public int EndPaddingMinutes { get; set; } = 2;
+    public int StorageReserveGigabytes { get; set; } = 5;
+    public DvrSchedulePriority DefaultPriority { get; set; } = DvrSchedulePriority.Normal;
+}
+
+public sealed class SeriesRecordingRule
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public required string ChannelKey { get; set; }
+    public required string ChannelName { get; set; }
+    public required string ProgramTitle { get; set; }
+    public DvrSchedulePriority Priority { get; set; } = DvrSchedulePriority.Normal;
+    public int StartPaddingMinutes { get; set; } = 1;
+    public int EndPaddingMinutes { get; set; } = 2;
+    public bool Enabled { get; set; } = true;
+    public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
 }
 
 public sealed record DvrRecordingSnapshot(
@@ -41,24 +70,50 @@ public sealed class ScheduledRecording
     public required string ProgramTitle { get; set; }
     public DateTimeOffset StartUtc { get; set; }
     public DateTimeOffset StopUtc { get; set; }
+    public DateTimeOffset? ProgrammeStartUtc { get; set; }
+    public DateTimeOffset? ProgrammeStopUtc { get; set; }
+    public int StartPaddingMinutes { get; set; }
+    public int EndPaddingMinutes { get; set; }
+    public DvrSchedulePriority Priority { get; set; } = DvrSchedulePriority.Normal;
+    public Guid? SeriesRuleId { get; set; }
+    public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
     public string Status { get; set; } = "Scheduled";
     public string? Detail { get; set; }
     public string? OutputPath { get; set; }
+
+    [JsonIgnore]
+    public DateTimeOffset GuideStartUtc => ProgrammeStartUtc ?? StartUtc.AddMinutes(StartPaddingMinutes);
+
+    [JsonIgnore]
+    public DateTimeOffset GuideStopUtc => ProgrammeStopUtc ?? StopUtc.AddMinutes(-EndPaddingMinutes);
 }
 
-public sealed record DvrScheduleRow(ScheduledRecording Recording, bool HasConflict = false)
+public sealed record DvrScheduleRow(
+    ScheduledRecording Recording,
+    bool HasConflict = false,
+    bool WinsConflict = false)
 {
     public Guid Id => Recording.Id;
     public string ProgramTitle => Recording.ProgramTitle;
     public string ChannelName => Recording.ChannelName;
-    public string TimeText => $"{Recording.StartUtc.ToLocalTime():ddd, MMM d • h:mm tt} – {Recording.StopUtc.ToLocalTime():h:mm tt}";
-    public string StatusText => HasConflict ? "CONFLICT" : Recording.Status.ToUpperInvariant();
-    public string DetailText => HasConflict
-        ? "Overlaps another recording; StreamVue can capture one channel at a time"
+    public string TimeText => $"{Recording.GuideStartUtc.ToLocalTime():ddd, MMM d • h:mm tt} – {Recording.GuideStopUtc.ToLocalTime():h:mm tt}";
+    public string StatusText => Recording.Status == "Conflict"
+        ? "SKIPPED"
+        : HasConflict && Recording.Status == "Scheduled"
+            ? WinsConflict ? "PRIORITY WIN" : "AT RISK"
+            : Recording.Status.ToUpperInvariant();
+    public string DetailText => Recording.Status == "Conflict"
+        ? Recording.Detail ?? "A higher-priority recording used the available tuner"
+        : HasConflict && Recording.Status == "Scheduled"
+        ? WinsConflict
+            ? $"{PriorityText} priority wins this overlap"
+            : $"{PriorityText} priority may yield to another schedule"
         : string.IsNullOrWhiteSpace(Recording.Detail)
         ? Recording.Status switch
         {
-            "Scheduled" => "StreamVue must be open when the program begins",
+            "Scheduled" => Recording.SeriesRuleId is null
+                ? "StreamVue must be open when the program begins"
+                : "Added automatically by a series rule",
             "Recording" => "Recording is in progress",
             "Completed" => "Saved to the StreamVue recordings folder",
             "Missed" => "StreamVue was not available during this program",
@@ -67,6 +122,23 @@ public sealed record DvrScheduleRow(ScheduledRecording Recording, bool HasConfli
         }
         : Recording.Detail!;
     public bool CanCancel => Recording.Status is "Scheduled" or "Recording";
+    public bool CanAdjustPriority => Recording.Status == "Scheduled";
+    public string PriorityText => Recording.Priority.ToString().ToUpperInvariant();
+    public string SourceText => Recording.SeriesRuleId is null ? "ONE TIME" : "SERIES";
+    public string PaddingText => Recording.StartPaddingMinutes == 0 && Recording.EndPaddingMinutes == 0
+        ? "NO PADDING"
+        : $"−{Recording.StartPaddingMinutes} / +{Recording.EndPaddingMinutes} MIN";
+    public string PriorityActionLabel => Recording.Priority == DvrSchedulePriority.High ? "Reset" : "↑ Priority";
+}
+
+public sealed record DvrSeriesRuleRow(SeriesRecordingRule Rule, int UpcomingCount)
+{
+    public Guid Id => Rule.Id;
+    public string ProgramTitle => Rule.ProgramTitle;
+    public string ChannelName => Rule.ChannelName;
+    public string PriorityText => Rule.Priority.ToString().ToUpperInvariant();
+    public string DetailText => $"{UpcomingCount:N0} upcoming • −{Rule.StartPaddingMinutes} / +{Rule.EndPaddingMinutes} min";
+    public string PriorityActionLabel => Rule.Priority == DvrSchedulePriority.High ? "Reset" : "↑ Priority";
 }
 
 public sealed record DvrLibraryItem(string FilePath, DateTimeOffset ModifiedUtc, long Bytes)

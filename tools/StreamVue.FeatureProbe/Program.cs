@@ -84,6 +84,7 @@ try
         throw new InvalidOperationException("The URL-independent guide mapping identity was not stable or unique.");
 
     var store = new AppSettingsStore(settingsPath);
+    var seriesRuleId = Guid.NewGuid();
     var expected = new AppSettings
     {
         LastSourceType = "file",
@@ -132,6 +133,26 @@ try
             }
         ],
         RecordingsFolder = Path.Combine(testRoot, "recordings"),
+        SmartDvr = new SmartDvrPreferences
+        {
+            StartPaddingMinutes = 5,
+            EndPaddingMinutes = 10,
+            StorageReserveGigabytes = 20,
+            DefaultPriority = DvrSchedulePriority.High
+        },
+        SeriesRecordingRules =
+        [
+            new SeriesRecordingRule
+            {
+                Id = seriesRuleId,
+                ChannelKey = first.StableKey,
+                ChannelName = first.Name,
+                ProgramTitle = "Late Report",
+                Priority = DvrSchedulePriority.High,
+                StartPaddingMinutes = 5,
+                EndPaddingMinutes = 10
+            }
+        ],
         ScheduledRecordings =
         [
             new ScheduledRecording
@@ -140,7 +161,9 @@ try
                 ChannelName = first.Name,
                 ProgramTitle = "Late Report",
                 StartUtc = DateTimeOffset.UtcNow.AddHours(2),
-                StopUtc = DateTimeOffset.UtcNow.AddHours(3)
+                StopUtc = DateTimeOffset.UtcNow.AddHours(3),
+                Priority = DvrSchedulePriority.High,
+                SeriesRuleId = seriesRuleId
             }
         ],
         RecordingPlaybackProgress = new Dictionary<string, DvrPlaybackProgress>(StringComparer.OrdinalIgnoreCase)
@@ -205,7 +228,10 @@ try
         throw new InvalidOperationException("Program reminders did not persist.");
     if (actual.RecordingsFolder != Path.Combine(testRoot, "recordings") ||
         actual.ScheduledRecordings.Count != 1 || actual.ScheduledRecordings[0].ProgramTitle != "Late Report" ||
-        actual.ScheduledRecordings[0].Status != "Scheduled" ||
+        actual.ScheduledRecordings[0].Status != "Scheduled" || actual.ScheduledRecordings[0].Priority != DvrSchedulePriority.High ||
+        actual.SmartDvr.StartPaddingMinutes != 5 || actual.SmartDvr.EndPaddingMinutes != 10 ||
+        actual.SmartDvr.StorageReserveGigabytes != 20 || actual.SmartDvr.DefaultPriority != DvrSchedulePriority.High ||
+        actual.SeriesRecordingRules.Count != 1 || actual.SeriesRecordingRules[0].Id != seriesRuleId ||
         !actual.RecordingPlaybackProgress.TryGetValue("RECORDING-PROBE", out var playbackProgress) ||
         playbackProgress.PositionMilliseconds != 420_000 || playbackProgress.DurationMilliseconds != 3_600_000)
         throw new InvalidOperationException("DVR folder, schedule, or recording resume position did not persist.");
@@ -214,6 +240,18 @@ try
         actual.Multiview.ChannelKeys[0] != first.StableKey || actual.Multiview.ChannelKeys[2] != distinct.StableKey ||
         actual.Multiview.SavedLayouts.Count != 1 || actual.Multiview.SavedLayouts[0].Name != "News desk")
         throw new InvalidOperationException("Multiview layout, audio focus, or channel assignments did not persist.");
+
+    var legacySettingsPath = Path.Combine(testRoot, "legacy-settings.json");
+    await File.WriteAllTextAsync(legacySettingsPath, """
+        {
+          "LastSourceType": "file",
+          "ScheduledRecordings": []
+        }
+        """);
+    var migratedSettings = await new AppSettingsStore(legacySettingsPath).LoadAsync();
+    if (migratedSettings.SmartDvr is null || migratedSettings.SmartDvr.StartPaddingMinutes != 1 ||
+        migratedSettings.SmartDvr.EndPaddingMinutes != 2 || migratedSettings.SeriesRecordingRules is null)
+        throw new InvalidOperationException("Pre-3.5 settings did not receive safe Smart DVR defaults.");
 
     using (var multiview = new MultiviewSession(expected.Playback))
     {
@@ -502,7 +540,8 @@ try
         ChannelName = first.Name,
         ProgramTitle = "Game One",
         StartUtc = conflictStart,
-        StopUtc = conflictStart.AddHours(2)
+        StopUtc = conflictStart.AddHours(2),
+        Priority = DvrSchedulePriority.Low
     };
     var conflictSecond = new ScheduledRecording
     {
@@ -510,7 +549,8 @@ try
         ChannelName = distinct.Name,
         ProgramTitle = "News Special",
         StartUtc = conflictStart.AddMinutes(30),
-        StopUtc = conflictStart.AddHours(1)
+        StopUtc = conflictStart.AddHours(1),
+        Priority = DvrSchedulePriority.High
     };
     var noConflict = new ScheduledRecording
     {
@@ -523,6 +563,59 @@ try
     var conflictIds = DvrRecordingService.FindConflictingScheduleIds([conflictFirst, conflictSecond, noConflict]);
     if (conflictIds.Count != 2 || !conflictIds.Contains(conflictFirst.Id) || !conflictIds.Contains(conflictSecond.Id) || conflictIds.Contains(noConflict.Id))
         throw new InvalidOperationException("DVR schedule conflict detection failed.");
+    var conflictWinners = SmartDvrPolicy.FindConflictWinners([conflictFirst, conflictSecond, noConflict]);
+    if (SmartDvrPolicy.SelectPreferred([conflictFirst, conflictSecond])?.Id != conflictSecond.Id ||
+        !conflictWinners.Contains(conflictSecond.Id) || conflictWinners.Contains(conflictFirst.Id))
+        throw new InvalidOperationException("Smart DVR priority resolution failed.");
+
+    var guideProgramme = new EpgProgram(
+        "probe.channel",
+        "News Special",
+        null,
+        "News",
+        conflictStart,
+        conflictStart.AddHours(1));
+    var paddedSchedule = SmartDvrPolicy.CreateSchedule(first, guideProgramme, 5, 10, DvrSchedulePriority.High, seriesRuleId);
+    var seriesRule = expected.SeriesRecordingRules[0];
+    if (paddedSchedule.StartUtc != guideProgramme.Start.AddMinutes(-5) ||
+        paddedSchedule.StopUtc != guideProgramme.Stop.AddMinutes(10) ||
+        paddedSchedule.GuideStartUtc != guideProgramme.Start || paddedSchedule.GuideStopUtc != guideProgramme.Stop ||
+        paddedSchedule.SeriesRuleId != seriesRuleId || !SmartDvrPolicy.MatchesProgramme(paddedSchedule, first, guideProgramme))
+        throw new InvalidOperationException("Smart DVR schedule padding or guide identity failed.");
+    var matchingRule = new SeriesRecordingRule
+    {
+        ChannelKey = first.StableKey,
+        ChannelName = first.Name,
+        ProgramTitle = guideProgramme.Title
+    };
+    if (!SmartDvrPolicy.RuleMatches(matchingRule, first, guideProgramme))
+        throw new InvalidOperationException("Smart DVR series matching failed.");
+    if (!SmartDvrPolicy.MeetsStorageReserve(new DvrStorageSnapshot(true, 100L << 30, 21L << 30, 0, 0), 20) ||
+        SmartDvrPolicy.MeetsStorageReserve(new DvrStorageSnapshot(true, 100L << 30, 19L << 30, 0, 0), 20))
+        throw new InvalidOperationException("Smart DVR storage reserve policy failed.");
+    var adjacentFirst = SmartDvrPolicy.CreateSchedule(
+        first,
+        guideProgramme,
+        2,
+        5,
+        DvrSchedulePriority.Normal);
+    var adjacentProgramme = guideProgramme with
+    {
+        Title = "News Special — Hour Two",
+        Start = guideProgramme.Stop,
+        Stop = guideProgramme.Stop.AddHours(1)
+    };
+    var adjacentSecond = SmartDvrPolicy.CreateSchedule(
+        first,
+        adjacentProgramme,
+        2,
+        5,
+        DvrSchedulePriority.Normal);
+    if (!DvrRecordingService.SchedulesOverlap(adjacentFirst, adjacentSecond) ||
+        DvrRecordingService.SchedulesCompete(adjacentFirst, adjacentSecond) ||
+        DvrRecordingService.FindConflictingScheduleIds([adjacentFirst, adjacentSecond]).Count != 0 ||
+        SmartDvrPolicy.SelectPreferredDue([adjacentFirst, adjacentSecond], adjacentSecond.GuideStartUtc.AddMinutes(1))?.Id != adjacentSecond.Id)
+        throw new InvalidOperationException("Smart DVR padding-only schedule handoff failed.");
 
     var castService = new WindowsCastService();
     if (!castService.IsSupported || WindowsCastService.NearbyDisplayShortcut != "Windows + K" ||
@@ -596,11 +689,13 @@ try
     Console.WriteLine("Playlist health persistence: PASS");
     Console.WriteLine("Program reminder persistence: PASS");
     Console.WriteLine("DVR schedule persistence: PASS");
+    Console.WriteLine("Pre-3.5 Smart DVR settings migration: PASS");
     Console.WriteLine("Safe transport-stream recording output: PASS");
     Console.WriteLine("DVR recording library indexing: PASS");
     Console.WriteLine("DVR playback resume persistence: PASS");
     Console.WriteLine("DVR storage reporting and safe delete: PASS");
     Console.WriteLine("DVR schedule conflict detection: PASS");
+    Console.WriteLine("Smart DVR series, padding, priority, boundary handoff, and storage guard: PASS");
     Console.WriteLine("Persistent four-view assignments: PASS");
     Console.WriteLine("Saved multiview layouts: PASS");
     Console.WriteLine("Single-audio multiview policy: PASS");

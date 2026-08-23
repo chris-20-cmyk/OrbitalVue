@@ -217,6 +217,13 @@ public sealed class DvrRecordingService : IDisposable
     public static bool SchedulesOverlap(ScheduledRecording first, ScheduledRecording second) =>
         first.StartUtc < second.StopUtc && second.StartUtc < first.StopUtc;
 
+    public static bool IsPaddingOnlyOverlap(ScheduledRecording first, ScheduledRecording second) =>
+        SchedulesOverlap(first, second) &&
+        (first.GuideStopUtc <= second.GuideStartUtc || second.GuideStopUtc <= first.GuideStartUtc);
+
+    public static bool SchedulesCompete(ScheduledRecording first, ScheduledRecording second) =>
+        SchedulesOverlap(first, second) && !IsPaddingOnlyOverlap(first, second);
+
     public static IReadOnlySet<Guid> FindConflictingScheduleIds(IEnumerable<ScheduledRecording> recordings)
     {
         var active = recordings
@@ -229,7 +236,7 @@ public sealed class DvrRecordingService : IDisposable
             for (var secondIndex = firstIndex + 1; secondIndex < active.Count; secondIndex++)
             {
                 if (active[secondIndex].StartUtc >= active[firstIndex].StopUtc) break;
-                if (!SchedulesOverlap(active[firstIndex], active[secondIndex])) continue;
+                if (!SchedulesCompete(active[firstIndex], active[secondIndex])) continue;
                 conflicts.Add(active[firstIndex].Id);
                 conflicts.Add(active[secondIndex].Id);
             }

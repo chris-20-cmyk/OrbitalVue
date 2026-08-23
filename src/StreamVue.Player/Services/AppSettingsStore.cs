@@ -19,6 +19,8 @@ public sealed class AppSettings
     public PlaylistHealthPreferences PlaylistHealth { get; set; } = new();
     public List<ProgramReminder> ProgramReminders { get; set; } = [];
     public string? RecordingsFolder { get; set; }
+    public SmartDvrPreferences SmartDvr { get; set; } = new();
+    public List<SeriesRecordingRule> SeriesRecordingRules { get; set; } = [];
     public List<ScheduledRecording> ScheduledRecordings { get; set; } = [];
     public Dictionary<string, DvrPlaybackProgress> RecordingPlaybackProgress { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public MultiviewPreferences Multiview { get; set; } = new();

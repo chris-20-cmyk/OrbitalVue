@@ -112,12 +112,14 @@ public partial class MainWindow : Window
     private string _trackControlSignature = string.Empty;
     private string _learnedProfileSignature = string.Empty;
     private string _handledDvrTerminalSignature = string.Empty;
+    private string _dvrScheduleSignature = string.Empty;
     private string _dvrLibrarySignature = string.Empty;
     private string? _currentRecordingPath;
     private bool _recordingResumeApplied = true;
     private bool _seekingRecording;
     private DateTimeOffset _lastRecordingProgressSaveUtc = DateTimeOffset.MinValue;
     private DateTimeOffset _lastDvrLibraryRefreshUtc = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastDvrStorageGuardUtc = DateTimeOffset.MinValue;
     private System.Windows.Point _dragStartPoint;
     private MultiviewLayout _multiviewLayout = MultiviewLayout.Quad;
     private DateTimeOffset? _sleepDeadline;
@@ -171,6 +173,8 @@ public partial class MainWindow : Window
             : new Dictionary<string, ChannelPlaybackProfile>(_settings.ChannelProfiles, StringComparer.OrdinalIgnoreCase);
         _settings.PlaylistHealth ??= new PlaylistHealthPreferences();
         _settings.ProgramReminders ??= [];
+        _settings.SmartDvr ??= new SmartDvrPreferences();
+        _settings.SeriesRecordingRules ??= [];
         _settings.ScheduledRecordings ??= [];
         _settings.RecordingPlaybackProgress = _settings.RecordingPlaybackProgress is null
             ? new Dictionary<string, DvrPlaybackProgress>(StringComparer.OrdinalIgnoreCase)
@@ -189,6 +193,7 @@ public partial class MainWindow : Window
         RefreshSavedMultiviewLayouts();
         UpdatePlaylistHealthUi();
         RecordingFolderBox.Text = _settings.RecordingsFolder;
+        ApplySmartDvrSettingsToControls();
         NormalizeScheduledRecordings();
         UpdateDvrUi(_dvrRecording.Snapshot);
         CreatePlaybackEngine();
@@ -491,6 +496,27 @@ public partial class MainWindow : Window
             if (_channels.Count > 0)
             {
                 var previewStart = DateTimeOffset.UtcNow.AddMinutes(38);
+                var previewSeriesRuleId = Guid.NewGuid();
+                _settings.SmartDvr = new SmartDvrPreferences
+                {
+                    StartPaddingMinutes = 2,
+                    EndPaddingMinutes = 5,
+                    StorageReserveGigabytes = 10,
+                    DefaultPriority = DvrSchedulePriority.Normal
+                };
+                _settings.SeriesRecordingRules =
+                [
+                    new SeriesRecordingRule
+                    {
+                        Id = previewSeriesRuleId,
+                        ChannelKey = _channels[0].StableKey,
+                        ChannelName = _channels[0].Name,
+                        ProgramTitle = "Prime Time Live",
+                        Priority = DvrSchedulePriority.High,
+                        StartPaddingMinutes = 2,
+                        EndPaddingMinutes = 5
+                    }
+                ];
                 _settings.ScheduledRecordings =
                 [
                     new ScheduledRecording
@@ -498,8 +524,14 @@ public partial class MainWindow : Window
                         ChannelKey = _channels[0].StableKey,
                         ChannelName = _channels[0].Name,
                         ProgramTitle = "Prime Time Live",
-                        StartUtc = previewStart,
-                        StopUtc = previewStart.AddHours(2)
+                        ProgrammeStartUtc = previewStart,
+                        ProgrammeStopUtc = previewStart.AddHours(2),
+                        StartUtc = previewStart.AddMinutes(-2),
+                        StopUtc = previewStart.AddHours(2).AddMinutes(5),
+                        StartPaddingMinutes = 2,
+                        EndPaddingMinutes = 5,
+                        Priority = DvrSchedulePriority.High,
+                        SeriesRuleId = previewSeriesRuleId
                     },
                     new ScheduledRecording
                     {
@@ -507,9 +539,11 @@ public partial class MainWindow : Window
                         ChannelName = _channels[Math.Min(1, _channels.Count - 1)].Name,
                         ProgramTitle = "Championship Pregame",
                         StartUtc = previewStart.AddMinutes(30),
-                        StopUtc = previewStart.AddHours(1.5)
+                        StopUtc = previewStart.AddHours(1.5),
+                        Priority = DvrSchedulePriority.Normal
                     }
                 ];
+                ApplySmartDvrSettingsToControls();
             }
             if (commandLineArguments.Contains("--maximized", StringComparer.OrdinalIgnoreCase))
                 WindowState = WindowState.Maximized;
@@ -1076,6 +1110,9 @@ public partial class MainWindow : Window
         GuideList.ItemsSource = _guideView;
         RebuildGuideTimeline();
         RefreshGuideViews();
+        var generatedSchedules = MaterializeSeriesRecordingRules();
+        if (generatedSchedules > 0)
+            _ = _settingsStore.SaveAsync(_settings);
         _lastGuidePresentationUpdate = now;
         UpdateCurrentGuide(_currentChannel);
     }
@@ -2040,6 +2077,8 @@ public partial class MainWindow : Window
         var dvrSnapshot = _dvrRecording.Poll(DateTimeOffset.UtcNow);
         ApplyDvrScheduleState(dvrSnapshot);
         CheckScheduledRecordings();
+        dvrSnapshot = _dvrRecording.Poll(DateTimeOffset.UtcNow);
+        ApplyDvrScheduleState(dvrSnapshot);
         UpdateDvrUi(dvrSnapshot);
 
         if (_settings.Playback.AdaptiveRefreshRate && snapshot.IsPlaying && snapshot.FramesPerSecond > 0)
@@ -2718,6 +2757,12 @@ public partial class MainWindow : Window
     {
         if ((sender as FrameworkElement)?.DataContext is not GuideProgrammeBlock { Programme: not null } block) return;
         await ToggleScheduledRecordingAsync(block);
+    }
+
+    private async void GuideContextSeriesRecording_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not GuideProgrammeBlock { Programme: not null } block) return;
+        await ToggleSeriesRecordingRuleAsync(block);
     }
 
     private void WatchReminder_Click(object sender, RoutedEventArgs e)
@@ -3912,6 +3957,13 @@ public partial class MainWindow : Window
         try
         {
             var folder = PersistRecordingsFolder();
+            if (!HasDvrStorageReserve(folder, out var storageMessage))
+            {
+                OpenDvrPanel();
+                FooterStatusDot.Fill = WarningBrush;
+                FooterStatusText.Text = storageMessage;
+                return;
+            }
             var program = GetGuideNowNext(channel, DateTimeOffset.UtcNow).Current;
             _handledDvrTerminalSignature = string.Empty;
             snapshot = _dvrRecording.Start(channel, folder, program?.Title);
@@ -3954,35 +4006,50 @@ public partial class MainWindow : Window
 
         _settings.ScheduledRecordings ??= [];
         var existing = _settings.ScheduledRecordings.FirstOrDefault(recording =>
-            recording.ChannelKey.Equals(block.Channel.StableKey, StringComparison.OrdinalIgnoreCase) &&
-            recording.StartUtc == block.Programme.Start &&
-            recording.ProgramTitle.Equals(block.Programme.Title, StringComparison.Ordinal));
+            SmartDvrPolicy.MatchesProgramme(recording, block.Channel, block.Programme));
         if (existing is not null)
         {
-            if (_dvrRecording.Snapshot.ScheduleId == existing.Id && _dvrRecording.Snapshot.IsActive)
-                _dvrRecording.Stop("Scheduled recording canceled");
-            _settings.ScheduledRecordings.Remove(existing);
-            FooterStatusDot.Fill = IdleBrush;
-            FooterStatusText.Text = $"Recording canceled • {block.Programme.Title}";
+            if (existing.Status is "Canceled" or "Conflict" or "Failed" or "Missed")
+            {
+                existing.Status = "Scheduled";
+                existing.Detail = null;
+                FooterStatusDot.Fill = LiveBrush;
+                FooterStatusText.Text = $"Recording restored • {block.Programme.Title}";
+            }
+            else
+            {
+                if (_dvrRecording.Snapshot.ScheduleId == existing.Id && _dvrRecording.Snapshot.IsActive)
+                    _dvrRecording.Stop("Scheduled recording canceled");
+                if (existing.SeriesRuleId is null)
+                {
+                    _settings.ScheduledRecordings.Remove(existing);
+                }
+                else
+                {
+                    existing.Status = "Canceled";
+                    existing.Detail = "This series airing was skipped";
+                }
+                FooterStatusDot.Fill = IdleBrush;
+                FooterStatusText.Text = $"Recording canceled • {block.Programme.Title}";
+            }
         }
         else
         {
-            var candidate = new ScheduledRecording
-            {
-                ChannelKey = block.Channel.StableKey,
-                ChannelName = block.Channel.Name,
-                ProgramTitle = block.Programme.Title,
-                StartUtc = block.Programme.Start,
-                StopUtc = block.Programme.Stop
-            };
+            var preferences = _settings.SmartDvr ?? new SmartDvrPreferences();
+            var candidate = SmartDvrPolicy.CreateSchedule(
+                block.Channel,
+                block.Programme,
+                preferences.StartPaddingMinutes,
+                preferences.EndPaddingMinutes,
+                preferences.DefaultPriority);
             var overlap = _settings.ScheduledRecordings.FirstOrDefault(recording =>
                 (recording.Status is "Scheduled" or "Recording") &&
-                DvrRecordingService.SchedulesOverlap(recording, candidate));
+                DvrRecordingService.SchedulesCompete(recording, candidate));
             if (overlap is not null)
             {
                 var result = MessageBox.Show(
                     this,
-                    $"{candidate.ProgramTitle} overlaps {overlap.ProgramTitle}. StreamVue can record one channel at a time, so one program may be missed.\n\nSchedule it anyway?",
+                    $"{candidate.ProgramTitle} overlaps {overlap.ProgramTitle}. StreamVue records the higher-priority schedule and uses start time as the tie-breaker.\n\nSchedule it anyway?",
                     "Recording schedule conflict",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Warning,
@@ -3997,14 +4064,103 @@ public partial class MainWindow : Window
 
             _settings.ScheduledRecordings.Add(candidate);
             FooterStatusDot.Fill = LiveBrush;
-            FooterStatusText.Text = block.Programme.Start <= now
+            FooterStatusText.Text = candidate.StartUtc <= now
                 ? $"Recording queued now • {block.Programme.Title}"
-                : $"Recording scheduled • {block.Programme.Title} at {block.Programme.Start.ToLocalTime():h:mm tt}";
+                : $"Recording scheduled • {block.Programme.Title} at {candidate.StartUtc.ToLocalTime():h:mm tt} with padding";
         }
 
         await _settingsStore.SaveAsync(_settings);
         CheckScheduledRecordings();
         UpdateDvrUi(_dvrRecording.Poll(DateTimeOffset.UtcNow));
+    }
+
+    private async Task ToggleSeriesRecordingRuleAsync(GuideProgrammeBlock block)
+    {
+        if (block.Programme is null || block.Channel.Kind != ChannelKind.Live) return;
+        if (block.Programme.Stop <= DateTimeOffset.UtcNow)
+        {
+            FooterStatusDot.Fill = WarningBrush;
+            FooterStatusText.Text = "That series airing has already ended";
+            return;
+        }
+
+        _settings.SeriesRecordingRules ??= [];
+        var existing = _settings.SeriesRecordingRules.FirstOrDefault(rule =>
+            SmartDvrPolicy.RuleMatches(rule, block.Channel, block.Programme));
+        if (existing is not null)
+        {
+            _settings.SeriesRecordingRules.Remove(existing);
+            _settings.ScheduledRecordings.RemoveAll(recording =>
+                recording.SeriesRuleId == existing.Id && recording.Status is "Scheduled" or "Canceled");
+            FooterStatusDot.Fill = IdleBrush;
+            FooterStatusText.Text = $"Series recording stopped • {block.Programme.Title}";
+        }
+        else
+        {
+            var preferences = _settings.SmartDvr ?? new SmartDvrPreferences();
+            _settings.SeriesRecordingRules.Add(new SeriesRecordingRule
+            {
+                ChannelKey = block.Channel.StableKey,
+                ChannelName = block.Channel.Name,
+                ProgramTitle = block.Programme.Title,
+                Priority = preferences.DefaultPriority,
+                StartPaddingMinutes = SmartDvrPolicy.ClampPadding(preferences.StartPaddingMinutes),
+                EndPaddingMinutes = SmartDvrPolicy.ClampPadding(preferences.EndPaddingMinutes)
+            });
+            var generated = MaterializeSeriesRecordingRules();
+            FooterStatusDot.Fill = LiveBrush;
+            FooterStatusText.Text = $"Series rule saved • {generated:N0} upcoming airing{(generated == 1 ? string.Empty : "s")}";
+        }
+
+        await _settingsStore.SaveAsync(_settings);
+        UpdateDvrUi(_dvrRecording.Poll(DateTimeOffset.UtcNow));
+    }
+
+    private int MaterializeSeriesRecordingRules()
+    {
+        if (_guideSchedule is null || _settings.SeriesRecordingRules is null) return 0;
+        _settings.ScheduledRecordings ??= [];
+        var now = DateTimeOffset.UtcNow;
+        var changed = 0;
+        foreach (var rule in _settings.SeriesRecordingRules.Where(rule => rule.Enabled))
+        {
+            var channel = _channels.FirstOrDefault(candidate =>
+                candidate.StableKey.Equals(rule.ChannelKey, StringComparison.OrdinalIgnoreCase));
+            if (channel is null) continue;
+
+            foreach (var programme in GetGuideProgrammes(channel)
+                         .Where(programme => programme.Stop.AddMinutes(rule.EndPaddingMinutes) > now)
+                         .Where(programme => SmartDvrPolicy.RuleMatches(rule, channel, programme))
+                         .Take(100))
+            {
+                var existing = _settings.ScheduledRecordings.FirstOrDefault(recording =>
+                    SmartDvrPolicy.MatchesProgramme(recording, channel, programme));
+                if (existing is not null)
+                {
+                    if (existing.SeriesRuleId is null && existing.Status == "Scheduled")
+                    {
+                        existing.SeriesRuleId = rule.Id;
+                        existing.Priority = rule.Priority;
+                        existing.StartPaddingMinutes = SmartDvrPolicy.ClampPadding(rule.StartPaddingMinutes);
+                        existing.EndPaddingMinutes = SmartDvrPolicy.ClampPadding(rule.EndPaddingMinutes);
+                        existing.StartUtc = programme.Start.AddMinutes(-existing.StartPaddingMinutes);
+                        existing.StopUtc = programme.Stop.AddMinutes(existing.EndPaddingMinutes);
+                        changed++;
+                    }
+                    continue;
+                }
+
+                _settings.ScheduledRecordings.Add(SmartDvrPolicy.CreateSchedule(
+                    channel,
+                    programme,
+                    rule.StartPaddingMinutes,
+                    rule.EndPaddingMinutes,
+                    rule.Priority,
+                    rule.Id));
+                changed++;
+            }
+        }
+        return changed;
     }
 
     private void CheckScheduledRecordings()
@@ -4029,12 +4185,77 @@ public partial class MainWindow : Window
             }
         }
 
-        if (!_dvrRecording.Snapshot.IsActive)
+        var recorderSnapshot = _dvrRecording.Snapshot;
+        if (recorderSnapshot.IsActive && now - _lastDvrStorageGuardUtc >= TimeSpan.FromSeconds(15))
         {
-            var due = _settings.ScheduledRecordings
+            _lastDvrStorageGuardUtc = now;
+            var folder = ResolveRecordingsFolder(_settings.RecordingsFolder);
+            if (!HasDvrStorageReserve(folder, out var storageMessage))
+            {
+                recorderSnapshot = _dvrRecording.Stop(storageMessage);
+                ApplyDvrScheduleState(recorderSnapshot);
+                changed = true;
+                FooterStatusDot.Fill = WarningBrush;
+                FooterStatusText.Text = storageMessage;
+            }
+        }
+
+        var dueRecordings = _settings.ScheduledRecordings
+            .Where(recording => recording.Status == "Scheduled" && recording.StartUtc <= now && recording.StopUtc > now)
+            .ToList();
+
+        if (recorderSnapshot.IsActive && dueRecordings.Count > 0)
+        {
+            var activeSchedule = recorderSnapshot.ScheduleId is Guid activeId
+                ? _settings.ScheduledRecordings.FirstOrDefault(recording => recording.Id == activeId)
+                : null;
+            var actionableDue = activeSchedule is null
+                ? dueRecordings.Where(recording => now >= recording.GuideStartUtc).ToList()
+                : dueRecordings.Where(recording =>
+                    !DvrRecordingService.IsPaddingOnlyOverlap(activeSchedule, recording) ||
+                    now >= recording.GuideStartUtc).ToList();
+            var preferredDue = SmartDvrPolicy.SelectPreferredDue(actionableDue, now);
+            var paddingHandoff = activeSchedule is not null && preferredDue is not null &&
+                                 DvrRecordingService.IsPaddingOnlyOverlap(activeSchedule, preferredDue) &&
+                                 now >= preferredDue.GuideStartUtc && preferredDue.Priority >= activeSchedule.Priority;
+            if (activeSchedule is not null && preferredDue is not null &&
+                (paddingHandoff || SmartDvrPolicy.IsPreferredOver(preferredDue, activeSchedule)))
+            {
+                recorderSnapshot = _dvrRecording.Stop(paddingHandoff
+                    ? $"Handed off to next scheduled program • {preferredDue.ProgramTitle}"
+                    : $"Stopped for higher-priority recording • {preferredDue.ProgramTitle}");
+                ApplyDvrScheduleState(recorderSnapshot);
+                changed = true;
+            }
+            else
+            {
+                foreach (var blocked in actionableDue)
+                {
+                    blocked.Status = "Conflict";
+                    blocked.Detail = activeSchedule is null
+                        ? "Skipped because a manual recording was already active"
+                        : $"Skipped for {activeSchedule.ProgramTitle} • {activeSchedule.Priority.ToString().ToLowerInvariant()} priority";
+                    changed = true;
+                }
+            }
+        }
+
+        if (!recorderSnapshot.IsActive)
+        {
+            dueRecordings = _settings.ScheduledRecordings
                 .Where(recording => recording.Status == "Scheduled" && recording.StartUtc <= now && recording.StopUtc > now)
-                .OrderBy(recording => recording.StartUtc)
-                .FirstOrDefault();
+                .ToList();
+            var due = SmartDvrPolicy.SelectPreferredDue(dueRecordings, now);
+            foreach (var blocked in dueRecordings.Where(recording => recording.Id != due?.Id))
+            {
+                if (due is not null && DvrRecordingService.IsPaddingOnlyOverlap(due, blocked) &&
+                    now < blocked.GuideStartUtc)
+                    continue;
+                blocked.Status = "Conflict";
+                blocked.Detail = $"Skipped for {due!.ProgramTitle} • {due.Priority.ToString().ToLowerInvariant()} priority";
+                changed = true;
+            }
+
             var channel = due is null
                 ? null
                 : _channels.FirstOrDefault(candidate => candidate.StableKey.Equals(due.ChannelKey, StringComparison.OrdinalIgnoreCase));
@@ -4043,6 +4264,16 @@ public partial class MainWindow : Window
                 try
                 {
                     var folder = PersistRecordingsFolder();
+                    if (!HasDvrStorageReserve(folder, out var storageMessage))
+                    {
+                        due.Status = "Failed";
+                        due.Detail = storageMessage;
+                        changed = true;
+                        FooterStatusDot.Fill = WarningBrush;
+                        FooterStatusText.Text = $"Scheduled recording blocked • {storageMessage}";
+                        if (changed) _ = _settingsStore.SaveAsync(_settings);
+                        return;
+                    }
                     _handledDvrTerminalSignature = string.Empty;
                     var snapshot = _dvrRecording.Start(channel, folder, due.ProgramTitle, due.StopUtc, due.Id);
                     due.Status = "Recording";
@@ -4060,6 +4291,12 @@ public partial class MainWindow : Window
                     FooterStatusDot.Fill = ErrorBrush;
                     FooterStatusText.Text = $"Scheduled recording failed • {due.ProgramTitle}";
                 }
+            }
+            else if (due is not null)
+            {
+                due.Status = "Failed";
+                due.Detail = "The playlist no longer contains this channel";
+                changed = true;
             }
         }
 
@@ -4104,7 +4341,8 @@ public partial class MainWindow : Window
             recording.Detail = recording.StopUtc > now ? "Ready to resume when the playlist is available" : "StreamVue closed before completion";
         }
         _settings.ScheduledRecordings.RemoveAll(recording =>
-            (recording.Status is "Completed" or "Missed" or "Failed") && recording.StopUtc < now.AddDays(-14));
+            (recording.Status is "Completed" or "Missed" or "Failed" or "Conflict" or "Canceled") &&
+            recording.StopUtc < now.AddDays(-14));
     }
 
     private void UpdateDvrUi(DvrRecordingSnapshot snapshot)
@@ -4177,18 +4415,47 @@ public partial class MainWindow : Window
         }
 
         if (snapshot.IsActive) DvrActionButton.IsEnabled = true;
-        var conflictingIds = DvrRecordingService.FindConflictingScheduleIds(_settings.ScheduledRecordings ?? []);
-        var scheduleRows = (_settings.ScheduledRecordings ?? [])
-            .OrderBy(recording => recording.Status is "Scheduled" or "Recording" ? 0 : 1)
-            .ThenBy(recording => recording.StartUtc)
-            .Take(20)
-            .Select(recording => new DvrScheduleRow(recording, conflictingIds.Contains(recording.Id)))
-            .ToList();
-        DvrScheduleList.ItemsSource = scheduleRows;
-        DvrScheduleEmptyText.Visibility = scheduleRows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        DvrConflictText.Text = conflictingIds.Count == 0
-            ? "RIGHT-CLICK A GUIDE PROGRAM"
-            : $"⚠ {conflictingIds.Count:N0} OVERLAPPING SCHEDULE{(conflictingIds.Count == 1 ? string.Empty : "S")}";
+        var scheduleSignature = string.Join('|', (_settings.ScheduledRecordings ?? [])
+            .OrderBy(recording => recording.Id)
+            .Select(recording => $"{recording.Id:N}:{recording.Status}:{recording.Priority}:{recording.StartUtc:O}:{recording.StopUtc:O}:{recording.Detail}")) +
+            "::" + string.Join('|', (_settings.SeriesRecordingRules ?? [])
+                .OrderBy(rule => rule.Id)
+                .Select(rule => $"{rule.Id:N}:{rule.Enabled}:{rule.Priority}:{rule.StartPaddingMinutes}:{rule.EndPaddingMinutes}"));
+        if (!string.Equals(_dvrScheduleSignature, scheduleSignature, StringComparison.Ordinal))
+        {
+            var conflictingIds = DvrRecordingService.FindConflictingScheduleIds(_settings.ScheduledRecordings ?? []);
+            var conflictWinners = SmartDvrPolicy.FindConflictWinners(_settings.ScheduledRecordings ?? []);
+            var scheduleRows = (_settings.ScheduledRecordings ?? [])
+                .OrderBy(recording => recording.Status is "Scheduled" or "Recording" ? 0 : 1)
+                .ThenByDescending(recording => recording.Priority)
+                .ThenBy(recording => recording.StartUtc)
+                .Take(20)
+                .Select(recording => new DvrScheduleRow(
+                    recording,
+                    conflictingIds.Contains(recording.Id),
+                    conflictWinners.Contains(recording.Id)))
+                .ToList();
+            DvrScheduleList.ItemsSource = scheduleRows;
+            DvrScheduleEmptyText.Visibility = scheduleRows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            DvrConflictText.Text = conflictingIds.Count == 0
+                ? "RIGHT-CLICK A GUIDE PROGRAM"
+                : $"⚠ {conflictingIds.Count:N0} OVERLAPPING • PRIORITY RESOLVES AUTOMATICALLY";
+
+            var seriesRows = (_settings.SeriesRecordingRules ?? [])
+                .Where(rule => rule.Enabled)
+                .OrderBy(rule => rule.ProgramTitle, StringComparer.OrdinalIgnoreCase)
+                .Select(rule => new DvrSeriesRuleRow(
+                    rule,
+                    (_settings.ScheduledRecordings ?? []).Count(recording =>
+                        recording.SeriesRuleId == rule.Id && recording.Status == "Scheduled")))
+                .ToList();
+            DvrSeriesRuleList.ItemsSource = seriesRows;
+            DvrSeriesRuleEmptyText.Visibility = seriesRows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            DvrSeriesRuleCountText.Text = seriesRows.Count == 0
+                ? "RIGHT-CLICK A GUIDE PROGRAM"
+                : $"{seriesRows.Count:N0} ACTIVE RULE{(seriesRows.Count == 1 ? string.Empty : "S")}";
+            _dvrScheduleSignature = scheduleSignature;
+        }
 
         var librarySignature = $"{snapshot.State}:{snapshot.OutputPath}:{snapshot.BytesWritten}:{_settings.RecordingsFolder}:{_currentRecordingPath}";
         var terminalChanged = (snapshot.State is DvrRecordingState.Completed or DvrRecordingState.Failed) &&
@@ -4212,7 +4479,7 @@ public partial class MainWindow : Window
 
             var storage = _dvrRecording.GetStorageSnapshot(_settings.RecordingsFolder);
             DvrStorageText.Text = storage.IsAvailable
-                ? $"{FormatDvrBytes(storage.FreeBytes)} free of {FormatDvrBytes(storage.TotalBytes)}  •  {storage.RecordingCount:N0} recording{(storage.RecordingCount == 1 ? string.Empty : "s")} use {FormatDvrBytes(storage.RecordingBytes)}"
+                ? $"{FormatDvrBytes(storage.FreeBytes)} free of {FormatDvrBytes(storage.TotalBytes)}  •  {storage.RecordingCount:N0} recording{(storage.RecordingCount == 1 ? string.Empty : "s")} use {FormatDvrBytes(storage.RecordingBytes)}  •  {_settings.SmartDvr.StorageReserveGigabytes:N0} GB protected"
                 : "Storage information is unavailable for this folder";
             DvrStorageProgress.Value = storage.DriveUsedPercent;
             _dvrLibrarySignature = librarySignature;
@@ -4227,10 +4494,118 @@ public partial class MainWindow : Window
         if (scheduled is null) return;
         if (_dvrRecording.Snapshot.ScheduleId == scheduled.Id && _dvrRecording.Snapshot.IsActive)
             _dvrRecording.Stop("Scheduled recording canceled");
-        _settings.ScheduledRecordings.Remove(scheduled);
+        if (scheduled.SeriesRuleId is null)
+        {
+            _settings.ScheduledRecordings.Remove(scheduled);
+        }
+        else
+        {
+            scheduled.Status = "Canceled";
+            scheduled.Detail = "This series airing was skipped";
+        }
         await _settingsStore.SaveAsync(_settings);
         UpdateDvrUi(_dvrRecording.Poll(DateTimeOffset.UtcNow));
         FooterStatusText.Text = $"Recording canceled • {scheduled.ProgramTitle}";
+    }
+
+    private async void PrioritizeScheduledRecording_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not DvrScheduleRow row) return;
+        var scheduled = _settings.ScheduledRecordings.FirstOrDefault(recording => recording.Id == row.Id);
+        if (scheduled is null || scheduled.Status != "Scheduled") return;
+        scheduled.Priority = scheduled.Priority == DvrSchedulePriority.High
+            ? DvrSchedulePriority.Normal
+            : (DvrSchedulePriority)((int)scheduled.Priority + 1);
+        await _settingsStore.SaveAsync(_settings);
+        UpdateDvrUi(_dvrRecording.Poll(DateTimeOffset.UtcNow));
+        FooterStatusDot.Fill = LiveBrush;
+        FooterStatusText.Text = $"{scheduled.Priority} priority • {scheduled.ProgramTitle}";
+    }
+
+    private async void RemoveSeriesRule_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not DvrSeriesRuleRow row) return;
+        var rule = _settings.SeriesRecordingRules.FirstOrDefault(candidate => candidate.Id == row.Id);
+        if (rule is null) return;
+        _settings.SeriesRecordingRules.Remove(rule);
+        _settings.ScheduledRecordings.RemoveAll(recording =>
+            recording.SeriesRuleId == rule.Id && recording.Status is "Scheduled" or "Canceled");
+        await _settingsStore.SaveAsync(_settings);
+        UpdateDvrUi(_dvrRecording.Poll(DateTimeOffset.UtcNow));
+        FooterStatusDot.Fill = IdleBrush;
+        FooterStatusText.Text = $"Series rule removed • {rule.ProgramTitle}";
+    }
+
+    private async void PrioritizeSeriesRule_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not DvrSeriesRuleRow row) return;
+        var rule = _settings.SeriesRecordingRules.FirstOrDefault(candidate => candidate.Id == row.Id);
+        if (rule is null) return;
+        rule.Priority = rule.Priority == DvrSchedulePriority.High
+            ? DvrSchedulePriority.Normal
+            : (DvrSchedulePriority)((int)rule.Priority + 1);
+        foreach (var recording in _settings.ScheduledRecordings.Where(recording =>
+                     recording.SeriesRuleId == rule.Id && recording.Status == "Scheduled"))
+            recording.Priority = rule.Priority;
+        await _settingsStore.SaveAsync(_settings);
+        UpdateDvrUi(_dvrRecording.Poll(DateTimeOffset.UtcNow));
+        FooterStatusDot.Fill = LiveBrush;
+        FooterStatusText.Text = $"{rule.Priority} priority for series • {rule.ProgramTitle}";
+    }
+
+    private async void DvrApplySmartSettings_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.SmartDvr ??= new SmartDvrPreferences();
+        _settings.SmartDvr.StartPaddingMinutes = ReadTaggedInt(DvrStartPaddingBox, 1);
+        _settings.SmartDvr.EndPaddingMinutes = ReadTaggedInt(DvrEndPaddingBox, 2);
+        _settings.SmartDvr.StorageReserveGigabytes = ReadTaggedInt(DvrStorageReserveBox, 5);
+        _settings.SmartDvr.DefaultPriority = ReadTaggedPriority(DvrDefaultPriorityBox, DvrSchedulePriority.Normal);
+        await _settingsStore.SaveAsync(_settings);
+        _lastDvrLibraryRefreshUtc = DateTimeOffset.MinValue;
+        UpdateDvrUi(_dvrRecording.Poll(DateTimeOffset.UtcNow));
+        FooterStatusDot.Fill = LiveBrush;
+        FooterStatusText.Text = "Smart DVR defaults saved for new recordings";
+    }
+
+    private void ApplySmartDvrSettingsToControls()
+    {
+        var preferences = _settings.SmartDvr ?? new SmartDvrPreferences();
+        SelectTaggedItem(DvrStartPaddingBox, preferences.StartPaddingMinutes.ToString());
+        SelectTaggedItem(DvrEndPaddingBox, preferences.EndPaddingMinutes.ToString());
+        SelectTaggedItem(DvrStorageReserveBox, preferences.StorageReserveGigabytes.ToString());
+        SelectTaggedItem(DvrDefaultPriorityBox, preferences.DefaultPriority.ToString());
+    }
+
+    private static void SelectTaggedItem(ComboBox comboBox, string tag)
+    {
+        var match = comboBox.Items.OfType<ComboBoxItem>().FirstOrDefault(item =>
+            string.Equals(item.Tag?.ToString(), tag, StringComparison.OrdinalIgnoreCase));
+        comboBox.SelectedItem = match ?? comboBox.Items.OfType<ComboBoxItem>().FirstOrDefault();
+    }
+
+    private static int ReadTaggedInt(ComboBox comboBox, int fallback) =>
+        comboBox.SelectedItem is ComboBoxItem item && int.TryParse(item.Tag?.ToString(), out var value)
+            ? value
+            : fallback;
+
+    private static DvrSchedulePriority ReadTaggedPriority(ComboBox comboBox, DvrSchedulePriority fallback) =>
+        comboBox.SelectedItem is ComboBoxItem item &&
+        Enum.TryParse<DvrSchedulePriority>(item.Tag?.ToString(), true, out var value)
+            ? value
+            : fallback;
+
+    private bool HasDvrStorageReserve(string folder, out string message)
+    {
+        var reserve = _settings.SmartDvr?.StorageReserveGigabytes ?? 5;
+        var storage = _dvrRecording.GetStorageSnapshot(folder);
+        if (SmartDvrPolicy.MeetsStorageReserve(storage, reserve))
+        {
+            message = string.Empty;
+            return true;
+        }
+
+        message = $"At least {reserve:N0} GB of free drive space is protected; clear storage or lower the reserve";
+        return false;
     }
 
     private async void BrowseRecordingsFolder_Click(object sender, RoutedEventArgs e)
