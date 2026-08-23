@@ -18,6 +18,8 @@ public sealed class AppSettings
     public Dictionary<string, ChannelPlaybackProfile> ChannelProfiles { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public PlaylistHealthPreferences PlaylistHealth { get; set; } = new();
     public List<ProgramReminder> ProgramReminders { get; set; } = [];
+    public string? RecordingsFolder { get; set; }
+    public List<ScheduledRecording> ScheduledRecordings { get; set; } = [];
     public MultiviewPreferences Multiview { get; set; } = new();
 }
 

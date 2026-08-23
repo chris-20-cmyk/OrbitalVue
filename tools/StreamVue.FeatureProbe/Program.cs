@@ -1,17 +1,39 @@
 using System.Text;
 using System.IO.Compression;
+using LibVLCSharp.Shared;
 using StreamVue.Player.Models;
 using StreamVue.Player.Playback;
 using StreamVue.Player.Services;
 
 if (args is ["--cast-shortcut-self-test"])
 {
-    var castShortcutProbe = new WindowsCastService();
-    castShortcutProbe.OpenNearbyDisplayPicker();
-    await Task.Delay(900);
-    castShortcutProbe.OpenNearbyDisplayPicker();
-    Console.WriteLine("Windows Cast picker shortcut: PASS");
-    return 0;
+    try
+    {
+        var castShortcutProbe = new WindowsCastService();
+        castShortcutProbe.OpenNearbyDisplayPicker();
+        await Task.Delay(900);
+        castShortcutProbe.OpenNearbyDisplayPicker();
+        Console.WriteLine("Windows Cast picker shortcut: PASS");
+        return 0;
+    }
+    catch (Exception exception)
+    {
+        Console.Error.WriteLine($"Windows Cast picker shortcut: FAIL - {exception.Message}");
+        return 1;
+    }
+}
+
+if (args is ["--dvr-self-test"])
+{
+    try
+    {
+        return await RunDvrSelfTestAsync();
+    }
+    catch (Exception exception)
+    {
+        Console.Error.WriteLine($"Live DVR transport-stream recording: FAIL - {exception.Message}");
+        return 1;
+    }
 }
 
 var testRoot = Path.Combine(Path.GetTempPath(), $"streamvue-feature-probe-{Guid.NewGuid():N}");
@@ -109,6 +131,18 @@ try
                 StopUtc = DateTimeOffset.UtcNow.AddMinutes(90)
             }
         ],
+        RecordingsFolder = Path.Combine(testRoot, "recordings"),
+        ScheduledRecordings =
+        [
+            new ScheduledRecording
+            {
+                ChannelKey = first.StableKey,
+                ChannelName = first.Name,
+                ProgramTitle = "Late Report",
+                StartUtc = DateTimeOffset.UtcNow.AddHours(2),
+                StopUtc = DateTimeOffset.UtcNow.AddHours(3)
+            }
+        ],
         Multiview = new MultiviewPreferences
         {
             Layout = MultiviewLayout.Quad.ToString(),
@@ -160,6 +194,10 @@ try
         throw new InvalidOperationException("Playlist health history did not persist.");
     if (actual.ProgramReminders.Count != 1 || actual.ProgramReminders[0].ProgramTitle != "Evening Report")
         throw new InvalidOperationException("Program reminders did not persist.");
+    if (actual.RecordingsFolder != Path.Combine(testRoot, "recordings") ||
+        actual.ScheduledRecordings.Count != 1 || actual.ScheduledRecordings[0].ProgramTitle != "Late Report" ||
+        actual.ScheduledRecordings[0].Status != "Scheduled")
+        throw new InvalidOperationException("DVR folder or scheduled recordings did not persist.");
     if (actual.Multiview.Layout != MultiviewLayout.Quad.ToString() || actual.Multiview.ActiveSlot != 2 ||
         actual.Multiview.AudioSlot != 1 || actual.Multiview.ChannelKeys.Count != MultiviewSession.MaximumTiles ||
         actual.Multiview.ChannelKeys[0] != first.StableKey || actual.Multiview.ChannelKeys[2] != distinct.StableKey ||
@@ -407,6 +445,25 @@ try
     if (!Uri.TryCreate(AppUpdateService.RepositoryUrl, UriKind.Absolute, out var updateRepository) || updateRepository.Scheme != Uri.UriSchemeHttps)
         throw new InvalidOperationException("The public update repository URL is not a valid HTTPS address.");
 
+    var recordingStart = new DateTimeOffset(2026, 8, 22, 20, 15, 0, TimeSpan.Zero);
+    var recordingFileName = DvrRecordingService.CreateRecordingFileName("US: CON? Sports", "Final / Highlights", recordingStart);
+    var recordingPath = Path.Combine(testRoot, "recordings", recordingFileName);
+    var soutOption = DvrRecordingService.BuildSoutOption(recordingPath);
+    if (recordingFileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
+        !recordingFileName.EndsWith(".ts", StringComparison.OrdinalIgnoreCase) ||
+        !soutOption.StartsWith(":sout=#std{access=file,mux=ts,dst='", StringComparison.Ordinal) ||
+        soutOption.Contains("provider.invalid", StringComparison.OrdinalIgnoreCase))
+        throw new InvalidOperationException("DVR output naming or transport-stream routing failed.");
+    Directory.CreateDirectory(Path.GetDirectoryName(recordingPath)!);
+    await File.WriteAllBytesAsync(recordingPath, new byte[4_096]);
+    await File.WriteAllBytesAsync(Path.Combine(Path.GetDirectoryName(recordingPath)!, "empty.ts"), []);
+    using (var dvrLibrary = new DvrRecordingService())
+    {
+        var recent = dvrLibrary.ListRecentRecordings(Path.GetDirectoryName(recordingPath));
+        if (recent.Count != 1 || recent[0].Bytes != 4_096 || recent[0].FilePath != recordingPath)
+            throw new InvalidOperationException("DVR recording library indexing failed.");
+    }
+
     var castService = new WindowsCastService();
     if (!castService.IsSupported || WindowsCastService.NearbyDisplayShortcut != "Windows + K" ||
         WindowsCastService.DisplaySettingsUri != "ms-settings:display")
@@ -478,6 +535,9 @@ try
     Console.WriteLine("Per-channel playback profiles: PASS");
     Console.WriteLine("Playlist health persistence: PASS");
     Console.WriteLine("Program reminder persistence: PASS");
+    Console.WriteLine("DVR schedule persistence: PASS");
+    Console.WriteLine("Safe transport-stream recording output: PASS");
+    Console.WriteLine("DVR recording library indexing: PASS");
     Console.WriteLine("Persistent four-view assignments: PASS");
     Console.WriteLine("Saved multiview layouts: PASS");
     Console.WriteLine("Single-audio multiview policy: PASS");
@@ -506,7 +566,132 @@ try
     Console.WriteLine("Public update channel configuration: PASS");
     return 0;
 }
+catch (Exception exception)
+{
+    Console.Error.WriteLine($"StreamVue feature verification: FAIL - {exception.Message}");
+    return 1;
+}
 finally
 {
     if (Directory.Exists(testRoot)) Directory.Delete(testRoot, recursive: true);
+}
+
+static async Task<int> RunDvrSelfTestAsync()
+{
+    var root = Path.Combine(Path.GetTempPath(), $"streamvue-dvr-probe-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(root);
+    try
+    {
+        var wavePath = Path.Combine(root, "source.wav");
+        var sourcePath = Path.Combine(root, "source.ts");
+        await WriteProbeWaveAsync(wavePath, TimeSpan.FromSeconds(5));
+        await CreateProbeTransportStreamAsync(wavePath, sourcePath);
+        var channel = new ChannelItem
+        {
+            Number = 1,
+            Name = "DVR Probe",
+            Group = "Quality assurance",
+            Url = new Uri(sourcePath).AbsoluteUri,
+            Kind = ChannelKind.Live
+        };
+
+        DvrRecordingSnapshot snapshot;
+        using (var dvr = new DvrRecordingService())
+        {
+            snapshot = dvr.Start(channel, Path.Combine(root, "recordings"), "Original quality self-test");
+            var deadline = DateTimeOffset.UtcNow.AddSeconds(8);
+            while (DateTimeOffset.UtcNow < deadline)
+            {
+                await Task.Delay(120);
+                snapshot = dvr.Poll(DateTimeOffset.UtcNow);
+                if (snapshot.State == DvrRecordingState.Failed)
+                    throw new InvalidOperationException(snapshot.Message ?? "The DVR recording self-test failed.");
+                if (snapshot.State == DvrRecordingState.Recording)
+                {
+                    await Task.Delay(1_250);
+                    break;
+                }
+            }
+            snapshot = dvr.Stop("DVR self-test complete");
+        }
+
+        if (snapshot.State != DvrRecordingState.Completed || snapshot.BytesWritten < 4_096 ||
+            string.IsNullOrWhiteSpace(snapshot.OutputPath) || !File.Exists(snapshot.OutputPath))
+            throw new InvalidOperationException(
+                $"The DVR did not finalize a playable transport-stream file " +
+                $"(state={snapshot.State}, bytes={snapshot.BytesWritten:N0}, exists={File.Exists(snapshot.OutputPath)}, " +
+                $"message={snapshot.Message ?? "none"}).");
+
+        Console.WriteLine($"Live DVR transport-stream recording: PASS ({snapshot.BytesWritten:N0} bytes)");
+        return 0;
+    }
+    finally
+    {
+        if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+    }
+}
+
+static async Task CreateProbeTransportStreamAsync(string wavePath, string outputPath)
+{
+    Core.Initialize();
+    using var libVlc = new LibVLC("--intf=dummy", "--no-video-title-show", "--quiet");
+    using var mediaPlayer = new MediaPlayer(libVlc);
+    using var media = new Media(libVlc, new Uri(wavePath));
+    var normalized = Path.GetFullPath(outputPath).Replace('\\', '/').Replace("'", "\\'", StringComparison.Ordinal);
+    media.AddOption(":sout=#transcode{acodec=mpga,ab=128,channels=1,samplerate=48000}:" +
+                    $"std{{access=file,mux=ts,dst='{normalized}'}}");
+    media.AddOption(":sout-all");
+
+    var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    void OnEndReached(object? sender, EventArgs e) => completed.TrySetResult();
+    void OnError(object? sender, EventArgs e) => completed.TrySetException(
+        new InvalidOperationException("LibVLC could not generate the DVR transport-stream fixture."));
+    mediaPlayer.EndReached += OnEndReached;
+    mediaPlayer.EncounteredError += OnError;
+    try
+    {
+        mediaPlayer.Media = media;
+        if (!mediaPlayer.Play())
+            throw new InvalidOperationException("LibVLC could not start the DVR transport-stream fixture.");
+        await completed.Task.WaitAsync(TimeSpan.FromSeconds(12));
+    }
+    finally
+    {
+        mediaPlayer.EndReached -= OnEndReached;
+        mediaPlayer.EncounteredError -= OnError;
+        if (mediaPlayer.IsPlaying) mediaPlayer.Stop();
+        mediaPlayer.Media = null;
+    }
+
+    if (!File.Exists(outputPath) || new FileInfo(outputPath).Length < 4_096)
+        throw new InvalidOperationException("LibVLC generated an empty DVR transport-stream fixture.");
+}
+
+static async Task WriteProbeWaveAsync(string path, TimeSpan duration)
+{
+    const int sampleRate = 48_000;
+    const short channels = 1;
+    const short bitsPerSample = 16;
+    var sampleCount = (int)(sampleRate * duration.TotalSeconds);
+    var dataLength = sampleCount * channels * bitsPerSample / 8;
+    await using var stream = File.Create(path);
+    using var writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen: true);
+    writer.Write(Encoding.ASCII.GetBytes("RIFF"));
+    writer.Write(36 + dataLength);
+    writer.Write(Encoding.ASCII.GetBytes("WAVEfmt "));
+    writer.Write(16);
+    writer.Write((short)1);
+    writer.Write(channels);
+    writer.Write(sampleRate);
+    writer.Write(sampleRate * channels * bitsPerSample / 8);
+    writer.Write((short)(channels * bitsPerSample / 8));
+    writer.Write(bitsPerSample);
+    writer.Write(Encoding.ASCII.GetBytes("data"));
+    writer.Write(dataLength);
+    for (var sample = 0; sample < sampleCount; sample++)
+    {
+        var value = (short)(Math.Sin(2 * Math.PI * 440 * sample / sampleRate) * short.MaxValue * 0.18);
+        writer.Write(value);
+    }
+    await stream.FlushAsync();
 }

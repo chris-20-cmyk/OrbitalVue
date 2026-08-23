@@ -27,6 +27,7 @@ using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 using Cursors = System.Windows.Input.Cursors;
 using Application = System.Windows.Application;
 using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
+using OpenFolderDialog = Microsoft.Win32.OpenFolderDialog;
 using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
 using RadioButton = System.Windows.Controls.RadioButton;
 
@@ -56,6 +57,7 @@ public partial class MainWindow : Window
     private readonly EpgMappingStore _epgMappingStore = new();
     private readonly StreamVueMaintenanceService _maintenanceService = new();
     private readonly WindowsCastService _castService = new();
+    private readonly DvrRecordingService _dvrRecording = new();
     private readonly DispatcherTimer _telemetryTimer;
     private readonly DispatcherTimer _fullscreenChromeTimer;
     private readonly DispatcherTimer _sleepTimer;
@@ -109,6 +111,8 @@ public partial class MainWindow : Window
     private bool _synchronizingGuideScroll;
     private string _trackControlSignature = string.Empty;
     private string _learnedProfileSignature = string.Empty;
+    private string _handledDvrTerminalSignature = string.Empty;
+    private string _dvrLibrarySignature = string.Empty;
     private System.Windows.Point _dragStartPoint;
     private MultiviewLayout _multiviewLayout = MultiviewLayout.Quad;
     private DateTimeOffset? _sleepDeadline;
@@ -162,6 +166,8 @@ public partial class MainWindow : Window
             : new Dictionary<string, ChannelPlaybackProfile>(_settings.ChannelProfiles, StringComparer.OrdinalIgnoreCase);
         _settings.PlaylistHealth ??= new PlaylistHealthPreferences();
         _settings.ProgramReminders ??= [];
+        _settings.ScheduledRecordings ??= [];
+        _settings.RecordingsFolder = ResolveRecordingsFolder(_settings.RecordingsFolder);
         _settings.Multiview ??= new MultiviewPreferences();
         _settings.Multiview.ChannelKeys ??= [null, null, null, null];
         _settings.Multiview.SavedLayouts ??= [];
@@ -169,6 +175,9 @@ public partial class MainWindow : Window
         ApplySettingsToControls();
         RefreshSavedMultiviewLayouts();
         UpdatePlaylistHealthUi();
+        RecordingFolderBox.Text = _settings.RecordingsFolder;
+        NormalizeScheduledRecordings();
+        UpdateDvrUi(_dvrRecording.Snapshot);
         CreatePlaybackEngine();
         _displayRefreshRate = new DisplayRefreshRateController(new WindowInteropHelper(this).Handle);
         _telemetryTimer.Start();
@@ -457,6 +466,36 @@ public partial class MainWindow : Window
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
             await Task.Delay(500);
             CaptureWindow(commandLineArguments[castCaptureArgumentIndex + 1]);
+            Close();
+            Application.Current.Shutdown(0);
+            return;
+        }
+
+        var dvrCaptureArgumentIndex = Array.FindIndex(commandLineArguments, argument => argument == "--capture-dvr-ui");
+        if (dvrCaptureArgumentIndex >= 0 && dvrCaptureArgumentIndex + 1 < commandLineArguments.Length)
+        {
+            await PrepareModalCaptureAsync(commandLineArguments);
+            if (_channels.Count > 0)
+            {
+                var previewStart = DateTimeOffset.UtcNow.AddMinutes(38);
+                _settings.ScheduledRecordings =
+                [
+                    new ScheduledRecording
+                    {
+                        ChannelKey = _channels[0].StableKey,
+                        ChannelName = _channels[0].Name,
+                        ProgramTitle = "Prime Time Live",
+                        StartUtc = previewStart,
+                        StopUtc = previewStart.AddHours(2)
+                    }
+                ];
+            }
+            if (commandLineArguments.Contains("--maximized", StringComparer.OrdinalIgnoreCase))
+                WindowState = WindowState.Maximized;
+            OpenDvrPanel();
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
+            await Task.Delay(500);
+            CaptureWindow(commandLineArguments[dvrCaptureArgumentIndex + 1]);
             Close();
             Application.Current.Shutdown(0);
             return;
@@ -1937,6 +1976,10 @@ public partial class MainWindow : Window
         UpdateFullscreenHud(snapshot);
         LearnCurrentChannelProfile(snapshot);
         CheckProgramReminders();
+        var dvrSnapshot = _dvrRecording.Poll(DateTimeOffset.UtcNow);
+        ApplyDvrScheduleState(dvrSnapshot);
+        CheckScheduledRecordings();
+        UpdateDvrUi(dvrSnapshot);
 
         if (_settings.Playback.AdaptiveRefreshRate && snapshot.IsPlaying && snapshot.FramesPerSecond > 0)
             _displayRefreshRate?.TryMatch(snapshot.FramesPerSecond);
@@ -2468,13 +2511,24 @@ public partial class MainWindow : Window
         WatchFromGuide(block.Channel);
     }
 
-    private async void GuideProgramme_Reminder(object sender, MouseButtonEventArgs e)
+    private void GuideContextWatch_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is not GuideProgrammeBlock { Programme: not null } block) return;
+        if ((sender as FrameworkElement)?.DataContext is GuideProgrammeBlock block)
+            GuideProgramme_Click(new Button { DataContext = block }, e);
+    }
+
+    private async void GuideContextReminder_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is GuideProgrammeBlock { Programme: not null } block)
+            await ToggleProgramReminderAsync(block);
+    }
+
+    private async Task ToggleProgramReminderAsync(GuideProgrammeBlock block)
+    {
+        if (block.Programme is null) return;
         if (block.Programme.Start <= DateTimeOffset.UtcNow)
         {
             FooterStatusText.Text = "Reminders can be added to upcoming programs";
-            e.Handled = true;
             return;
         }
 
@@ -2502,7 +2556,12 @@ public partial class MainWindow : Window
             FooterStatusText.Text = $"Reminder removed • {block.Programme.Title}";
         }
         await _settingsStore.SaveAsync(_settings);
-        e.Handled = true;
+    }
+
+    private async void GuideContextRecording_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not GuideProgrammeBlock { Programme: not null } block) return;
+        await ToggleScheduledRecordingAsync(block);
     }
 
     private void WatchReminder_Click(object sender, RoutedEventArgs e)
@@ -3503,6 +3562,16 @@ public partial class MainWindow : Window
 
     private async Task DownloadAndApplyUpdateAsync()
     {
+        if (_dvrRecording.Snapshot.IsActive)
+        {
+            UpdateStateBadge.Background = new SolidColorBrush(Color.FromRgb(59, 32, 39));
+            UpdateStateBadgeText.Foreground = ErrorBrush;
+            UpdateStateBadgeText.Text = "RECORDING";
+            UpdateStatusText.Text = "Finish the active recording first";
+            UpdateDetailText.Text = "Stop and save the DVR recording before installing an update so the transport-stream file can close safely.";
+            return;
+        }
+
         _updateCancellation?.Cancel();
         _updateCancellation?.Dispose();
         _updateCancellation = new CancellationTokenSource();
@@ -3616,6 +3685,406 @@ public partial class MainWindow : Window
             CastStateBadgeText.Text = "UNAVAILABLE";
             CastStatusText.Text = exception.Message;
         }
+    }
+
+    private void OpenDvr_Click(object sender, RoutedEventArgs e) => OpenDvrPanel();
+
+    private void OpenDvrPanel()
+    {
+        if (!RecordingFolderBox.IsKeyboardFocusWithin)
+            RecordingFolderBox.Text = ResolveRecordingsFolder(_settings.RecordingsFolder);
+        ShowModal(DvrOverlay);
+        UpdateDvrUi(_dvrRecording.Poll(DateTimeOffset.UtcNow));
+    }
+
+    private void CloseDvr_Click(object sender, RoutedEventArgs e)
+    {
+        PersistRecordingsFolder();
+        HideModal(DvrOverlay);
+    }
+
+    private void ToggleRecording_Click(object sender, RoutedEventArgs e) => ToggleDvrRecording();
+
+    private void DvrRecordNow_Click(object sender, RoutedEventArgs e) => ToggleDvrRecording();
+
+    private void ToggleDvrRecording()
+    {
+        var snapshot = _dvrRecording.Snapshot;
+        if (snapshot.IsActive)
+        {
+            snapshot = _dvrRecording.Stop("Recording stopped and saved");
+            ApplyDvrScheduleState(snapshot);
+            UpdateDvrUi(snapshot);
+            FooterStatusDot.Fill = snapshot.State == DvrRecordingState.Completed ? LiveBrush : ErrorBrush;
+            FooterStatusText.Text = snapshot.State == DvrRecordingState.Completed
+                ? $"Recording saved • {Path.GetFileName(snapshot.OutputPath)}"
+                : snapshot.Message ?? "The recording could not be saved";
+            return;
+        }
+
+        var channel = ResolveRecordableChannel();
+        if (channel is null)
+        {
+            OpenDvrPanel();
+            FooterStatusDot.Fill = WarningBrush;
+            FooterStatusText.Text = "Choose a live channel before recording";
+            return;
+        }
+
+        if (channel.Kind != ChannelKind.Live)
+        {
+            FooterStatusDot.Fill = WarningBrush;
+            FooterStatusText.Text = "DVR recording is available for live channels";
+            return;
+        }
+
+        try
+        {
+            var folder = PersistRecordingsFolder();
+            var program = GetGuideNowNext(channel, DateTimeOffset.UtcNow).Current;
+            _handledDvrTerminalSignature = string.Empty;
+            snapshot = _dvrRecording.Start(channel, folder, program?.Title);
+            UpdateDvrUi(snapshot);
+            FooterStatusDot.Fill = ErrorBrush;
+            FooterStatusText.Text = $"Recording started • {channel.Name}";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or UriFormatException)
+        {
+            FooterStatusDot.Fill = ErrorBrush;
+            FooterStatusText.Text = SafeRecordingErrorMessage(exception);
+            UpdateDvrUi(_dvrRecording.Snapshot);
+        }
+    }
+
+    private ChannelItem? ResolveRecordableChannel()
+    {
+        if (_multiviewMode && _multiviewSession is not null)
+            return _multiviewSession.Tiles[_multiviewSession.ActiveSlot].Channel;
+        return _currentChannel;
+    }
+
+    private async Task ToggleScheduledRecordingAsync(GuideProgrammeBlock block)
+    {
+        if (block.Programme is null) return;
+        if (block.Channel.Kind != ChannelKind.Live)
+        {
+            FooterStatusDot.Fill = WarningBrush;
+            FooterStatusText.Text = "Only live TV programs can be scheduled for recording";
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (block.Programme.Stop <= now)
+        {
+            FooterStatusDot.Fill = WarningBrush;
+            FooterStatusText.Text = "That program has already ended";
+            return;
+        }
+
+        _settings.ScheduledRecordings ??= [];
+        var existing = _settings.ScheduledRecordings.FirstOrDefault(recording =>
+            recording.ChannelKey.Equals(block.Channel.StableKey, StringComparison.OrdinalIgnoreCase) &&
+            recording.StartUtc == block.Programme.Start &&
+            recording.ProgramTitle.Equals(block.Programme.Title, StringComparison.Ordinal));
+        if (existing is not null)
+        {
+            if (_dvrRecording.Snapshot.ScheduleId == existing.Id && _dvrRecording.Snapshot.IsActive)
+                _dvrRecording.Stop("Scheduled recording canceled");
+            _settings.ScheduledRecordings.Remove(existing);
+            FooterStatusDot.Fill = IdleBrush;
+            FooterStatusText.Text = $"Recording canceled • {block.Programme.Title}";
+        }
+        else
+        {
+            _settings.ScheduledRecordings.Add(new ScheduledRecording
+            {
+                ChannelKey = block.Channel.StableKey,
+                ChannelName = block.Channel.Name,
+                ProgramTitle = block.Programme.Title,
+                StartUtc = block.Programme.Start,
+                StopUtc = block.Programme.Stop
+            });
+            FooterStatusDot.Fill = LiveBrush;
+            FooterStatusText.Text = block.Programme.Start <= now
+                ? $"Recording queued now • {block.Programme.Title}"
+                : $"Recording scheduled • {block.Programme.Title} at {block.Programme.Start.ToLocalTime():h:mm tt}";
+        }
+
+        await _settingsStore.SaveAsync(_settings);
+        CheckScheduledRecordings();
+        UpdateDvrUi(_dvrRecording.Poll(DateTimeOffset.UtcNow));
+    }
+
+    private void CheckScheduledRecordings()
+    {
+        _settings.ScheduledRecordings ??= [];
+        var now = DateTimeOffset.UtcNow;
+        var changed = false;
+        foreach (var recording in _settings.ScheduledRecordings)
+        {
+            if (recording.Status == "Recording" && _dvrRecording.Snapshot.ScheduleId != recording.Id)
+            {
+                recording.Status = recording.StopUtc > now ? "Scheduled" : "Missed";
+                recording.Detail = recording.StopUtc > now ? "Resuming after StreamVue restarted" : "StreamVue closed before the recording completed";
+                changed = true;
+            }
+
+            if (recording.Status == "Scheduled" && recording.StopUtc <= now)
+            {
+                recording.Status = "Missed";
+                recording.Detail = "StreamVue was not recording before the program ended";
+                changed = true;
+            }
+        }
+
+        if (!_dvrRecording.Snapshot.IsActive)
+        {
+            var due = _settings.ScheduledRecordings
+                .Where(recording => recording.Status == "Scheduled" && recording.StartUtc <= now && recording.StopUtc > now)
+                .OrderBy(recording => recording.StartUtc)
+                .FirstOrDefault();
+            var channel = due is null
+                ? null
+                : _channels.FirstOrDefault(candidate => candidate.StableKey.Equals(due.ChannelKey, StringComparison.OrdinalIgnoreCase));
+            if (due is not null && channel is not null)
+            {
+                try
+                {
+                    var folder = PersistRecordingsFolder();
+                    _handledDvrTerminalSignature = string.Empty;
+                    var snapshot = _dvrRecording.Start(channel, folder, due.ProgramTitle, due.StopUtc, due.Id);
+                    due.Status = "Recording";
+                    due.Detail = "Recording in progress";
+                    due.OutputPath = snapshot.OutputPath;
+                    changed = true;
+                    FooterStatusDot.Fill = ErrorBrush;
+                    FooterStatusText.Text = $"Scheduled recording started • {due.ProgramTitle}";
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or UriFormatException)
+                {
+                    due.Status = "Failed";
+                    due.Detail = SafeRecordingErrorMessage(exception);
+                    changed = true;
+                    FooterStatusDot.Fill = ErrorBrush;
+                    FooterStatusText.Text = $"Scheduled recording failed • {due.ProgramTitle}";
+                }
+            }
+        }
+
+        if (changed) _ = _settingsStore.SaveAsync(_settings);
+    }
+
+    private void ApplyDvrScheduleState(DvrRecordingSnapshot snapshot)
+    {
+        if (snapshot.ScheduleId is not Guid scheduleId) return;
+        var scheduled = _settings.ScheduledRecordings?.FirstOrDefault(recording => recording.Id == scheduleId);
+        if (scheduled is null) return;
+
+        var desiredStatus = snapshot.State switch
+        {
+            DvrRecordingState.Starting or DvrRecordingState.Recording or DvrRecordingState.Stopping => "Recording",
+            DvrRecordingState.Completed => "Completed",
+            DvrRecordingState.Failed => "Failed",
+            _ => scheduled.Status
+        };
+        var terminalSignature = $"{scheduleId:N}:{snapshot.State}:{snapshot.OutputPath}";
+        var terminalAlreadyHandled =
+            (snapshot.State is DvrRecordingState.Completed or DvrRecordingState.Failed) &&
+            terminalSignature == _handledDvrTerminalSignature;
+        if (terminalAlreadyHandled && scheduled.Status == desiredStatus) return;
+
+        var changed = scheduled.Status != desiredStatus || scheduled.OutputPath != snapshot.OutputPath;
+        scheduled.Status = desiredStatus;
+        scheduled.OutputPath = snapshot.OutputPath;
+        scheduled.Detail = snapshot.Message;
+        if (snapshot.State is DvrRecordingState.Completed or DvrRecordingState.Failed)
+            _handledDvrTerminalSignature = terminalSignature;
+        if (changed) _ = _settingsStore.SaveAsync(_settings);
+    }
+
+    private void NormalizeScheduledRecordings()
+    {
+        _settings.ScheduledRecordings ??= [];
+        var now = DateTimeOffset.UtcNow;
+        foreach (var recording in _settings.ScheduledRecordings.Where(recording => recording.Status == "Recording"))
+        {
+            recording.Status = recording.StopUtc > now ? "Scheduled" : "Missed";
+            recording.Detail = recording.StopUtc > now ? "Ready to resume when the playlist is available" : "StreamVue closed before completion";
+        }
+        _settings.ScheduledRecordings.RemoveAll(recording =>
+            (recording.Status is "Completed" or "Missed" or "Failed") && recording.StopUtc < now.AddDays(-14));
+    }
+
+    private void UpdateDvrUi(DvrRecordingSnapshot snapshot)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var recordableChannel = ResolveRecordableChannel();
+        var elapsed = snapshot.Elapsed(now);
+        DvrElapsedText.Text = $"{(int)elapsed.TotalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}";
+        DvrSizeText.Text = FormatDvrBytes(snapshot.BytesWritten);
+        DvrActiveDot.Fill = snapshot.IsActive ? ErrorBrush : IdleBrush;
+        RecordButton.IsEnabled = snapshot.IsActive || recordableChannel?.Kind == ChannelKind.Live;
+
+        if (snapshot.IsActive)
+        {
+            DvrCurrentTitle.Text = $"Recording • {snapshot.ChannelName}";
+            DvrCurrentDetail.Text = string.IsNullOrWhiteSpace(snapshot.ProgramTitle)
+                ? snapshot.Message ?? "Recording the original live transport stream"
+                : $"{snapshot.ProgramTitle} • {snapshot.Message}";
+            DvrStateBadge.Background = new SolidColorBrush(Color.FromRgb(59, 32, 39));
+            DvrStateBadgeText.Foreground = ErrorBrush;
+            DvrStateBadgeText.Text = snapshot.State == DvrRecordingState.Starting ? "STARTING" : "RECORDING";
+            DvrActionButton.Content = "Stop & save";
+            DvrNavigationText.Text = "REC";
+            DvrNavigationDot.Fill = ErrorBrush;
+            DvrNavigationButton.Background = new SolidColorBrush(Color.FromRgb(59, 32, 39));
+            DvrNavigationButton.BorderBrush = ErrorBrush;
+            RecordButtonGlyph.Text = "■";
+            RecordButton.ToolTip = $"Stop recording {snapshot.ChannelName}";
+        }
+        else
+        {
+            DvrNavigationText.Text = "DVR";
+            DvrNavigationDot.Fill = IdleBrush;
+            DvrNavigationButton.ClearValue(BackgroundProperty);
+            DvrNavigationButton.ClearValue(BorderBrushProperty);
+            RecordButtonGlyph.Text = "●";
+            RecordButton.ToolTip = recordableChannel?.Kind == ChannelKind.Live
+                ? $"Record {recordableChannel.Name}"
+                : "Choose a live channel to record";
+            DvrActionButton.Content = "Record now";
+            DvrActionButton.IsEnabled = recordableChannel?.Kind == ChannelKind.Live;
+
+            if (snapshot.State == DvrRecordingState.Completed)
+            {
+                DvrCurrentTitle.Text = "Recording saved";
+                DvrCurrentDetail.Text = Path.GetFileName(snapshot.OutputPath) ?? snapshot.Message ?? "The recording is ready.";
+                DvrStateBadge.Background = new SolidColorBrush(Color.FromRgb(23, 54, 47));
+                DvrStateBadgeText.Foreground = LiveBrush;
+                DvrStateBadgeText.Text = "SAVED";
+            }
+            else if (snapshot.State == DvrRecordingState.Failed)
+            {
+                DvrCurrentTitle.Text = "Recording could not be completed";
+                DvrCurrentDetail.Text = snapshot.Message ?? "The provider stream ended before media could be saved.";
+                DvrStateBadge.Background = new SolidColorBrush(Color.FromRgb(66, 31, 38));
+                DvrStateBadgeText.Foreground = ErrorBrush;
+                DvrStateBadgeText.Text = "FAILED";
+            }
+            else
+            {
+                DvrCurrentTitle.Text = recordableChannel is null ? "Ready to record" : $"Ready • {recordableChannel.Name}";
+                DvrCurrentDetail.Text = recordableChannel is null
+                    ? "Choose a live channel, then press Record."
+                    : "Record the current live channel without interrupting playback.";
+                DvrStateBadge.Background = new SolidColorBrush(Color.FromRgb(23, 36, 50));
+                DvrStateBadgeText.Foreground = new SolidColorBrush(Color.FromRgb(117, 185, 255));
+                DvrStateBadgeText.Text = "READY";
+            }
+        }
+
+        if (snapshot.IsActive) DvrActionButton.IsEnabled = true;
+        var scheduleRows = (_settings.ScheduledRecordings ?? [])
+            .OrderBy(recording => recording.Status is "Scheduled" or "Recording" ? 0 : 1)
+            .ThenBy(recording => recording.StartUtc)
+            .Take(20)
+            .Select(recording => new DvrScheduleRow(recording))
+            .ToList();
+        DvrScheduleList.ItemsSource = scheduleRows;
+        DvrScheduleEmptyText.Visibility = scheduleRows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        var librarySignature = $"{snapshot.State}:{snapshot.OutputPath}:{snapshot.BytesWritten}:{_settings.RecordingsFolder}";
+        if (DvrOverlay.Visibility == Visibility.Visible ||
+            ((snapshot.State is DvrRecordingState.Completed or DvrRecordingState.Failed) &&
+             !string.Equals(_dvrLibrarySignature, librarySignature, StringComparison.Ordinal)))
+        {
+            var library = _dvrRecording.ListRecentRecordings(_settings.RecordingsFolder);
+            DvrLibraryList.ItemsSource = library;
+            DvrLibraryEmptyText.Visibility = library.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            _dvrLibrarySignature = librarySignature;
+        }
+    }
+
+    private async void CancelScheduledRecording_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not DvrScheduleRow row) return;
+        var scheduled = _settings.ScheduledRecordings.FirstOrDefault(recording => recording.Id == row.Id);
+        if (scheduled is null) return;
+        if (_dvrRecording.Snapshot.ScheduleId == scheduled.Id && _dvrRecording.Snapshot.IsActive)
+            _dvrRecording.Stop("Scheduled recording canceled");
+        _settings.ScheduledRecordings.Remove(scheduled);
+        await _settingsStore.SaveAsync(_settings);
+        UpdateDvrUi(_dvrRecording.Poll(DateTimeOffset.UtcNow));
+        FooterStatusText.Text = $"Recording canceled • {scheduled.ProgramTitle}";
+    }
+
+    private async void BrowseRecordingsFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFolderDialog
+        {
+            Title = "Choose the StreamVue recordings folder",
+            InitialDirectory = ResolveRecordingsFolder(RecordingFolderBox.Text),
+            Multiselect = false
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        RecordingFolderBox.Text = dialog.FolderName;
+        _settings.RecordingsFolder = ResolveRecordingsFolder(dialog.FolderName);
+        await _settingsStore.SaveAsync(_settings);
+        UpdateDvrUi(_dvrRecording.Snapshot);
+    }
+
+    private void OpenRecordingsFolder_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var folder = PersistRecordingsFolder();
+            Directory.CreateDirectory(folder);
+            var startInfo = new ProcessStartInfo("explorer.exe") { UseShellExecute = true };
+            startInfo.ArgumentList.Add(folder);
+            Process.Start(startInfo);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or Win32Exception)
+        {
+            FooterStatusDot.Fill = ErrorBrush;
+            FooterStatusText.Text = SafeRecordingErrorMessage(exception);
+        }
+    }
+
+    private void OpenRecordingFileLocation_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not DvrLibraryItem item || !File.Exists(item.FilePath)) return;
+        var startInfo = new ProcessStartInfo("explorer.exe") { UseShellExecute = true };
+        startInfo.ArgumentList.Add($"/select,{item.FilePath}");
+        Process.Start(startInfo);
+    }
+
+    private string PersistRecordingsFolder()
+    {
+        var folder = ResolveRecordingsFolder(RecordingFolderBox.Text);
+        RecordingFolderBox.Text = folder;
+        if (!string.Equals(_settings.RecordingsFolder, folder, StringComparison.OrdinalIgnoreCase))
+        {
+            _settings.RecordingsFolder = folder;
+            _ = _settingsStore.SaveAsync(_settings);
+        }
+        return folder;
+    }
+
+    private static string ResolveRecordingsFolder(string? folder)
+    {
+        try { return DvrRecordingService.NormalizeRecordingsFolder(folder); }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return DvrRecordingService.DefaultRecordingsFolder;
+        }
+    }
+
+    private static string FormatDvrBytes(long bytes)
+    {
+        if (bytes >= 1_073_741_824) return $"{bytes / 1_073_741_824d:0.00} GB";
+        if (bytes >= 1_048_576) return $"{bytes / 1_048_576d:0.0} MB";
+        if (bytes >= 1_024) return $"{bytes / 1_024d:0.0} KB";
+        return $"{bytes:N0} bytes";
     }
 
     private void ToggleMiniPlayer_Click(object sender, RoutedEventArgs e) => ToggleMiniPlayer();
@@ -3949,7 +4418,15 @@ public partial class MainWindow : Window
         var castShortcut = e.Key == Key.C &&
                            Keyboard.Modifiers.HasFlag(ModifierKeys.Control) &&
                            Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
-        if (castShortcut && !IsAnyModalVisible())
+        var recordShortcut = e.Key == Key.R &&
+                             Keyboard.Modifiers.HasFlag(ModifierKeys.Control) &&
+                             Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+        if (recordShortcut && !IsAnyModalVisible())
+        {
+            ToggleDvrRecording();
+            e.Handled = true;
+        }
+        else if (castShortcut && !IsAnyModalVisible())
         {
             OpenCastPanel();
             e.Handled = true;
@@ -3973,6 +4450,7 @@ public partial class MainWindow : Window
             else if (SettingsOverlay.Visibility == Visibility.Visible) HideModal(SettingsOverlay);
             else if (UpdateOverlay.Visibility == Visibility.Visible && !_updateBusy) HideModal(UpdateOverlay);
             else if (CastOverlay.Visibility == Visibility.Visible) HideModal(CastOverlay);
+            else if (DvrOverlay.Visibility == Visibility.Visible) HideModal(DvrOverlay);
             else if (_isFullscreen) ToggleFullscreen();
             else if (_multiviewMode && _multiviewLayout == MultiviewLayout.Focus)
             {
@@ -4111,6 +4589,7 @@ public partial class MainWindow : Window
         if (!ReferenceEquals(overlay, SettingsOverlay)) SettingsOverlay.Visibility = Visibility.Collapsed;
         if (!ReferenceEquals(overlay, UpdateOverlay)) UpdateOverlay.Visibility = Visibility.Collapsed;
         if (!ReferenceEquals(overlay, CastOverlay)) CastOverlay.Visibility = Visibility.Collapsed;
+        if (!ReferenceEquals(overlay, DvrOverlay)) DvrOverlay.Visibility = Visibility.Collapsed;
         if (!ReferenceEquals(overlay, MappingOverlay)) MappingOverlay.Visibility = Visibility.Collapsed;
 
         _playerChromeSuppressed = true;
@@ -4121,7 +4600,7 @@ public partial class MainWindow : Window
     private void HideModal(Grid overlay)
     {
         overlay.Visibility = Visibility.Collapsed;
-        if (ImportOverlay.Visibility != Visibility.Visible && PlaylistHealthOverlay.Visibility != Visibility.Visible && SettingsOverlay.Visibility != Visibility.Visible && UpdateOverlay.Visibility != Visibility.Visible && CastOverlay.Visibility != Visibility.Visible && MappingOverlay.Visibility != Visibility.Visible)
+        if (ImportOverlay.Visibility != Visibility.Visible && PlaylistHealthOverlay.Visibility != Visibility.Visible && SettingsOverlay.Visibility != Visibility.Visible && UpdateOverlay.Visibility != Visibility.Visible && CastOverlay.Visibility != Visibility.Visible && DvrOverlay.Visibility != Visibility.Visible && MappingOverlay.Visibility != Visibility.Visible)
         {
             _playerChromeSuppressed = GuideWorkspace.Visibility == Visibility.Visible || _multiviewMode;
             RefreshPlayerSurfaceVisibility();
@@ -4130,7 +4609,7 @@ public partial class MainWindow : Window
 
     private bool IsAnyModalVisible() =>
         ImportOverlay.Visibility == Visibility.Visible || PlaylistHealthOverlay.Visibility == Visibility.Visible || SettingsOverlay.Visibility == Visibility.Visible ||
-        UpdateOverlay.Visibility == Visibility.Visible || CastOverlay.Visibility == Visibility.Visible || MappingOverlay.Visibility == Visibility.Visible;
+        UpdateOverlay.Visibility == Visibility.Visible || CastOverlay.Visibility == Visibility.Visible || DvrOverlay.Visibility == Visibility.Visible || MappingOverlay.Visibility == Visibility.Visible;
 
     private void RefreshPlayerSurfaceVisibility()
     {
@@ -4200,6 +4679,26 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
+        PersistRecordingsFolder();
+        if (_dvrRecording.Snapshot.IsActive)
+        {
+            var result = MessageBox.Show(
+                this,
+                $"StreamVue is recording {_dvrRecording.Snapshot.ChannelName}. Closing now will stop and save the recording.\n\nStop recording and close StreamVue?",
+                "Recording in progress",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+            if (result != MessageBoxResult.Yes)
+            {
+                e.Cancel = true;
+                return;
+            }
+            var snapshot = _dvrRecording.Stop("Recording stopped when StreamVue closed");
+            ApplyDvrScheduleState(snapshot);
+            _ = _settingsStore.SaveAsync(_settings);
+        }
+
         if (_isFullscreen) ExitFullscreen();
         _telemetryTimer.Stop();
         _fullscreenChromeTimer.Stop();
@@ -4213,6 +4712,7 @@ public partial class MainWindow : Window
         MultiviewTiles.ItemsSource = null;
         _multiviewSession?.Dispose();
         _playback?.Dispose();
+        _dvrRecording.Dispose();
     }
 
     private static string SafeErrorMessage(Exception exception) => exception switch
@@ -4235,6 +4735,19 @@ public partial class MainWindow : Window
         InvalidDataException invalidData => invalidData.Message,
         ArgumentException argument => argument.Message,
         _ => "The guide data could not be read."
+    };
+
+    private static string SafeRecordingErrorMessage(Exception exception) => exception switch
+    {
+        UnauthorizedAccessException => "Windows denied access to the recordings folder. Choose another folder.",
+        DirectoryNotFoundException => "The recordings folder is no longer available. Choose it again.",
+        PathTooLongException => "The recordings folder path is too long. Choose a shorter location.",
+        IOException => "Windows could not write the recording. Check the drive and available space.",
+        UriFormatException => "That channel has an invalid stream address and cannot be recorded.",
+        ArgumentException argument => argument.Message,
+        InvalidOperationException invalid => invalid.Message,
+        Win32Exception => "Windows could not open the recordings folder.",
+        _ => "The live channel could not be recorded."
     };
 
     private static string SafeUpdateErrorMessage(Exception exception) => exception switch

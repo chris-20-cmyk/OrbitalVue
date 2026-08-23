@@ -58,6 +58,12 @@
                 <TextBlock x:Name="BroadcastTitle" Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#647087" FontSize="11" Text="WINDOWS BROADCAST PLAYER" />
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="DvrNavigationButton" Margin="0,0,8,0" Height="32" Padding="12,0" Style="{StaticResource SecondaryButton}" Click="OpenDvr_Click" ToolTip="Open DVR &amp; recordings">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse x:Name="DvrNavigationDot" Width="7" Height="7" Margin="0,0,7,0" Fill="#FF536A" />
+                            <TextBlock x:Name="DvrNavigationText" VerticalAlignment="Center" FontSize="9.5" FontWeight="Bold" Text="DVR" />
+                        </StackPanel>
+                    </Button>
                     <Button x:Name="CastNavigationButton" Margin="0,0,8,0" Height="32" Padding="12,0" Style="{StaticResource SecondaryButton}" Click="OpenCast_Click" ToolTip="Cast to a nearby wireless display (Ctrl+Shift+C)">
                         <StackPanel Orientation="Horizontal">
                             <Viewbox Width="15" Height="15" Margin="0,0,7,0">
@@ -500,6 +506,9 @@
                             <Button Margin="4,0,0,0" Style="{StaticResource IconButton}" Width="42" Height="42" Foreground="#B9AFFF" Click="StabilizePlayback_Click" ToolTip="Stabilize stream with an 8-second cache">
                                 <TextBlock FontSize="18" FontWeight="Bold" Text="≋" />
                             </Button>
+                            <Button x:Name="RecordButton" Margin="4,0,0,0" Style="{StaticResource IconButton}" Width="42" Height="42" Foreground="#FF6277" Click="ToggleRecording_Click" ToolTip="Record this live channel">
+                                <TextBlock x:Name="RecordButtonGlyph" FontSize="17" Text="●" />
+                            </Button>
                         </StackPanel>
                         <StackPanel Grid.Column="2" Margin="16,0" VerticalAlignment="Center">
                             <TextBlock x:Name="PlaybackStatusText" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="IDLE" />
@@ -796,7 +805,7 @@
                                                     </ItemsControl.ItemContainerStyle>
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
-                                                            <Button Width="{Binding Width}" Height="64" Padding="11,8" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Click="GuideProgramme_Click" PreviewMouseRightButtonUp="GuideProgramme_Reminder" ToolTip="Watch now • right-click a future program to set a reminder" FocusVisualStyle="{x:Null}">
+                                                            <Button Width="{Binding Width}" Height="64" Padding="11,8" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Click="GuideProgramme_Click" ToolTip="Watch now • right-click for reminder and recording options" FocusVisualStyle="{x:Null}">
                                                                 <Button.Style>
                                                                     <Style TargetType="Button">
                                                                         <Setter Property="Foreground" Value="#DCE5F2" />
@@ -823,6 +832,14 @@
                                                                         </Style.Triggers>
                                                                     </Style>
                                                                 </Button.Style>
+                                                                <Button.ContextMenu>
+                                                                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}" Background="#121A26" Foreground="#E3EAF4" BorderBrush="#344158" BorderThickness="1" Padding="4">
+                                                                        <MenuItem Header="Watch now" Click="GuideContextWatch_Click" />
+                                                                        <Separator Background="#344158" />
+                                                                        <MenuItem Header="Set or remove reminder" Click="GuideContextReminder_Click" />
+                                                                        <MenuItem Header="Schedule or cancel recording" Click="GuideContextRecording_Click" />
+                                                                    </ContextMenu>
+                                                                </Button.ContextMenu>
                                                                 <StackPanel>
                                                                     <TextBlock FontSize="10.5" FontWeight="SemiBold" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
                                                                     <TextBlock Margin="0,4,0,0" Foreground="#8190A5" FontSize="8.5" Text="{Binding Time}" TextTrimming="CharacterEllipsis" />
@@ -1061,7 +1078,7 @@
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
                     <TextBlock Foreground="#566176" FontSize="9" Text="↑↓ CHANNELS • BACKSPACE LAST" />
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
-                    <TextBlock Foreground="#566176" FontSize="9" Text="3.2 WIRELESS CAST" />
+                    <TextBlock Foreground="#566176" FontSize="9" Text="3.3 DVR PREVIEW" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -1665,6 +1682,140 @@
                             <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                                 <Button Margin="0,0,10,0" Style="{StaticResource SecondaryButton}" Click="OpenCastDisplaySettings_Click" Content="Display settings" />
                                 <Button x:Name="FindCastDevicesButton" Style="{StaticResource PrimaryButton}" Click="FindCastDevices_Click" Content="Find nearby displays" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- DVR and recordings center -->
+        <Grid x:Name="DvrOverlay" Grid.RowSpan="3" Panel.ZIndex="118" Background="#F2080B12" Visibility="Collapsed">
+            <Border Width="780" MaxHeight="760" Margin="24" HorizontalAlignment="Center" VerticalAlignment="Center" CornerRadius="22" Background="#111722" BorderBrush="#344158" BorderThickness="1" ClipToBounds="True">
+                <Border.Effect><DropShadowEffect BlurRadius="38" ShadowDepth="8" Opacity="0.58" Color="#000000" /></Border.Effect>
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+
+                    <Grid Margin="28,24,28,18">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="DVR &amp; recordings" />
+                                <Border Margin="10,3,0,0" Padding="8,4" VerticalAlignment="Top" CornerRadius="6" Background="#3B2027">
+                                    <TextBlock Foreground="#FF7184" FontSize="8" FontWeight="Bold" Text="DIRECT TRANSPORT STREAM" />
+                                </Border>
+                            </StackPanel>
+                            <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Record live channels now or schedule a program from the TV Guide." />
+                        </StackPanel>
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseDvr_Click" ToolTip="Close"><TextBlock FontSize="18" Text="×" /></Button>
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1" Margin="24,0,18,0" Padding="4,0,8,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" CanContentScroll="False">
+                        <StackPanel>
+                            <Border Padding="19" CornerRadius="16" Background="#0D131D" BorderBrush="#273247" BorderThickness="1">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="54" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <Grid Width="42" Height="42" VerticalAlignment="Top">
+                                        <Ellipse Fill="#3B2027" Stroke="#6C3540" StrokeThickness="1" />
+                                        <Ellipse x:Name="DvrActiveDot" Width="12" Height="12" Fill="#FF536A" />
+                                    </Grid>
+                                    <StackPanel Grid.Column="1" Margin="2,0,18,0">
+                                        <TextBlock x:Name="DvrCurrentTitle" Foreground="#F0F4FA" FontSize="15" FontWeight="SemiBold" Text="Ready to record" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock x:Name="DvrCurrentDetail" Margin="0,6,0,0" Foreground="#8797AD" FontSize="10.5" LineHeight="16" Text="Choose a live channel, then press Record." TextWrapping="Wrap" />
+                                        <StackPanel Margin="0,10,0,0" Orientation="Horizontal">
+                                            <TextBlock x:Name="DvrElapsedText" Foreground="#FF7184" FontSize="10" FontWeight="Bold" Text="00:00:00" />
+                                            <Border Width="1" Height="12" Margin="10,0" Background="#344158" />
+                                            <TextBlock x:Name="DvrSizeText" Foreground="#8D9DB3" FontSize="10" Text="0 bytes" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <Border x:Name="DvrStateBadge" Grid.Column="2" Padding="10,5" VerticalAlignment="Top" CornerRadius="12" Background="#172432">
+                                        <TextBlock x:Name="DvrStateBadgeText" Foreground="#75B9FF" FontSize="9" FontWeight="Bold" Text="READY" />
+                                    </Border>
+                                </Grid>
+                            </Border>
+
+                            <Border Margin="0,14,0,0" Padding="17" CornerRadius="14" Background="#0D141E" BorderBrush="#273247" BorderThickness="1">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Foreground="#718198" FontSize="8.5" FontWeight="Bold" Text="RECORDINGS FOLDER" />
+                                        <TextBox x:Name="RecordingFolderBox" Height="38" Margin="0,8,12,0" Padding="11,8" ToolTip="Where StreamVue saves .ts recordings" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Margin="0,23,8,0" VerticalAlignment="Top" Style="{StaticResource SecondaryButton}" Click="BrowseRecordingsFolder_Click" Content="Browse…" />
+                                    <Button Grid.Column="2" Margin="0,23,0,0" VerticalAlignment="Top" Style="{StaticResource SecondaryButton}" Click="OpenRecordingsFolder_Click" Content="Open folder" />
+                                </Grid>
+                            </Border>
+
+                            <Grid Margin="0,18,0,8">
+                                <TextBlock Foreground="#7E8DA3" FontSize="9" FontWeight="Bold" Text="SCHEDULED FROM THE TV GUIDE" />
+                                <TextBlock HorizontalAlignment="Right" Foreground="#66758B" FontSize="9" Text="RIGHT-CLICK A GUIDE PROGRAM" />
+                            </Grid>
+                            <Border CornerRadius="14" Background="#0D131D" BorderBrush="#273247" BorderThickness="1" ClipToBounds="True">
+                                <Grid>
+                                    <TextBlock x:Name="DvrScheduleEmptyText" Margin="18" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#66758B" FontSize="10.5" Text="No scheduled recordings" />
+                                    <ListBox x:Name="DvrScheduleList" MaxHeight="220" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Padding="15,12" BorderBrush="#202B3B" BorderThickness="0,0,0,1">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                        <StackPanel>
+                                                            <TextBlock Foreground="#E0E7F1" FontSize="11" FontWeight="SemiBold" Text="{Binding ProgramTitle}" TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Margin="0,4,0,0" Foreground="#8494AA" FontSize="9" Text="{Binding ChannelName}" TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Margin="0,3,0,0" Foreground="#66758B" FontSize="8.5" Text="{Binding TimeText}" />
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="1" Margin="16,0" VerticalAlignment="Center">
+                                                            <TextBlock HorizontalAlignment="Right" Foreground="#FF7184" FontSize="8.5" FontWeight="Bold" Text="{Binding StatusText}" />
+                                                            <TextBlock Margin="0,4,0,0" MaxWidth="220" Foreground="#66758B" FontSize="8" Text="{Binding DetailText}" TextTrimming="CharacterEllipsis" />
+                                                        </StackPanel>
+                                                        <Button Grid.Column="2" Padding="10,6" VerticalAlignment="Center" Style="{StaticResource SecondaryButton}" Click="CancelScheduledRecording_Click" IsEnabled="{Binding CanCancel}" Content="Cancel" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </Grid>
+                            </Border>
+
+                            <Grid Margin="0,18,0,8">
+                                <TextBlock Foreground="#7E8DA3" FontSize="9" FontWeight="Bold" Text="RECENT RECORDINGS" />
+                                <TextBlock HorizontalAlignment="Right" Foreground="#66758B" FontSize="9" Text="MPEG-TS • ORIGINAL QUALITY" />
+                            </Grid>
+                            <Border CornerRadius="14" Background="#0D131D" BorderBrush="#273247" BorderThickness="1" ClipToBounds="True">
+                                <Grid>
+                                    <TextBlock x:Name="DvrLibraryEmptyText" Margin="18" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#66758B" FontSize="10.5" Text="Recordings will appear here" />
+                                    <ListBox x:Name="DvrLibraryList" MaxHeight="190" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Padding="15,11" BorderBrush="#202B3B" BorderThickness="0,0,0,1">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                        <StackPanel>
+                                                            <TextBlock Foreground="#E0E7F1" FontSize="10.5" FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Margin="0,4,0,0" Foreground="#6E7D92" FontSize="8.5" Text="{Binding Detail}" />
+                                                        </StackPanel>
+                                                        <Button Grid.Column="1" Padding="10,6" VerticalAlignment="Center" Style="{StaticResource SecondaryButton}" Click="OpenRecordingFileLocation_Click" Content="Show in folder" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </Grid>
+                            </Border>
+
+                            <Border Margin="0,14,0,2" Padding="15,12" CornerRadius="12" Background="#251D13" BorderBrush="#4B3A22" BorderThickness="1">
+                                <TextBlock Foreground="#D4B47D" FontSize="9.8" LineHeight="15" Text="Recording opens a separate direct stream so your picture is never interrupted. Some IPTV providers may count this as an additional simultaneous connection. StreamVue records only while the app is open." TextWrapping="Wrap" />
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <Border Grid.Row="2" Margin="0,18,0,0" Padding="28,16" Background="#0D131D" BorderBrush="#273247" BorderThickness="0,1,0,0">
+                        <Grid>
+                            <TextBlock VerticalAlignment="Center" Foreground="#65748A" FontSize="9.5" Text="CTRL + SHIFT + R  •  RECORD ACTIVE CHANNEL" />
+                            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                                <Button Margin="0,0,10,0" Style="{StaticResource SecondaryButton}" Click="CloseDvr_Click" Content="Close" />
+                                <Button x:Name="DvrActionButton" Style="{StaticResource PrimaryButton}" Click="DvrRecordNow_Click" Content="Record now" />
                             </StackPanel>
                         </Grid>
                     </Border>

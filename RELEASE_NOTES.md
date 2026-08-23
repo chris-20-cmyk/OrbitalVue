@@ -1,35 +1,35 @@
-# StreamVue 3.2.0 Wireless Cast
+# StreamVue 3.3.0 Live DVR
 
-StreamVue 3.2 adds a native Cast experience for nearby Windows wireless displays without weakening playback compatibility or exposing IPTV provider details to the receiving screen.
+StreamVue 3.3 adds original-quality live recording and TV Guide scheduling while preserving the native playback, casting, and multi-monitor improvements from 3.2.
 
-## Nearby display discovery
+## Record live TV
 
-- Open Cast directly from the StreamVue title bar or with Ctrl+Shift+C
-- Discover powered-on Miracast TVs, projectors, adapters, and receiving Windows PCs
-- Connect to compatible displays even when they have not previously been paired with this PC
-- Hand off to the official Windows Cast panel for trusted device selection and connection prompts
-- Open Windows display settings directly when projection configuration or troubleshooting is needed
+- Start or stop a recording from the Watch controls, the new DVR center, or Ctrl+Shift+R
+- Capture the provider's live transport stream directly without retuning or interrupting playback
+- Keep visible elapsed-time, file-size, channel, program, and save-status feedback
+- Save recordings as broadly compatible `.ts` files without quality-reducing video transcoding
+- Record the active Multiview tile while leaving the rest of the signal grid undisturbed
 
-## Playback-safe mirroring
+## Schedule from the TV Guide
 
-- Mirror StreamVue's rendered picture instead of sending the IPTV source URL to the receiving device
-- Keep LibVLC decoding, Playback IQ, hardware fallback, subtitles, aspect ratio, and on-screen controls active on the PC
-- Avoid receiver-side failures caused by unsupported MPEG-TS, HLS variants, provider authentication, or private request details
-- Continue using standard or Multiview playback while Windows manages the wireless display connection
+- Right-click a current or upcoming guide program to schedule or cancel its recording
+- Start and stop scheduled recordings automatically while StreamVue is open
+- Preserve upcoming schedules across restarts and clearly label completed, missed, or failed events
+- Enforce one active recording at a time to avoid uncontrolled provider connections
 
-## Professional Cast panel
+## Recordings center
 
-- Explain device requirements and connection steps before leaving StreamVue
-- Clarify that the target must be powered on with Screen Mirroring or Miracast enabled
-- Recommend Windows Duplicate mode for a direct StreamVue mirror
-- Document the separate protocol requirement for Chromecast-only and AirPlay-only receivers
-- Note that wireless audio capability and maximum resolution depend on the receiving device
+- Choose a recordings folder or open it directly in Windows Explorer
+- Review recent recordings with date, time, and file size
+- Reveal any saved recording in its folder with one click
+- Warn when a provider may count recording as an additional simultaneous stream
 
-## Verification
+## Safe lifecycle and verification
 
-- Release builds with zero warnings or errors
-- Feature probes verify the Windows nearby-display entry point and display-settings fallback
-- Visual checks cover the complete Cast panel at standard and maximized window sizes
-- Existing playback, updater, fullscreen, Multiview, multi-monitor, backup, guide, playlist, and Playback IQ probes remain covered
+- Prevent an in-app update restart until the active recording has been stopped and finalized
+- Confirm before closing StreamVue during a recording
+- Remove empty failed outputs instead of adding unusable files to the recordings library
+- Verify direct MPEG-TS remuxing with a real local transport-stream fixture
+- Pass the complete existing playlist, guide, updater, fullscreen, Multiview, multi-monitor, backup, casting, and Playback IQ feature suite
 
-This build installs in place through StreamVue's UPDATE button. Existing settings, favorites, playlists, guide data, reminders, channel profiles, backups, and Multiview assignments are preserved.
+This build installs in place through StreamVue's UPDATE button. Existing settings, playlists, favorites, guide data, reminders, channel profiles, backups, Cast behavior, and Multiview assignments are preserved.
