@@ -1,4 +1,5 @@
 using Velopack;
+using StreamVue.Player.Services;
 
 namespace StreamVue.Player;
 
@@ -11,8 +12,38 @@ public static class Program
         VelopackApp.Build().Run();
 #endif
 
-        var application = new App();
-        application.InitializeComponent();
-        application.Run();
+        StreamVueSingleInstance? singleInstance = null;
+#if !STREAMVUE_QA_BUILD
+        var automationRun = args.Any(argument =>
+            argument.StartsWith("--capture-", StringComparison.OrdinalIgnoreCase) ||
+            argument.StartsWith("--smoke-", StringComparison.OrdinalIgnoreCase) ||
+            argument.Equals("--startup-refresh-probe", StringComparison.OrdinalIgnoreCase));
+        if (!automationRun)
+        {
+            singleInstance = new StreamVueSingleInstance(args.Contains("--wait-for-instance", StringComparer.OrdinalIgnoreCase));
+            if (!singleInstance.IsPrimary)
+            {
+                singleInstance.SignalPrimary();
+                singleInstance.Dispose();
+                return;
+            }
+        }
+#endif
+
+        try
+        {
+            var application = new App();
+            application.InitializeComponent();
+            if (singleInstance is not null)
+                singleInstance.ActivationRequested += (_, _) => application.Dispatcher.BeginInvoke(() =>
+                {
+                    if (application.MainWindow is MainWindow window) window.ActivateFromSecondaryInstance();
+                });
+            application.Run();
+        }
+        finally
+        {
+            singleInstance?.Dispose();
+        }
     }
 }

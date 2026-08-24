@@ -57,3 +57,16 @@ public sealed record PlaybackSnapshot(
     string RecoveryReason = "No interventions");
 
 public sealed record PlaybackTrack(int Id, string Name, bool IsSelected);
+
+public sealed record LiveTimeshiftSnapshot(
+    bool Enabled,
+    bool IsLiveChannel,
+    bool CanPause,
+    bool CanRewind,
+    bool IsPaused,
+    TimeSpan BehindLive,
+    TimeSpan Window,
+    TimeSpan Remaining)
+{
+    public bool IsActive => Enabled && IsLiveChannel && (IsPaused || BehindLive > TimeSpan.FromSeconds(1));
+}

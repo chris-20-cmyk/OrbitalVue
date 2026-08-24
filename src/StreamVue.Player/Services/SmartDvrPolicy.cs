@@ -26,7 +26,10 @@ public static class SmartDvrPolicy
             StartPaddingMinutes = startPaddingMinutes,
             EndPaddingMinutes = endPaddingMinutes,
             Priority = priority,
-            SeriesRuleId = seriesRuleId
+            SeriesRuleId = seriesRuleId,
+            EpisodeKey = CreateEpisodeKey(programme, channel, seriesRuleId is not null),
+            EpisodeLabel = programme.EpisodeLabel,
+            IsNewEpisode = programme.IsNewEpisode
         };
     }
 
@@ -37,8 +40,29 @@ public static class SmartDvrPolicy
 
     public static bool RuleMatches(SeriesRecordingRule rule, ChannelItem channel, EpgProgram programme) =>
         rule.Enabled &&
-        rule.ChannelKey.Equals(channel.StableKey, StringComparison.OrdinalIgnoreCase) &&
-        NormalizeTitle(rule.ProgramTitle) == NormalizeTitle(programme.Title);
+        (rule.AnyChannel || rule.ChannelKey.Equals(channel.StableKey, StringComparison.OrdinalIgnoreCase)) &&
+        NormalizeTitle(rule.ProgramTitle) == NormalizeTitle(programme.Title) &&
+        (rule.EpisodeSelection != DvrEpisodeSelection.NewEpisodesOnly || programme.IsNewEpisode != false);
+
+    public static string CreateEpisodeKey(EpgProgram programme, ChannelItem channel, bool seriesIdentity)
+    {
+        var title = NormalizeTitle(programme.Title);
+        if (!string.IsNullOrWhiteSpace(programme.EpisodeId))
+            return $"{title}|{NormalizeTitle(programme.EpisodeId)}";
+        if (programme.SeasonNumber is int season && programme.EpisodeNumber is int episode)
+            return $"{title}|S{season}:E{episode}";
+        return seriesIdentity
+            ? $"{title}|{programme.Start.UtcDateTime:O}"
+            : $"{channel.StableKey}|{title}|{programme.Start.UtcDateTime:O}";
+    }
+
+    public static bool IsDuplicateEpisode(
+        IEnumerable<ScheduledRecording> recordings,
+        ScheduledRecording candidate) =>
+        !string.IsNullOrWhiteSpace(candidate.EpisodeKey) && recordings.Any(recording =>
+            recording.Id != candidate.Id &&
+            (recording.Status is not "Canceled" and not "Missed" and not "Failed" and not "Conflict" and not "Expired") &&
+            string.Equals(recording.EpisodeKey, candidate.EpisodeKey, StringComparison.OrdinalIgnoreCase));
 
     public static ScheduledRecording? SelectPreferred(IEnumerable<ScheduledRecording> recordings) => recordings
         .OrderByDescending(recording => recording.Priority)
@@ -67,7 +91,7 @@ public static class SmartDvrPolicy
 
     public static IReadOnlySet<Guid> FindConflictWinners(IEnumerable<ScheduledRecording> recordings)
     {
-        var active = recordings.Where(recording => recording.Status is "Scheduled" or "Recording").ToList();
+        var active = recordings.Where(recording => recording.Status is "Scheduled" or "Recording" or "Recovering").ToList();
         var winners = new HashSet<Guid>();
         foreach (var recording in active)
         {
@@ -88,6 +112,40 @@ public static class SmartDvrPolicy
 
     public static long StorageReserveBytes(int reserveGigabytes) =>
         Math.Clamp(reserveGigabytes, 0, 100) * 1_073_741_824L;
+
+    public static TimeSpan RecoveryDelay(int completedAttempts) => completedAttempts switch
+    {
+        <= 1 => TimeSpan.FromSeconds(2),
+        2 => TimeSpan.FromSeconds(5),
+        _ => TimeSpan.FromSeconds(10)
+    };
+
+    public static int ClampRetention(int count) => count switch
+    {
+        <= 0 => 0,
+        <= 1 => 1,
+        <= 3 => 3,
+        <= 5 => 5,
+        <= 10 => 10,
+        _ => 0
+    };
+
+    public static int NextRetention(int count) => ClampRetention(count) switch
+    {
+        0 => 1,
+        1 => 3,
+        3 => 5,
+        5 => 10,
+        _ => 0
+    };
+
+    public static int ClampTimeshiftMinutes(int minutes) => minutes switch
+    {
+        <= 15 => 15,
+        <= 30 => 30,
+        <= 60 => 60,
+        _ => 120
+    };
 
     public static int ClampPadding(int minutes) => Math.Clamp(minutes, 0, 30);
 

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Xml;
 using StreamVue.Player.Models;
 
@@ -104,7 +105,11 @@ public sealed class XmlTvParser
                 NullIfBlank(details.Description),
                 NullIfBlank(details.Category),
                 start!.Value,
-                stop!.Value));
+                stop!.Value,
+                NullIfBlank(details.EpisodeId),
+                details.SeasonNumber,
+                details.EpisodeNumber,
+                details.IsNewEpisode));
             matchedProgrammes++;
 
             if (matchedProgrammes % 2_000 == 0)
@@ -130,12 +135,16 @@ public sealed class XmlTvParser
         var names = new List<string>();
         if (reader.IsEmptyElement) return names;
         using var subtree = reader.ReadSubtree();
-        await subtree.ReadAsync();
-        while (await subtree.ReadAsync())
+        if (!await subtree.ReadAsync() || !await subtree.ReadAsync()) return names;
+        while (!subtree.EOF)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (subtree.NodeType == XmlNodeType.Element && subtree.LocalName.Equals("display-name", StringComparison.OrdinalIgnoreCase))
+            {
                 names.Add(await subtree.ReadElementContentAsStringAsync());
+                continue;
+            }
+            if (!await subtree.ReadAsync()) break;
         }
         return names;
     }
@@ -145,19 +154,73 @@ public sealed class XmlTvParser
         var details = new ProgrammeDetails();
         if (reader.IsEmptyElement) return details;
         using var subtree = reader.ReadSubtree();
-        await subtree.ReadAsync();
-        while (await subtree.ReadAsync())
+        if (!await subtree.ReadAsync() || !await subtree.ReadAsync()) return details;
+        while (!subtree.EOF)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (subtree.NodeType != XmlNodeType.Element) continue;
+            if (subtree.NodeType != XmlNodeType.Element)
+            {
+                if (!await subtree.ReadAsync()) break;
+                continue;
+            }
             if (subtree.LocalName.Equals("title", StringComparison.OrdinalIgnoreCase))
-                details.Title ??= await subtree.ReadElementContentAsStringAsync();
+            {
+                var value = await subtree.ReadElementContentAsStringAsync();
+                details.Title ??= value;
+                continue;
+            }
             else if (subtree.LocalName.Equals("desc", StringComparison.OrdinalIgnoreCase))
-                details.Description ??= await subtree.ReadElementContentAsStringAsync();
+            {
+                var value = await subtree.ReadElementContentAsStringAsync();
+                details.Description ??= value;
+                continue;
+            }
             else if (subtree.LocalName.Equals("category", StringComparison.OrdinalIgnoreCase))
-                details.Category ??= await subtree.ReadElementContentAsStringAsync();
+            {
+                var value = await subtree.ReadElementContentAsStringAsync();
+                details.Category ??= value;
+                continue;
+            }
+            else if (subtree.LocalName.Equals("new", StringComparison.OrdinalIgnoreCase))
+                details.IsNewEpisode = true;
+            else if (subtree.LocalName.Equals("previously-shown", StringComparison.OrdinalIgnoreCase))
+                details.IsNewEpisode ??= false;
+            else if (subtree.LocalName.Equals("episode-num", StringComparison.OrdinalIgnoreCase))
+            {
+                var system = subtree.GetAttribute("system")?.Trim() ?? string.Empty;
+                var value = (await subtree.ReadElementContentAsStringAsync()).Trim();
+                if (value.Length == 0) continue;
+                details.EpisodeId ??= $"{system}:{value}";
+                ParseEpisodeNumber(system, value, details);
+                continue;
+            }
+            if (!await subtree.ReadAsync()) break;
         }
         return details;
+    }
+
+    private static void ParseEpisodeNumber(string system, string value, ProgrammeDetails details)
+    {
+        if (system.Equals("xmltv_ns", StringComparison.OrdinalIgnoreCase))
+        {
+            var parts = value.Split('.');
+            if (parts.Length > 0 && int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var zeroBasedSeason))
+                details.SeasonNumber = zeroBasedSeason + 1;
+            if (parts.Length > 1)
+            {
+                var episodePart = parts[1].Split('/')[0];
+                if (int.TryParse(episodePart, NumberStyles.Integer, CultureInfo.InvariantCulture, out var zeroBasedEpisode))
+                    details.EpisodeNumber = zeroBasedEpisode + 1;
+            }
+            return;
+        }
+
+        var match = Regex.Match(value, @"S(?<season>\d{1,3})\s*E(?<episode>\d{1,4})", RegexOptions.IgnoreCase);
+        if (match.Success)
+        {
+            details.SeasonNumber = int.Parse(match.Groups["season"].Value, CultureInfo.InvariantCulture);
+            details.EpisodeNumber = int.Parse(match.Groups["episode"].Value, CultureInfo.InvariantCulture);
+        }
     }
 
     public static DateTimeOffset? ParseXmlTvTimestamp(string? value)
@@ -192,5 +255,9 @@ public sealed class XmlTvParser
         public string? Title { get; set; }
         public string? Description { get; set; }
         public string? Category { get; set; }
+        public string? EpisodeId { get; set; }
+        public int? SeasonNumber { get; set; }
+        public int? EpisodeNumber { get; set; }
+        public bool? IsNewEpisode { get; set; }
     }
 }

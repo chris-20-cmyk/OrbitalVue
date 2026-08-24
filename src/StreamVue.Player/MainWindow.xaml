@@ -509,6 +509,15 @@
                             <Button x:Name="RecordButton" Margin="4,0,0,0" Style="{StaticResource IconButton}" Width="42" Height="42" Foreground="#FF6277" Click="ToggleRecording_Click" ToolTip="Record this live channel">
                                 <TextBlock x:Name="RecordButtonGlyph" FontSize="17" Text="●" />
                             </Button>
+                            <Button x:Name="Rewind10Button" Margin="4,0,0,0" Style="{StaticResource IconButton}" Width="42" Height="42" Foreground="#75B9FF" Tag="10" Click="RewindLive_Click" ToolTip="Rewind live TV 10 seconds" Visibility="Collapsed">
+                                <TextBlock FontSize="9" FontWeight="Bold" Text="−10" />
+                            </Button>
+                            <Button x:Name="Rewind60Button" Margin="2,0,0,0" Style="{StaticResource IconButton}" Width="42" Height="42" Foreground="#75B9FF" Tag="60" Click="RewindLive_Click" ToolTip="Rewind live TV 60 seconds" Visibility="Collapsed">
+                                <TextBlock FontSize="9" FontWeight="Bold" Text="−60" />
+                            </Button>
+                            <Button x:Name="GoLiveButton" Margin="2,0,0,0" Style="{StaticResource IconButton}" Width="46" Height="42" Foreground="{StaticResource AccentBrush}" Click="GoLive_Click" ToolTip="Return to the live edge" Visibility="Collapsed">
+                                <TextBlock FontSize="8" FontWeight="Bold" Text="LIVE" />
+                            </Button>
                         </StackPanel>
                         <StackPanel Grid.Column="2" Margin="16,0" VerticalAlignment="Center">
                             <TextBlock x:Name="PlaybackStatusText" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="IDLE" />
@@ -518,6 +527,12 @@
                                 <TextBlock x:Name="RecordingPositionText" VerticalAlignment="Center" Foreground="#8E9DB1" FontSize="8.5" Text="0:00" />
                                 <Slider x:Name="PlaybackSeekSlider" Grid.Column="1" Height="15" Margin="9,0" Minimum="0" Maximum="1" IsMoveToPointEnabled="True" PreviewMouseLeftButtonDown="PlaybackSeekSlider_PreviewMouseLeftButtonDown" PreviewMouseLeftButtonUp="PlaybackSeekSlider_PreviewMouseLeftButtonUp" KeyUp="PlaybackSeekSlider_KeyUp" Foreground="{StaticResource AccentBrush}" />
                                 <TextBlock x:Name="RecordingDurationText" Grid.Column="2" VerticalAlignment="Center" Foreground="#8E9DB1" FontSize="8.5" Text="0:00" />
+                            </Grid>
+                            <Grid x:Name="TimeshiftPanel" Margin="0,5,0,0" Visibility="Collapsed">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <TextBlock x:Name="TimeshiftStatusText" VerticalAlignment="Center" Foreground="#75B9FF" FontSize="8.5" FontWeight="SemiBold" Text="LIVE BUFFER READY" />
+                                <ProgressBar x:Name="TimeshiftWindowProgress" Grid.Column="1" Height="3" Margin="10,0" Minimum="0" Maximum="100" Value="0" Foreground="#75B9FF" Background="#253145" />
+                                <TextBlock x:Name="TimeshiftWindowText" Grid.Column="2" VerticalAlignment="Center" Foreground="#718198" FontSize="8.5" Text="60 MIN" />
                             </Grid>
                         </StackPanel>
                         <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
@@ -1085,7 +1100,7 @@
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
                     <TextBlock Foreground="#566176" FontSize="9" Text="↑↓ CHANNELS • BACKSPACE LAST" />
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
-                    <TextBlock Foreground="#566176" FontSize="9" Text="3.5 SMART DVR" />
+                    <TextBlock Foreground="#566176" FontSize="9" Text="3.6 BACKGROUND DVR" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -1716,7 +1731,7 @@
                         <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseDvr_Click" ToolTip="Close"><TextBlock FontSize="18" Text="×" /></Button>
                     </Grid>
 
-                    <ScrollViewer Grid.Row="1" Margin="24,0,18,0" Padding="4,0,8,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" CanContentScroll="False">
+                    <ScrollViewer x:Name="DvrScrollViewer" Grid.Row="1" Margin="24,0,18,0" Padding="4,0,8,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" CanContentScroll="False">
                         <StackPanel>
                             <Border Padding="19" CornerRadius="16" Background="#0D131D" BorderBrush="#273247" BorderThickness="1">
                                 <Grid>
@@ -1732,11 +1747,33 @@
                                             <TextBlock x:Name="DvrElapsedText" Foreground="#FF7184" FontSize="10" FontWeight="Bold" Text="00:00:00" />
                                             <Border Width="1" Height="12" Margin="10,0" Background="#344158" />
                                             <TextBlock x:Name="DvrSizeText" Foreground="#8D9DB3" FontSize="10" Text="0 bytes" />
+                                            <Border Width="1" Height="12" Margin="10,0" Background="#344158" />
+                                            <TextBlock x:Name="DvrRateText" Foreground="#75B9FF" FontSize="10" Text="WAITING FOR MEDIA" />
+                                            <Border Width="1" Height="12" Margin="10,0" Background="#344158" />
+                                            <TextBlock x:Name="DvrRemainingText" Foreground="#8D9DB3" FontSize="10" Text="MANUAL" />
                                         </StackPanel>
                                     </StackPanel>
                                     <Border x:Name="DvrStateBadge" Grid.Column="2" Padding="10,5" VerticalAlignment="Top" CornerRadius="12" Background="#172432">
                                         <TextBlock x:Name="DvrStateBadgeText" Foreground="#75B9FF" FontSize="9" FontWeight="Bold" Text="READY" />
                                     </Border>
+                                </Grid>
+                            </Border>
+
+                            <Border Margin="0,14,0,0" Padding="15,13" CornerRadius="14" Background="#0C151E" BorderBrush="#274052" BorderThickness="1">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,14,0">
+                                        <TextBlock Foreground="#718198" FontSize="8" FontWeight="Bold" Text="NEXT RECORDING" />
+                                        <TextBlock x:Name="DvrNextRecordingText" Margin="0,5,0,0" Foreground="#E0E7F1" FontSize="9.5" FontWeight="SemiBold" Text="Nothing scheduled" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="0,0,14,0">
+                                        <TextBlock Foreground="#718198" FontSize="8" FontWeight="Bold" Text="ESTIMATED CAPACITY" />
+                                        <TextBlock x:Name="DvrCapacityText" Margin="0,5,0,0" Foreground="{StaticResource AccentBrush}" FontSize="9.5" FontWeight="SemiBold" Text="Calculating…" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Foreground="#718198" FontSize="8" FontWeight="Bold" Text="BACKGROUND ENGINE" />
+                                        <TextBlock x:Name="DvrBackgroundStatusText" Margin="0,5,0,0" Foreground="#75B9FF" FontSize="9.5" FontWeight="SemiBold" Text="Recorder ready" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
                                 </Grid>
                             </Border>
 
@@ -1792,6 +1829,35 @@
                                             </ComboBox>
                                         </StackPanel>
                                     </Grid>
+                                    <Grid Margin="0,13,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Margin="0,0,8,0">
+                                            <TextBlock Foreground="#7E8DA3" FontSize="8" Text="WINDOW CLOSED" />
+                                            <CheckBox x:Name="DvrBackgroundRecordingCheck" Margin="0,9,0,0" Foreground="#DCE5F0" Content="Keep in tray" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                                            <TextBlock Foreground="#7E8DA3" FontSize="8" Text="PC ASLEEP" />
+                                            <CheckBox x:Name="DvrWakeForRecordingCheck" Margin="0,9,0,0" Foreground="#DCE5F0" Content="Wake to record" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" Margin="0,0,8,0">
+                                            <TextBlock Foreground="#7E8DA3" FontSize="8" Text="LIVE TV" />
+                                            <CheckBox x:Name="DvrTimeshiftCheck" Margin="0,9,0,0" Foreground="#DCE5F0" Content="Pause + rewind" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="3" Margin="0,0,8,0">
+                                            <TextBlock Foreground="#7E8DA3" FontSize="8" Text="TIMESHIFT WINDOW" />
+                                            <ComboBox x:Name="DvrTimeshiftWindowBox" Height="34" Margin="0,6,0,0" Padding="9,5">
+                                                <ComboBoxItem Tag="15" Content="15 minutes" /><ComboBoxItem Tag="30" Content="30 minutes" /><ComboBoxItem Tag="60" Content="60 minutes" /><ComboBoxItem Tag="120" Content="120 minutes" />
+                                            </ComboBox>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="4">
+                                            <TextBlock Foreground="#7E8DA3" FontSize="8" Text="STREAM RECOVERY" />
+                                            <ComboBox x:Name="DvrRecoveryAttemptsBox" Height="34" Margin="0,6,0,0" Padding="9,5">
+                                                <ComboBoxItem Tag="1" Content="1 retry" /><ComboBoxItem Tag="2" Content="2 retries" /><ComboBoxItem Tag="3" Content="3 retries" /><ComboBoxItem Tag="5" Content="5 retries" />
+                                            </ComboBox>
+                                        </StackPanel>
+                                    </Grid>
                                 </StackPanel>
                             </Border>
 
@@ -1808,6 +1874,7 @@
                                             <DataTemplate>
                                                 <Border Padding="15,11" BorderBrush="#202B3B" BorderThickness="0,0,0,1">
                                                     <Grid>
+                                                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                                         <StackPanel>
                                                             <TextBlock Foreground="#E0E7F1" FontSize="10.5" FontWeight="SemiBold" Text="{Binding ProgramTitle}" TextTrimming="CharacterEllipsis" />
@@ -1819,6 +1886,11 @@
                                                         </StackPanel>
                                                         <Button Grid.Column="2" Margin="0,0,7,0" Padding="10,6" VerticalAlignment="Center" Style="{StaticResource SecondaryButton}" Click="PrioritizeSeriesRule_Click" Content="{Binding PriorityActionLabel}" />
                                                         <Button Grid.Column="3" Padding="10,6" VerticalAlignment="Center" Style="{StaticResource SecondaryButton}" Foreground="#FF7184" Click="RemoveSeriesRule_Click" Content="Remove" />
+                                                        <StackPanel Grid.Row="1" Grid.ColumnSpan="4" Margin="0,9,0,0" Orientation="Horizontal">
+                                                            <Button Margin="0,0,7,0" Padding="9,5" Style="{StaticResource SecondaryButton}" Click="ToggleSeriesEpisodeMode_Click" Content="{Binding EpisodeModeText}" ToolTip="Record all airings or only guide entries not marked as repeats" />
+                                                            <Button Margin="0,0,7,0" Padding="9,5" Style="{StaticResource SecondaryButton}" Click="CycleSeriesRetention_Click" Content="{Binding RetentionText}" ToolTip="Automatically keep only the newest recordings from this rule" />
+                                                            <Button Padding="9,5" Style="{StaticResource SecondaryButton}" Click="ToggleSeriesChannelScope_Click" Content="{Binding ChannelScopeText}" ToolTip="Match this title on the selected channel or any playlist channel" />
+                                                        </StackPanel>
                                                     </Grid>
                                                 </Border>
                                             </DataTemplate>
@@ -1831,6 +1903,24 @@
                                 <TextBlock Foreground="#7E8DA3" FontSize="9" FontWeight="Bold" Text="SCHEDULED FROM THE TV GUIDE" />
                                 <TextBlock x:Name="DvrConflictText" HorizontalAlignment="Right" Foreground="#D4B47D" FontSize="9" FontWeight="SemiBold" Text="RIGHT-CLICK A GUIDE PROGRAM" />
                             </Grid>
+                            <ItemsControl x:Name="DvrCalendarList" Margin="0,0,0,2">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button MinWidth="122" Margin="0,0,7,7" Padding="11,8" Click="SelectDvrCalendarDay_Click">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+                                                        <Style.Triggers><DataTrigger Binding="{Binding IsSelected}" Value="True"><Setter Property="Background" Value="#183F42" /><Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" /></DataTrigger></Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                                <StackPanel>
+                                                    <TextBlock Foreground="#DCE5F0" FontSize="8.5" FontWeight="Bold" Text="{Binding DateText}" />
+                                                    <TextBlock Margin="0,4,0,0" Foreground="#718198" FontSize="7.5" Text="{Binding SummaryText}" />
+                                                </StackPanel>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                             <Border CornerRadius="14" Background="#0D131D" BorderBrush="#273247" BorderThickness="1" ClipToBounds="True">
                                 <Grid>
                                     <TextBlock x:Name="DvrScheduleEmptyText" Margin="18" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#66758B" FontSize="10.5" Text="No scheduled recordings" />
@@ -1850,7 +1940,11 @@
                                                                 <TextBlock Margin="7,0" Foreground="#46566D" FontSize="7.5" Text="•" />
                                                                 <TextBlock Foreground="#718198" FontSize="7.5" Text="{Binding SourceText}" />
                                                                 <TextBlock Margin="7,0" Foreground="#46566D" FontSize="7.5" Text="•" />
-                                                                <TextBlock Foreground="#718198" FontSize="7.5" Text="{Binding PaddingText}" />
+                                                            <TextBlock Foreground="#718198" FontSize="7.5" Text="{Binding PaddingText}" />
+                                                                <TextBlock Margin="7,0" Foreground="#46566D" FontSize="7.5" Text="•" />
+                                                                <TextBlock Foreground="#718198" FontSize="7.5" Text="{Binding EpisodeText}" />
+                                                                <TextBlock Margin="7,0" Foreground="#46566D" FontSize="7.5" Text="•" />
+                                                                <TextBlock Foreground="#718198" FontSize="7.5" Text="{Binding EstimateText}" />
                                                             </StackPanel>
                                                         </StackPanel>
                                                         <StackPanel Grid.Column="1" Margin="16,0" VerticalAlignment="Center">
@@ -1907,7 +2001,7 @@
                             </Border>
 
                             <Border Margin="0,14,0,2" Padding="15,12" CornerRadius="12" Background="#251D13" BorderBrush="#4B3A22" BorderThickness="1">
-                                <TextBlock Foreground="#D4B47D" FontSize="9.8" LineHeight="15" Text="Recording opens a separate direct stream so your picture is never interrupted. Some IPTV providers may count this as an additional simultaneous connection. StreamVue records only while the app is open." TextWrapping="Wrap" />
+                                <TextBlock Foreground="#D4B47D" FontSize="9.8" LineHeight="15" Text="Recording opens a separate direct stream so your picture is never interrupted. Closing the window leaves the tray recorder and wake timer armed; choose Exit StreamVue from the tray only when you want scheduled recording to stop." TextWrapping="Wrap" />
                             </Border>
                         </StackPanel>
                     </ScrollViewer>

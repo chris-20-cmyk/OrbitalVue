@@ -227,7 +227,7 @@ public sealed class DvrRecordingService : IDisposable
     public static IReadOnlySet<Guid> FindConflictingScheduleIds(IEnumerable<ScheduledRecording> recordings)
     {
         var active = recordings
-            .Where(recording => recording.Status is "Scheduled" or "Recording")
+            .Where(recording => recording.Status is "Scheduled" or "Recording" or "Recovering")
             .OrderBy(recording => recording.StartUtc)
             .ToList();
         var conflicts = new HashSet<Guid>();

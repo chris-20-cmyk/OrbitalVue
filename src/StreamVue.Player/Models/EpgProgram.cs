@@ -9,9 +9,16 @@ public sealed record EpgProgram(
     string? Description,
     string? Category,
     DateTimeOffset Start,
-    DateTimeOffset Stop)
+    DateTimeOffset Stop,
+    string? EpisodeId = null,
+    int? SeasonNumber = null,
+    int? EpisodeNumber = null,
+    bool? IsNewEpisode = null)
 {
     public string LocalTimeRange => $"{Start.ToLocalTime():h:mm tt} – {Stop.ToLocalTime():h:mm tt}";
+    public string? EpisodeLabel => SeasonNumber is int season && EpisodeNumber is int episode
+        ? $"S{season:00}E{episode:00}"
+        : EpisodeNumber is int standaloneEpisode ? $"Episode {standaloneEpisode}" : null;
 }
 
 public sealed record EpgNowNext(EpgProgram? Current, EpgProgram? Next);
@@ -79,7 +86,7 @@ public sealed class EpgSchedule
         var merged = programmes.ToDictionary(
             pair => pair.Key,
             pair => (IReadOnlyList<EpgProgram>)pair.Value
-                .DistinctBy(programme => (programme.Start, programme.Stop, programme.Title))
+                .DistinctBy(programme => (programme.Start, programme.Stop, programme.Title, programme.EpisodeId))
                 .OrderBy(programme => programme.Start)
                 .ToList(),
             StringComparer.Ordinal);

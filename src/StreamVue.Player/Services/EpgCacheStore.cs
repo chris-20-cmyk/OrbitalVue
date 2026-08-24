@@ -34,7 +34,11 @@ public sealed class EpgCacheStore
                 Description = programme.Description,
                 Category = programme.Category,
                 Start = programme.Start,
-                Stop = programme.Stop
+                Stop = programme.Stop,
+                EpisodeId = programme.EpisodeId,
+                SeasonNumber = programme.SeasonNumber,
+                EpisodeNumber = programme.EpisodeNumber,
+                IsNewEpisode = programme.IsNewEpisode
             }).ToList()
         };
 
@@ -71,7 +75,17 @@ public sealed class EpgCacheStore
             if (envelope is null || envelope.SourceKey != BuildSourceKey(source) || envelope.Programmes.Count == 0) return null;
 
             var programmes = envelope.Programmes
-                .Select(programme => new EpgProgram(programme.ChannelId, programme.Title, programme.Description, programme.Category, programme.Start, programme.Stop))
+                .Select(programme => new EpgProgram(
+                    programme.ChannelId,
+                    programme.Title,
+                    programme.Description,
+                    programme.Category,
+                    programme.Start,
+                    programme.Stop,
+                    programme.EpisodeId,
+                    programme.SeasonNumber,
+                    programme.EpisodeNumber,
+                    programme.IsNewEpisode))
                 .GroupBy(programme => EpgSchedule.NormalizeKey(programme.ChannelId), StringComparer.Ordinal)
                 .ToDictionary(
                     group => group.Key,
@@ -114,5 +128,9 @@ public sealed class EpgCacheStore
         public string? Category { get; set; }
         public DateTimeOffset Start { get; set; }
         public DateTimeOffset Stop { get; set; }
+        public string? EpisodeId { get; set; }
+        public int? SeasonNumber { get; set; }
+        public int? EpisodeNumber { get; set; }
+        public bool? IsNewEpisode { get; set; }
     }
 }

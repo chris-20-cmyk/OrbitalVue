@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using LibVLCSharp.Shared;
 using StreamVue.Player.Models;
 using StreamVue.Player.Services;
@@ -15,6 +16,9 @@ public sealed class NativePlaybackEngine : IDisposable
     private readonly ConcurrentDictionary<string, int> _channelInstability = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, byte> _softwareDecoderChannels = new(StringComparer.OrdinalIgnoreCase);
     private readonly System.Threading.Timer _watchdogTimer;
+    private readonly bool _timeshiftEnabled;
+    private readonly TimeSpan _timeshiftWindow;
+    private readonly string _timeshiftDirectory;
     private Media? _currentMedia;
     private ChannelItem? _currentChannel;
     private ChannelPlaybackProfile? _currentProfile;
@@ -40,12 +44,22 @@ public sealed class NativePlaybackEngine : IDisposable
     private bool _reconnectScheduled;
     private bool _softwareFallbackActive;
     private bool _decoderFallbackAttempted;
+    private DateTimeOffset? _livePausedUtc;
+    private TimeSpan _behindLive;
     private string _lastRecoveryReason = "No interventions";
     private bool _disposed;
 
-    public NativePlaybackEngine(PlaybackPreferences preferences)
+    public NativePlaybackEngine(
+        PlaybackPreferences preferences,
+        bool timeshiftEnabled = true,
+        int timeshiftWindowMinutes = 60,
+        string? timeshiftDirectory = null)
     {
         _preferences = preferences;
+        _timeshiftEnabled = timeshiftEnabled;
+        _timeshiftWindow = TimeSpan.FromMinutes(SmartDvrPolicy.ClampTimeshiftMinutes(timeshiftWindowMinutes));
+        _timeshiftDirectory = timeshiftDirectory ?? StreamVueDataPaths.Resolve("timeshift");
+        PrepareTimeshiftDirectory();
         var options = new List<string>
         {
             "--intf=dummy",
@@ -53,6 +67,12 @@ public sealed class NativePlaybackEngine : IDisposable
             "--no-snapshot-preview",
             preferences.HardwareDecoding ? "--avcodec-hw=any" : "--avcodec-hw=none"
         };
+
+        if (_timeshiftEnabled)
+        {
+            options.Add($"--input-timeshift-path={_timeshiftDirectory}");
+            options.Add("--input-timeshift-granularity=33554432");
+        }
 
         if (preferences.HdmiPassthrough) options.Add("--spdif");
         _libVlc = new LibVLC(options.ToArray());
@@ -69,7 +89,7 @@ public sealed class NativePlaybackEngine : IDisposable
             technicalDetail: _currentPlan?.Explanation);
         MediaPlayer.Buffering += (_, args) => HandleBuffering(args.Cache);
         MediaPlayer.Playing += (_, _) => HandlePlaying();
-        MediaPlayer.Paused += (_, _) => Publish(PlaybackState.Paused, "Paused");
+        MediaPlayer.Paused += (_, _) => HandlePaused();
         MediaPlayer.Stopped += (_, _) => Publish(PlaybackState.Stopped, "Stopped");
         MediaPlayer.EndReached += (_, _) =>
         {
@@ -107,6 +127,7 @@ public sealed class NativePlaybackEngine : IDisposable
                                   (profile?.HardwareDecoding == false ||
                                    _preferences.PlaybackIntelligence && _softwareDecoderChannels.ContainsKey(channel.StableKey));
         _decoderFallbackAttempted = _softwareFallbackActive;
+        ResetTimeshift();
         return StartPlayback(channel);
     }
 
@@ -164,6 +185,11 @@ public sealed class NativePlaybackEngine : IDisposable
             _currentMedia.AddOption($":live-caching={_activeCacheMilliseconds}");
             _currentMedia.AddOption($":file-caching={Math.Max(1_000, _activeCacheMilliseconds / 2)}");
             _currentMedia.AddOption(":http-reconnect");
+            if (_timeshiftEnabled)
+            {
+                _currentMedia.AddOption($":input-timeshift-path={_timeshiftDirectory}");
+                _currentMedia.AddOption(":input-timeshift-granularity=33554432");
+            }
         }
         _currentMedia.AddOption(_currentPlan.UseHardwareDecoding ? ":avcodec-hw=any" : ":avcodec-hw=none");
         if (!string.IsNullOrWhiteSpace(channel.UserAgent))
@@ -186,6 +212,61 @@ public sealed class NativePlaybackEngine : IDisposable
         MediaPlayer.Pause();
     }
 
+    public bool TryRewindLive(TimeSpan amount)
+    {
+        ThrowIfDisposed();
+        if (!_timeshiftEnabled || _currentChannel?.Kind != ChannelKind.Live || amount <= TimeSpan.Zero || !MediaPlayer.IsSeekable)
+            return false;
+
+        var currentTime = MediaPlayer.Time;
+        if (currentTime <= 0) return false;
+        var rewindMilliseconds = (long)Math.Min(amount.TotalMilliseconds, _timeshiftWindow.TotalMilliseconds);
+        var target = Math.Max(0, currentTime - rewindMilliseconds);
+        MediaPlayer.Time = target;
+        _behindLive = TimeSpan.FromMilliseconds(Math.Min(
+            _timeshiftWindow.TotalMilliseconds,
+            _behindLive.TotalMilliseconds + currentTime - target));
+        Publish(PlaybackState.Playing, $"Timeshift • {FormatTimeshift(_behindLive)} behind live");
+        return true;
+    }
+
+    public bool GoLive()
+    {
+        ThrowIfDisposed();
+        if (_currentChannel?.Kind != ChannelKind.Live) return false;
+        ResetTimeshift();
+        _lastRecoveryReason = "Returned to live edge";
+        return StartPlayback(_currentChannel);
+    }
+
+    public bool EnforceTimeshiftWindow(DateTimeOffset now)
+    {
+        if (!_timeshiftEnabled || _currentChannel?.Kind != ChannelKind.Live) return false;
+        var snapshot = GetLiveTimeshiftSnapshot(now);
+        if (!snapshot.IsActive || snapshot.BehindLive < snapshot.Window) return false;
+        GoLive();
+        return true;
+    }
+
+    public LiveTimeshiftSnapshot GetLiveTimeshiftSnapshot(DateTimeOffset now)
+    {
+        var isLive = _currentChannel?.Kind == ChannelKind.Live;
+        var isPaused = isLive && MediaPlayer.State == VLCState.Paused;
+        var behind = _behindLive;
+        if (isPaused && _livePausedUtc is DateTimeOffset pausedUtc)
+            behind += now - pausedUtc;
+        behind = behind < TimeSpan.Zero ? TimeSpan.Zero : behind > _timeshiftWindow ? _timeshiftWindow : behind;
+        return new LiveTimeshiftSnapshot(
+            _timeshiftEnabled,
+            isLive,
+            isLive && MediaPlayer.CanPause,
+            isLive && MediaPlayer.IsSeekable && MediaPlayer.Time > 1_000,
+            isPaused,
+            behind,
+            _timeshiftWindow,
+            _timeshiftWindow - behind);
+    }
+
     public bool SeekTo(long milliseconds)
     {
         ThrowIfDisposed();
@@ -202,6 +283,7 @@ public sealed class NativePlaybackEngine : IDisposable
         _currentChannel = null;
         _currentProfile = null;
         _currentPlan = null;
+        ResetTimeshift();
         ReleaseMedia();
         ResetProgressMonitor();
     }
@@ -413,6 +495,12 @@ public sealed class NativePlaybackEngine : IDisposable
             0,
             int.MaxValue);
         _networkFailureCount = 0;
+        if (_livePausedUtc is DateTimeOffset pausedUtc)
+        {
+            _behindLive += DateTimeOffset.UtcNow - pausedUtc;
+            if (_behindLive > _timeshiftWindow) _behindLive = _timeshiftWindow;
+            _livePausedUtc = null;
+        }
         MarkProgress();
         ApplyAudioDelayToPlayer(EffectiveAudioDelayMilliseconds);
         ApplyDeinterlaceToPlayer(EffectiveDeinterlaceMode);
@@ -434,6 +522,17 @@ public sealed class NativePlaybackEngine : IDisposable
             _stabilityCancellation = new CancellationTokenSource();
             _ = ResetRecoveryBudgetAfterStablePlaybackAsync(_currentChannel, _stabilityCancellation.Token);
         }
+    }
+
+    private void HandlePaused()
+    {
+        if (_currentChannel?.Kind == ChannelKind.Live && _timeshiftEnabled)
+        {
+            _livePausedUtc ??= DateTimeOffset.UtcNow;
+            Publish(PlaybackState.Paused, $"Live paused • {FormatTimeshift(_timeshiftWindow)} window");
+            return;
+        }
+        Publish(PlaybackState.Paused, "Paused");
     }
 
     private void HandleRecordingEnded()
@@ -655,6 +754,44 @@ public sealed class NativePlaybackEngine : IDisposable
             _lastProgressUtc = _playbackStartedUtc;
         }
     }
+
+    private void ResetTimeshift()
+    {
+        _livePausedUtc = null;
+        _behindLive = TimeSpan.Zero;
+    }
+
+    private void PrepareTimeshiftDirectory()
+    {
+        if (!_timeshiftEnabled) return;
+        try
+        {
+            Directory.CreateDirectory(_timeshiftDirectory);
+            foreach (var file in Directory.EnumerateFiles(_timeshiftDirectory, "vlc-timeshift.*", SearchOption.TopDirectoryOnly))
+            {
+                try
+                {
+                    if (File.GetLastWriteTimeUtc(file) < DateTime.UtcNow.AddDays(-1)) File.Delete(file);
+                }
+                catch (IOException)
+                {
+                }
+                catch (UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private static string FormatTimeshift(TimeSpan duration) => duration.TotalHours >= 1
+        ? $"{(int)duration.TotalHours}:{duration.Minutes:00}:{duration.Seconds:00}"
+        : $"{duration.Minutes}:{duration.Seconds:00}";
 
     private void MarkProgress()
     {

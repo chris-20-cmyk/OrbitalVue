@@ -4,6 +4,15 @@ StreamVue is a Windows-native IPTV player built with .NET, WPF, LibVLCSharp, the
 
 ## Current preview
 
+- Background DVR mode that keeps schedules and active recordings running from the Windows notification area after the main window closes
+- Resumable Windows wake timers that can bring the PC out of supported sleep states two minutes before a scheduled recording
+- Single-instance activation so reopening StreamVue restores the background window instead of starting a competing recorder
+- Automatic interrupted-recording recovery with 2, 5, and 10 second backoff, preserved playable segments, and up to five attempts
+- Safe Windows shutdown handling that finalizes an active transport stream before the app exits
+- Live TV disk timeshift with pause, a configurable 15–120 minute window, live-edge return, and rewind controls on seekable streams
+- Advanced series rules for new episodes only or all airings, this channel or any matching channel, and keep-latest retention
+- XMLTV season, episode, new-airing, and repeat metadata used for cross-channel duplicate prevention
+- Seven-day DVR calendar filters, next-recording summary, recording health, time remaining, and estimated hours of drive capacity
 - Native in-app playback for saved DVR recordings with a compact seek bar and original-quality local-file rendering
 - Automatic per-recording resume positions, a visible watched-progress indicator, and completed-playback cleanup
 - Safe confirmed recording deletion constrained to the selected recordings folder
@@ -103,7 +112,7 @@ The application targets Windows x64 and the current .NET 10 LTS release.
 ## Verification tools
 
 - `StreamVue.PlaylistProbe` validates large-list parsing and favorite-key uniqueness.
-- `StreamVue.FeatureProbe` checks Smart DVR series rules, padding, priorities, storage guards, transport-stream capture and native playback, resume persistence, safe deletion, privacy-safe favorite identity, settings persistence, encrypted backup/restore, diagnostic redaction, nearby-display casting entry points, and Multiview policies.
+- `StreamVue.FeatureProbe` checks background wake timers, episode-aware series rules, duplicate prevention, recovery timing, retention, timeshift policy, padding, priorities, storage guards, transport-stream capture and native playback, resume persistence, safe deletion, privacy-safe favorite identity, settings persistence, encrypted backup/restore, diagnostic redaction, nearby-display casting entry points, and Multiview policies.
 - `StreamVue.PlaybackProbe` checks native live playback and bounded reconnect behavior.
 
 ## Privacy

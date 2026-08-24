@@ -138,7 +138,14 @@ try
             StartPaddingMinutes = 5,
             EndPaddingMinutes = 10,
             StorageReserveGigabytes = 20,
-            DefaultPriority = DvrSchedulePriority.High
+            DefaultPriority = DvrSchedulePriority.High,
+            BackgroundRecordingEnabled = true,
+            WakeForRecordings = true,
+            LiveTimeshiftEnabled = true,
+            LiveTimeshiftMinutes = 120,
+            MaximumRecoveryAttempts = 5,
+            DefaultEpisodeSelection = DvrEpisodeSelection.NewEpisodesOnly,
+            DefaultKeepLatestCount = 5
         },
         SeriesRecordingRules =
         [
@@ -150,7 +157,10 @@ try
                 ProgramTitle = "Late Report",
                 Priority = DvrSchedulePriority.High,
                 StartPaddingMinutes = 5,
-                EndPaddingMinutes = 10
+                EndPaddingMinutes = 10,
+                EpisodeSelection = DvrEpisodeSelection.NewEpisodesOnly,
+                KeepLatestCount = 3,
+                AnyChannel = true
             }
         ],
         ScheduledRecordings =
@@ -163,7 +173,13 @@ try
                 StartUtc = DateTimeOffset.UtcNow.AddHours(2),
                 StopUtc = DateTimeOffset.UtcNow.AddHours(3),
                 Priority = DvrSchedulePriority.High,
-                SeriesRuleId = seriesRuleId
+                SeriesRuleId = seriesRuleId,
+                EpisodeKey = "LATE REPORT|S2:E5",
+                EpisodeLabel = "S02E05",
+                IsNewEpisode = true,
+                RecoveryAttempts = 1,
+                NextRecoveryUtc = DateTimeOffset.UtcNow.AddHours(2),
+                OutputPaths = [Path.Combine(testRoot, "recordings", "segment-1.ts")]
             }
         ],
         RecordingPlaybackProgress = new Dictionary<string, DvrPlaybackProgress>(StringComparer.OrdinalIgnoreCase)
@@ -231,7 +247,15 @@ try
         actual.ScheduledRecordings[0].Status != "Scheduled" || actual.ScheduledRecordings[0].Priority != DvrSchedulePriority.High ||
         actual.SmartDvr.StartPaddingMinutes != 5 || actual.SmartDvr.EndPaddingMinutes != 10 ||
         actual.SmartDvr.StorageReserveGigabytes != 20 || actual.SmartDvr.DefaultPriority != DvrSchedulePriority.High ||
+        !actual.SmartDvr.BackgroundRecordingEnabled || !actual.SmartDvr.WakeForRecordings ||
+        !actual.SmartDvr.LiveTimeshiftEnabled || actual.SmartDvr.LiveTimeshiftMinutes != 120 ||
+        actual.SmartDvr.MaximumRecoveryAttempts != 5 || actual.SmartDvr.DefaultEpisodeSelection != DvrEpisodeSelection.NewEpisodesOnly ||
+        actual.SmartDvr.DefaultKeepLatestCount != 5 ||
         actual.SeriesRecordingRules.Count != 1 || actual.SeriesRecordingRules[0].Id != seriesRuleId ||
+        actual.SeriesRecordingRules[0].EpisodeSelection != DvrEpisodeSelection.NewEpisodesOnly ||
+        actual.SeriesRecordingRules[0].KeepLatestCount != 3 || !actual.SeriesRecordingRules[0].AnyChannel ||
+        actual.ScheduledRecordings[0].EpisodeLabel != "S02E05" || actual.ScheduledRecordings[0].RecoveryAttempts != 1 ||
+        actual.ScheduledRecordings[0].OutputPaths.Count != 1 ||
         !actual.RecordingPlaybackProgress.TryGetValue("RECORDING-PROBE", out var playbackProgress) ||
         playbackProgress.PositionMilliseconds != 420_000 || playbackProgress.DurationMilliseconds != 3_600_000)
         throw new InvalidOperationException("DVR folder, schedule, or recording resume position did not persist.");
@@ -250,8 +274,11 @@ try
         """);
     var migratedSettings = await new AppSettingsStore(legacySettingsPath).LoadAsync();
     if (migratedSettings.SmartDvr is null || migratedSettings.SmartDvr.StartPaddingMinutes != 1 ||
-        migratedSettings.SmartDvr.EndPaddingMinutes != 2 || migratedSettings.SeriesRecordingRules is null)
-        throw new InvalidOperationException("Pre-3.5 settings did not receive safe Smart DVR defaults.");
+        migratedSettings.SmartDvr.EndPaddingMinutes != 2 || migratedSettings.SeriesRecordingRules is null ||
+        !migratedSettings.SmartDvr.BackgroundRecordingEnabled || !migratedSettings.SmartDvr.WakeForRecordings ||
+        !migratedSettings.SmartDvr.LiveTimeshiftEnabled || migratedSettings.SmartDvr.LiveTimeshiftMinutes != 60 ||
+        migratedSettings.SmartDvr.MaximumRecoveryAttempts != 3)
+        throw new InvalidOperationException("Pre-3.6 settings did not receive safe background DVR and timeshift defaults.");
 
     using (var multiview = new MultiviewSession(expected.Playback))
     {
@@ -308,8 +335,8 @@ try
         <tv>
           <channel id="TNT.HD.us2"><display-name>TNT HD</display-name></channel>
           <channel id="KMBC-DT.us_locals1"><display-name>KMBC-DT</display-name></channel>
-          <programme channel="TNT.HD.us2" start="{guideNow.AddMinutes(-15):yyyyMMddHHmmss zzz}" stop="{guideNow.AddMinutes(45):yyyyMMddHHmmss zzz}"><title>Live Sports Center</title></programme>
-          <programme channel="TNT.HD.us2" start="{guideNow.AddMinutes(45):yyyyMMddHHmmss zzz}" stop="{guideNow.AddMinutes(105):yyyyMMddHHmmss zzz}"><title>Prime Movie</title></programme>
+          <programme channel="TNT.HD.us2" start="{guideNow.AddMinutes(-15):yyyyMMddHHmmss zzz}" stop="{guideNow.AddMinutes(45):yyyyMMddHHmmss zzz}"><title>Live Sports Center</title><episode-num system="xmltv_ns">1.4.</episode-num><new /></programme>
+          <programme channel="TNT.HD.us2" start="{guideNow.AddMinutes(45):yyyyMMddHHmmss zzz}" stop="{guideNow.AddMinutes(105):yyyyMMddHHmmss zzz}"><title>Prime Movie</title><previously-shown /></programme>
           <programme channel="KMBC-DT.us_locals1" start="{guideNow.AddMinutes(-10):yyyyMMddHHmmss zzz}" stop="{guideNow.AddMinutes(20):yyyyMMddHHmmss zzz}"><title>Local News</title></programme>
         </tv>
         """;
@@ -319,13 +346,19 @@ try
         guide.GetNowNext(tnt, guideNow).Next?.Title != "Prime Movie" ||
         guide.GetNowNext(local, guideNow).Current?.Title != "Local News")
         throw new InvalidOperationException("XMLTV Now/Next or broadcast call-sign matching failed.");
+    var episodeProgramme = guide.GetNowNext(tnt, guideNow).Current;
+    if (episodeProgramme?.SeasonNumber != 2 || episodeProgramme.EpisodeNumber != 5 ||
+        episodeProgramme.EpisodeLabel != "S02E05" || episodeProgramme.IsNewEpisode != true)
+        throw new InvalidOperationException("XMLTV episode identity or new-episode metadata parsing failed.");
     if (guide.ChannelCatalog.Count != 2 || !guide.ChannelCatalog.ContainsKey("TNT.HD.US2"))
         throw new InvalidOperationException("The lightweight XMLTV channel catalog was not retained.");
 
     var epgCache = new EpgCacheStore(epgCachePath);
     await epgCache.SaveAsync("public-us-pack", guide);
     var cachedGuide = await epgCache.TryLoadAsync("public-us-pack");
-    if (cachedGuide?.GetNowNext(tnt, guideNow).Current?.Title != "Live Sports Center" || cachedGuide.ChannelCatalog.Count != 2)
+    if (cachedGuide?.GetNowNext(tnt, guideNow).Current?.Title != "Live Sports Center" || cachedGuide.ChannelCatalog.Count != 2 ||
+        cachedGuide.GetNowNext(tnt, guideNow).Current?.EpisodeLabel != "S02E05" ||
+        cachedGuide.GetNowNext(tnt, guideNow).Current?.IsNewEpisode != true)
         throw new InvalidOperationException("Encrypted guide cache round-trip failed.");
     if (Encoding.UTF8.GetString(await File.ReadAllBytesAsync(epgCachePath)).Contains("Live Sports Center", StringComparison.Ordinal))
         throw new InvalidOperationException("Guide cache exposed programme data as clear text.");
@@ -617,6 +650,106 @@ try
         SmartDvrPolicy.SelectPreferredDue([adjacentFirst, adjacentSecond], adjacentSecond.GuideStartUtc.AddMinutes(1))?.Id != adjacentSecond.Id)
         throw new InvalidOperationException("Smart DVR padding-only schedule handoff failed.");
 
+    var repeatProgramme = guideProgramme with
+    {
+        EpisodeId = "provider-episode-205",
+        SeasonNumber = 2,
+        EpisodeNumber = 5,
+        IsNewEpisode = false
+    };
+    var newProgramme = repeatProgramme with { IsNewEpisode = true };
+    var newOnlyRule = new SeriesRecordingRule
+    {
+        ChannelKey = matchingRule.ChannelKey,
+        ChannelName = matchingRule.ChannelName,
+        ProgramTitle = matchingRule.ProgramTitle,
+        EpisodeSelection = DvrEpisodeSelection.NewEpisodesOnly,
+        AnyChannel = true,
+        KeepLatestCount = 3
+    };
+    var alternateChannel = new ChannelItem
+    {
+        Number = 99,
+        Name = "Alternate News",
+        Group = "News",
+        Url = "https://provider.invalid/live/alternate-news.ts",
+        Kind = ChannelKind.Live
+    };
+    if (SmartDvrPolicy.RuleMatches(newOnlyRule, alternateChannel, repeatProgramme) ||
+        !SmartDvrPolicy.RuleMatches(newOnlyRule, alternateChannel, newProgramme))
+        throw new InvalidOperationException("New-episode-only or any-channel series matching failed.");
+    var firstEpisodeSchedule = SmartDvrPolicy.CreateSchedule(first, newProgramme, 1, 2, DvrSchedulePriority.Normal, newOnlyRule.Id);
+    var duplicateEpisodeSchedule = SmartDvrPolicy.CreateSchedule(alternateChannel, newProgramme, 1, 2, DvrSchedulePriority.Normal, newOnlyRule.Id);
+    if (firstEpisodeSchedule.EpisodeLabel != "S02E05" ||
+        firstEpisodeSchedule.EpisodeKey != duplicateEpisodeSchedule.EpisodeKey ||
+        !SmartDvrPolicy.IsDuplicateEpisode([firstEpisodeSchedule], duplicateEpisodeSchedule))
+        throw new InvalidOperationException("Series episode identity or cross-channel duplicate prevention failed.");
+    if (SmartDvrPolicy.ClampRetention(2) != 3 || SmartDvrPolicy.NextRetention(3) != 5 ||
+        SmartDvrPolicy.ClampTimeshiftMinutes(31) != 60 ||
+        SmartDvrPolicy.RecoveryDelay(1) != TimeSpan.FromSeconds(2) ||
+        SmartDvrPolicy.RecoveryDelay(2) != TimeSpan.FromSeconds(5) ||
+        SmartDvrPolicy.RecoveryDelay(3) != TimeSpan.FromSeconds(10))
+        throw new InvalidOperationException("DVR retention, timeshift, or staged recovery policy failed.");
+
+    var wakeNow = DateTimeOffset.UtcNow;
+    var wakeSchedule = new ScheduledRecording
+    {
+        ChannelKey = first.StableKey,
+        ChannelName = first.Name,
+        ProgramTitle = "Wake probe",
+        StartUtc = wakeNow.AddMinutes(15),
+        StopUtc = wakeNow.AddHours(1)
+    };
+    var wakePreferences = new SmartDvrPreferences
+    {
+        BackgroundRecordingEnabled = true,
+        WakeForRecordings = true,
+        StorageReserveGigabytes = 5
+    };
+    var wakePlan = DvrBackgroundPolicy.CreateWakePlan([wakeSchedule], wakePreferences, wakeNow);
+    var capacity = DvrBackgroundPolicy.EstimateCapacityHours(
+        new DvrStorageSnapshot(true, 100L << 30, 15L << 30, 0, 0),
+        wakePreferences.StorageReserveGigabytes,
+        8);
+    if (wakePlan?.ScheduleId != wakeSchedule.Id || wakePlan.WakeUtc != wakeSchedule.StartUtc.AddMinutes(-2) ||
+        !wakePlan.ResumeSystem || capacity < 2.9 || capacity > 3.1)
+        throw new InvalidOperationException("Background DVR wake planning or storage-capacity estimate failed.");
+    using (var powerGuard = new WindowsRecordingPowerGuard())
+    {
+        powerGuard.SetActive(true);
+        powerGuard.SetActive(false);
+    }
+    if (OperatingSystem.IsWindows())
+    {
+        using var wakeTimer = new WindowsWakeTimer();
+        if (!wakeTimer.IsAvailable)
+            throw new InvalidOperationException("The Windows background DVR wake timer could not be created.");
+        var wakeTriggered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        wakeTimer.Triggered += (_, _) => wakeTriggered.TrySetResult();
+        if (!wakeTimer.Schedule(DateTimeOffset.UtcNow.AddMilliseconds(1_250), resumeSystem: false) ||
+            wakeTimer.NextWakeUtc is null)
+            throw new InvalidOperationException("The Windows background DVR wake timer could not be armed.");
+        await wakeTriggered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        wakeTimer.Cancel();
+        if (wakeTimer.NextWakeUtc is not null)
+            throw new InvalidOperationException("The Windows background DVR wake timer did not cancel cleanly.");
+
+        var instanceScope = $"StreamVue.FeatureProbe.{Guid.NewGuid():N}";
+        using var primaryInstance = new StreamVueSingleInstance(waitForPreviousInstance: false, scope: instanceScope);
+        if (!primaryInstance.IsPrimary)
+            throw new InvalidOperationException("The first StreamVue process did not acquire the single-instance coordinator.");
+        var activationRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        primaryInstance.ActivationRequested += (_, _) => activationRequested.TrySetResult();
+        await Task.Run(() =>
+        {
+            using var secondaryInstance = new StreamVueSingleInstance(waitForPreviousInstance: false, scope: instanceScope);
+            if (secondaryInstance.IsPrimary)
+                throw new InvalidOperationException("A second StreamVue process acquired the active recorder instance.");
+            secondaryInstance.SignalPrimary();
+        });
+        await activationRequested.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
     var castService = new WindowsCastService();
     if (!castService.IsSupported || WindowsCastService.NearbyDisplayShortcut != "Windows + K" ||
         WindowsCastService.DisplaySettingsUri != "ms-settings:display")
@@ -689,19 +822,23 @@ try
     Console.WriteLine("Playlist health persistence: PASS");
     Console.WriteLine("Program reminder persistence: PASS");
     Console.WriteLine("DVR schedule persistence: PASS");
-    Console.WriteLine("Pre-3.5 Smart DVR settings migration: PASS");
+    Console.WriteLine("Pre-3.6 background DVR settings migration: PASS");
     Console.WriteLine("Safe transport-stream recording output: PASS");
     Console.WriteLine("DVR recording library indexing: PASS");
     Console.WriteLine("DVR playback resume persistence: PASS");
     Console.WriteLine("DVR storage reporting and safe delete: PASS");
     Console.WriteLine("DVR schedule conflict detection: PASS");
-    Console.WriteLine("Smart DVR series, padding, priority, boundary handoff, and storage guard: PASS");
+    Console.WriteLine("Smart DVR series, episode deduplication, retention, padding, priority, boundary handoff, and storage guard: PASS");
+    Console.WriteLine("Background DVR wake planning and capacity estimate: PASS");
+    Console.WriteLine("Windows background DVR wake timer: PASS");
+    Console.WriteLine("Single-instance background activation: PASS");
+    Console.WriteLine("Staged interrupted-recording recovery policy: PASS");
     Console.WriteLine("Persistent four-view assignments: PASS");
     Console.WriteLine("Saved multiview layouts: PASS");
     Console.WriteLine("Single-audio multiview policy: PASS");
     Console.WriteLine("Encrypted offline playlist cache: PASS");
     Console.WriteLine("Protected Xtream auto-refresh credentials: PASS");
-    Console.WriteLine("XMLTV Now/Next parsing and call-sign matching: PASS");
+    Console.WriteLine("XMLTV Now/Next, episode metadata, and call-sign matching: PASS");
     Console.WriteLine("Encrypted offline guide cache: PASS");
     Console.WriteLine("Protected multi-source guide configuration: PASS");
     Console.WriteLine("Lightweight XMLTV channel catalog: PASS");

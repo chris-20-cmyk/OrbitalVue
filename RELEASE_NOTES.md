@@ -1,42 +1,53 @@
-# StreamVue 3.5.0 Smart DVR
+# StreamVue 3.6.0 Background DVR
 
-StreamVue 3.5 upgrades the in-app DVR into a guide-aware recording system with recurring rules, precise padding, deterministic conflict handling, and low-storage protection.
+StreamVue 3.6 turns Smart DVR into a resilient Windows background recorder, adds live-TV timeshift, and makes recurring rules episode-aware.
 
-## Record a full series
+## Keep recording in the background
 
-- Right-click any live TV Guide program to start or stop a recurring series rule
-- Match future airings by channel and normalized program title whenever guide data refreshes
-- Review every active rule, its priority, padding, and upcoming-airing count in the DVR center
-- Remove a rule without interrupting an airing that is already being recorded
-- Skip or restore a single series airing without deleting the recurring rule
+- Closing the main window now leaves the DVR engine, schedule monitor, and wake timer running in the Windows notification area
+- Double-click the tray icon to reopen StreamVue, open the DVR center directly, or stop and save the active recording
+- Reopening StreamVue activates the existing background process instead of starting a second competing player
+- Exiting from the tray warns when future schedules would be abandoned
+- A supported sleeping PC can wake two minutes before the next scheduled program
+- Active recording prevents automatic sleep, while Windows shutdown safely finalizes the current transport-stream file
 
-## Capture the complete program
+## Recover interrupted streams
 
-- Start each new recording 0–30 minutes early and end it 0–30 minutes late
-- Keep original guide airtimes separate from padded capture windows for accurate schedule identity
-- Choose Low, Normal, or High as the default priority for new schedules
-- Promote an individual airing or an entire series directly from its DVR row
+- Retry a dropped scheduled recording after 2, 5, and 10 second backoff intervals
+- Configure one to five recovery attempts in the DVR center
+- Create a fresh transport-stream segment for each retry so an earlier playable segment is never overwritten
+- Resume an unfinished schedule after StreamVue or Windows restarts while the program is still airing
+- Label recovered and partial files clearly in the recording library
+- Preserve playable segments when the provider never returns before the program ends
 
-## Resolve conflicts predictably
+## Pause live television
 
-- Prefer the highest-priority due recording when overlapping programs need the single DVR connection
-- Use earliest scheduled start and creation order as stable tie-breakers
-- Preempt a lower-priority scheduled recording when a higher-priority program begins
-- Hand off consecutive programs at the guide boundary when only their padding overlaps
-- Label future winners and at-risk recordings, then retain a clear reason for skipped conflicts
-- Preserve an explicitly started manual recording over automatically scheduled work
+- Keep a private disk-backed live buffer on this PC with a 15, 30, 60, or 120 minute window
+- Pause and resume live channels without affecting the independent DVR recorder
+- Rewind by 10 or 60 seconds when the provider stream exposes seeking through LibVLC
+- Return to the live edge with one click and automatically recover when the configured window is exhausted
+- Remove stale temporary timeshift files without touching saved DVR recordings
 
-## Protect drive space
+## Record smarter series
 
-- Reserve 0, 2, 5, 10, 20, or 50 GB on the selected recordings drive
-- Check the reserve before manual and scheduled capture begins
-- Recheck during long recordings and stop safely before the protected free-space threshold is crossed
-- Show the active reserve alongside live capacity and library storage reporting
+- Choose all airings or new episodes only
+- Match the original channel or any channel carrying the same program
+- Read XMLTV season, episode, new-airing, and repeat metadata
+- Prevent the same identified episode from being scheduled twice across alternate feeds
+- Keep every recording or automatically retain only the newest 1, 3, 5, or 10 episodes
+- Rebuild future schedules immediately when a series option changes
+
+## See the week at a glance
+
+- Filter the schedule by All or any of the next seven days
+- See the next recording, background-engine state, estimated recording hours, current ingest rate, and time remaining
+- Distinguish scheduled, recording, recovering, recovered, partial, expired, missed, failed, conflict, and canceled states
 
 ## Verification
 
-- Verify persistent series rules, padded guide identity, priority selection, and reserve thresholds
-- Pass native transport-stream recording/playback, seeking, resume, storage, safe-delete, guide, updater, fullscreen, Multiview, multi-monitor, backup, casting, playlist, and Playback IQ regression suites
-- Visually verify Smart DVR controls, populated series rules, schedule priority metadata, and the scroll-safe window-sized modal
+- Pass a zero-warning Release build and the complete feature regression suite
+- Exercise the real Windows waitable timer, power guard, settings migration, XMLTV episode parser, duplicate prevention, retention, capacity estimate, and staged recovery policy
+- Record an original transport stream, reopen it in the native player, seek it, and verify the saved output is playable
+- Visually verify the expanded DVR center and live timeshift controls at desktop scale
 
-This build installs in place through StreamVue's UPDATE button. Existing settings, playlists, favorites, guide data, reminders, channel profiles, schedules, recordings, playback progress, backups, Cast behavior, and Multiview assignments are preserved.
+This build installs in place through StreamVue's UPDATE button. Existing settings, playlist cache, favorites, guide data, mappings, reminders, Playback IQ profiles, schedules, series rules, recordings, playback progress, backups, Cast behavior, and Multiview assignments are preserved.
