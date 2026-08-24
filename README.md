@@ -2,7 +2,7 @@
 
 StreamVue is a Windows-native IPTV player built with .NET, WPF, LibVLCSharp, the VideoLAN playback engine, and Velopack packaging.
 
-## 3.8 source-manager development
+## 3.8 source manager
 
 - A polished My sources workspace for saved M3U files, M3U URLs, and protected Xtream accounts
 - Enable, pause, reorder, refresh, use, or safely remove each provider without rebuilding the rest of the library

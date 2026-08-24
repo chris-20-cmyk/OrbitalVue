@@ -1,48 +1,42 @@
-# StreamVue 3.7.0 Multi-Source Foundation
+# StreamVue 3.8.0 Source Manager
 
-StreamVue 3.7 lays the safe storage and migration foundation for combining multiple IPTV providers without disrupting the playlist already connected in 3.6.
+StreamVue 3.8 turns the multi-source foundation into a complete source workspace and refreshes every enabled IPTV provider into one resilient library when the app opens.
 
-## Preserve every source independently
+## Manage every provider in one place
 
-- Automatically migrate the existing M3U file, M3U URL, or Xtream connection into the new ordered source catalog
-- Keep a stable identity, friendly name, enabled state, startup-refresh preference, channel count, and health history for each source
-- Track the originating source on merged channels so searching and future source controls remain unambiguous
-- Normalize duplicate source entries while preserving the original source order and identifiers
+- Open the new My sources workspace to see every saved M3U file, M3U URL, and protected Xtream account
+- Enable or pause a source without deleting its saved details or encrypted offline copy
+- Reorder sources to control which provider wins when the same exact channel appears more than once
+- Load one source immediately, refresh all enabled sources together, or safely remove a source and its private cached data
+- See a privacy-safe location, connection state, channel count, and last successful refresh for every source
 
-## Stay usable when one provider is offline
+## Build one library automatically
 
-- Store a separate Windows-user-encrypted last-known-good playlist for every configured source
-- Continue reading the existing 3.6 encrypted cache during migration
-- Remove or replace one source cache without disturbing offline copies belonging to other providers
-- Keep playlist addresses, channel data, guide addresses, and provider tokens out of clear-text cache files
+- Refresh every enabled provider whenever StreamVue opens instead of checking only the most recently connected playlist
+- Merge all available channels in the chosen source order and suppress exact duplicates automatically
+- Preserve source identity on every merged channel so favorites and guide matching remain stable
+- Keep manually connected sources in the manager automatically for future launches
 
-## Protect multiple Xtream accounts
+## Stay online when providers struggle
 
-- Retain multiple Xtream logins in one Windows-user-encrypted account vault instead of replacing the previous login
-- Recognize equivalent server addresses with or without an HTTP or HTTPS prefix
-- Migrate the protected 3.6 single-account format automatically after a successful read
-- Serialize concurrent account updates safely so one login cannot overwrite another
+- Refresh and recover each source independently so one unavailable provider cannot take the rest of the library offline
+- Fall back to the affected source's Windows-user-encrypted last-known-good playlist while healthy providers remain live
+- Allow startup network refresh to be disabled per source and open that source's encrypted copy instead
+- Report which sources are live, using protected offline data, or need attention without exposing provider tokens
 
-## Prepare a unified library
+## Keep account data private
 
-- Merge enabled source snapshots in a deterministic order
-- Preserve favorite-compatible channel identities and source provenance
-- Suppress exact duplicate channel entries while leaving genuinely different feeds available
-- Combine distinct XMLTV guide sources for the unified channel set
-
-## Keep recovery dependable
-
-- Include every per-source encrypted playlist cache in StreamVue backups
-- Restore 3.7 cache collections as a complete snapshot and remove stale entries safely
-- Continue restoring StreamVue 3.6 backup archives with the same Windows account
-- Keep the automatic pre-restore rollback backup
+- Hide playlist query strings, tokens, and Xtream account details from the source-manager display
+- Retain protected Xtream credentials only while another saved source still uses the same account
+- Delete only the selected source's encrypted cache without disturbing other providers
+- Preserve the complete 3.7 source catalog, caches, account vault, settings, and channel order during the in-place update
 
 ## Verification
 
 - Pass a zero-warning Release build across the complete solution
-- Verify source migration, ordering, identity, provenance, merging, and duplicate suppression
-- Verify independent encrypted caches, multi-account credential persistence, and legacy credential migration
-- Create and restore a multi-source backup, then restore a simulated 3.6 backup into 3.7
-- Pass the existing playback, DVR, timeshift, guide, fullscreen, Multiview, multi-monitor, Cast, diagnostics, and updater regression suite
+- Verify live refresh, intentional cache-only startup, provider-failure fallback, and no-cache failure in one coordinated run
+- Verify deterministic merging, source provenance, exact duplicate suppression, independent encrypted caches, and protected multi-account credentials
+- Visually verify the source manager at desktop scale with no player or modal overlap
+- Pass the existing playback, DVR, timeshift, guide, fullscreen, Multiview, multi-monitor, Cast, backup, diagnostics, and updater regression suite
 
-This prerelease installs in place through StreamVue's UPDATE button. Existing settings, playlist connection, encrypted cache, Xtream login, favorites, guide data, mappings, reminders, Playback IQ profiles, schedules, series rules, recordings, backups, Cast behavior, and Multiview assignments are preserved.
+This prerelease installs in place through StreamVue's UPDATE button. Existing settings, source catalog, encrypted playlists, Xtream logins, favorites, guide data, mappings, reminders, Playback IQ profiles, schedules, series rules, recordings, backups, Cast behavior, and Multiview assignments are preserved.
