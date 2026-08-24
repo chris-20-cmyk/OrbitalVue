@@ -8,6 +8,7 @@ public sealed class AppSettings
 {
     public string? LastSourceType { get; set; }
     public string? LastSource { get; set; }
+    public List<PlaylistSourceDefinition> PlaylistSources { get; set; } = [];
     public string? LastChannelKey { get; set; }
     public DateTimeOffset? LastPlaylistRefreshUtc { get; set; }
     public bool ResumeLastChannelOnStartup { get; set; }

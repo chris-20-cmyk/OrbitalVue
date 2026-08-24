@@ -1,5 +1,7 @@
 using System.Text;
 using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Text.Json;
 using LibVLCSharp.Shared;
 using StreamVue.Player.Models;
 using StreamVue.Player.Playback;
@@ -39,6 +41,7 @@ if (args is ["--dvr-self-test"])
 var testRoot = Path.Combine(Path.GetTempPath(), $"streamvue-feature-probe-{Guid.NewGuid():N}");
 var settingsPath = Path.Combine(testRoot, "settings.json");
 var cachePath = Path.Combine(testRoot, "playlist-cache.bin");
+var sourceCacheDirectory = Path.Combine(testRoot, "playlist-caches.v2");
 var credentialPath = Path.Combine(testRoot, "xtream-credentials.bin");
 var epgCachePath = Path.Combine(testRoot, "epg-cache.bin");
 var guideSourcePath = Path.Combine(testRoot, "guide-source.bin");
@@ -85,10 +88,24 @@ try
 
     var store = new AppSettingsStore(settingsPath);
     var seriesRuleId = Guid.NewGuid();
+    var playlistSourceId = Guid.NewGuid();
     var expected = new AppSettings
     {
         LastSourceType = "file",
         LastSource = "playlist.m3u",
+        PlaylistSources =
+        [
+            new PlaylistSourceDefinition
+            {
+                Id = playlistSourceId,
+                Name = "Primary lineup",
+                SourceType = "file",
+                SourceValue = "playlist.m3u",
+                LastAttemptUtc = DateTimeOffset.UtcNow,
+                LastSuccessUtc = DateTimeOffset.UtcNow,
+                ChannelCount = 2
+            }
+        ],
         LastChannelKey = first.StableKey,
         LastPlaylistRefreshUtc = DateTimeOffset.UtcNow,
         ResumeLastChannelOnStartup = true,
@@ -226,6 +243,9 @@ try
         throw new InvalidOperationException("Reconnect preferences did not persist.");
     if (actual.LastPlaylistRefreshUtc is null)
         throw new InvalidOperationException("Playlist refresh status did not persist.");
+    if (actual.PlaylistSources.Count != 1 || actual.PlaylistSources[0].Id != playlistSourceId ||
+        actual.PlaylistSources[0].Name != "Primary lineup" || actual.PlaylistSources[0].ChannelCount != 2)
+        throw new InvalidOperationException("Playlist source catalog did not persist.");
     if (actual.LastChannelKey != first.StableKey || !actual.ResumeLastChannelOnStartup || !actual.MiniPlayerAlwaysOnTop)
         throw new InvalidOperationException("Startup resume or Mini Player preferences did not persist.");
     if (actual.RecentChannelKeys.Count != 2 || actual.RecentChannelKeys[0] != distinct.StableKey ||
@@ -280,6 +300,75 @@ try
         migratedSettings.SmartDvr.MaximumRecoveryAttempts != 3)
         throw new InvalidOperationException("Pre-3.6 settings did not receive safe background DVR and timeshift defaults.");
 
+    var legacyCatalogSettings = new AppSettings
+    {
+        LastSourceType = " URL ",
+        LastSource = "https://lineup.invalid/primary/"
+    };
+    if (!PlaylistSourcePolicy.NormalizeSettings(legacyCatalogSettings) || legacyCatalogSettings.PlaylistSources.Count != 1 ||
+        legacyCatalogSettings.PlaylistSources[0].SourceType != "url" ||
+        legacyCatalogSettings.PlaylistSources[0].SourceValue != "https://lineup.invalid/primary/" ||
+        legacyCatalogSettings.PlaylistSources[0].Name != "lineup.invalid")
+        throw new InvalidOperationException("The 3.6 playlist connection did not migrate into the 3.7 source catalog.");
+    var migratedSource = legacyCatalogSettings.PlaylistSources[0];
+    legacyCatalogSettings.PlaylistSources.Add(new PlaylistSourceDefinition
+    {
+        Id = Guid.NewGuid(),
+        Name = "Duplicate",
+        SourceType = "URL",
+        SourceValue = "https://lineup.invalid/primary",
+        SortOrder = 50
+    });
+    legacyCatalogSettings.PlaylistSources.Add(new PlaylistSourceDefinition
+    {
+        Id = migratedSource.Id,
+        Name = "  Sports account  ",
+        SourceType = "XTREAM",
+        SourceValue = "sports.invalid/",
+        SortOrder = 75
+    });
+    if (!PlaylistSourcePolicy.NormalizeSettings(legacyCatalogSettings) || legacyCatalogSettings.PlaylistSources.Count != 2 ||
+        legacyCatalogSettings.PlaylistSources.Select(source => source.Id).Distinct().Count() != 2 ||
+        legacyCatalogSettings.PlaylistSources.Select(source => source.SortOrder).SequenceEqual([0, 1]) == false ||
+        legacyCatalogSettings.PlaylistSources[1].Name != "Sports account" ||
+        PlaylistSourcePolicy.GetOrAdd(legacyCatalogSettings, "url", "https://lineup.invalid/primary/").Id != migratedSource.Id)
+        throw new InvalidOperationException("Playlist source normalization, deduplication, or identity preservation failed.");
+
+    var regional = new ChannelItem
+    {
+        Number = 41,
+        Name = "Regional Weather",
+        Group = "Local",
+        Url = "https://regional.invalid/weather.ts",
+        TvgId = "regional.weather",
+        Kind = ChannelKind.Live
+    };
+    var primarySource = PlaylistSourcePolicy.Create("url", "https://primary.invalid/list.m3u", "Primary", 1);
+    var regionalSource = PlaylistSourcePolicy.Create("file", Path.Combine(testRoot, "regional.m3u"), "Regional", 0);
+    var disabledSource = PlaylistSourcePolicy.Create("url", "https://disabled.invalid/list.m3u", "Disabled", 2);
+    disabledSource.IsEnabled = false;
+    var merge = PlaylistMergePolicy.Merge(
+    [
+        new PlaylistSourceSnapshot(
+            primarySource,
+            new PlaylistResult([first, distinct], "Primary", "primary", DateTimeOffset.UtcNow, "https://guide.invalid/primary.xml")),
+        new PlaylistSourceSnapshot(
+            regionalSource,
+            new PlaylistResult([first, regional], "Regional", "regional", DateTimeOffset.UtcNow.AddMinutes(1), "https://guide.invalid/regional.xml")),
+        new PlaylistSourceSnapshot(
+            disabledSource,
+            new PlaylistResult([distinct], "Disabled", "disabled", DateTimeOffset.UtcNow.AddMinutes(2)))
+    ]);
+    if (merge.SourceCount != 2 || merge.InputChannelCount != 4 || merge.DuplicateChannelCount != 1 ||
+        merge.Playlist.Channels.Count != 3 ||
+        !merge.Playlist.Channels.Select(channel => channel.Number).SequenceEqual([1, 2, 3]) ||
+        merge.Playlist.Channels[0].StableKey != first.StableKey ||
+        merge.Playlist.Channels[0].SourceId != regionalSource.Id || merge.Playlist.Channels[0].SourceName != "Regional" ||
+        merge.Playlist.Channels[2].SourceId != primarySource.Id ||
+        merge.Playlist.GuideSource is null || !merge.Playlist.GuideSource.Contains("primary.xml", StringComparison.Ordinal) ||
+        !merge.Playlist.GuideSource.Contains("regional.xml", StringComparison.Ordinal))
+        throw new InvalidOperationException("Multi-source ordering, provenance, exact deduplication, or guide merging failed.");
+
     using (var multiview = new MultiviewSession(expected.Playback))
     {
         multiview.RestoreChannel(0, first);
@@ -303,13 +392,95 @@ try
     if (Encoding.UTF8.GetString(await File.ReadAllBytesAsync(cachePath)).Contains("token=secret", StringComparison.Ordinal))
         throw new InvalidOperationException("Playlist cache exposed provider data as clear text.");
 
+    var multiSourceCache = new PlaylistCacheStore(cachePath, sourceCacheDirectory);
+    var migratedLegacyCache = await multiSourceCache.TryLoadAsync("url", "https://provider.invalid/list.m3u?token=secret");
+    if (migratedLegacyCache?.Playlist.Channels.Count != 2)
+        throw new InvalidOperationException("The 3.6 playlist cache was not available through the 3.7 cache layout.");
+    var primaryCacheSource = "https://primary.invalid/list.m3u?token=primary-secret";
+    var regionalCacheSource = Path.Combine(testRoot, "regional.m3u");
+    await multiSourceCache.SaveAsync("url", primaryCacheSource,
+        new PlaylistResult([first, distinct], "Primary", "primary", DateTimeOffset.UtcNow));
+    await multiSourceCache.SaveAsync("file", regionalCacheSource,
+        new PlaylistResult([regional], "Regional", "regional", DateTimeOffset.UtcNow));
+    var perSourceCacheFiles = Directory.GetFiles(sourceCacheDirectory, "*.bin");
+    var primaryCached = await multiSourceCache.TryLoadAsync("url", primaryCacheSource);
+    var regionalCached = await multiSourceCache.TryLoadAsync("file", regionalCacheSource);
+    if (perSourceCacheFiles.Length != 2 || primaryCached?.Playlist.Channels.Count != 2 ||
+        regionalCached?.Playlist.Channels.Single().Name != regional.Name)
+        throw new InvalidOperationException("Independent encrypted playlist caches were not preserved per source.");
+    foreach (var path in perSourceCacheFiles)
+    {
+        var cacheText = Encoding.UTF8.GetString(await File.ReadAllBytesAsync(path));
+        if (cacheText.Contains("primary-secret", StringComparison.Ordinal) ||
+            cacheText.Contains(regional.Name, StringComparison.Ordinal))
+            throw new InvalidOperationException("A per-source playlist cache exposed provider data as clear text.");
+    }
+    await multiSourceCache.DeleteAsync("url", primaryCacheSource);
+    if (await multiSourceCache.TryLoadAsync("url", primaryCacheSource) is not null ||
+        await multiSourceCache.TryLoadAsync("file", regionalCacheSource) is null)
+        throw new InvalidOperationException("Deleting one playlist cache affected the wrong source.");
+    await multiSourceCache.SaveAsync("url", primaryCacheSource,
+        new PlaylistResult([first, distinct], "Primary", "primary", DateTimeOffset.UtcNow));
+
     var credentialStore = new XtreamCredentialStore(credentialPath);
     await credentialStore.SaveAsync(new XtreamCredentials("https://provider.invalid", "probe-user", "probe-password"));
+    await credentialStore.SaveAsync(new XtreamCredentials("https://sports.invalid", "sports-user", "sports-password"));
     var credentials = await credentialStore.TryLoadAsync("https://provider.invalid/");
-    if (credentials is null || credentials.Username != "probe-user" || credentials.Password != "probe-password")
-        throw new InvalidOperationException("Protected Xtream credential round-trip failed.");
-    if (Encoding.UTF8.GetString(await File.ReadAllBytesAsync(credentialPath)).Contains("probe-password", StringComparison.Ordinal))
-        throw new InvalidOperationException("Xtream password was persisted as clear text.");
+    var sportsCredentials = await credentialStore.TryLoadAsync("sports.invalid/");
+    if (credentials is null || credentials.Username != "probe-user" || credentials.Password != "probe-password" ||
+        sportsCredentials is null || sportsCredentials.Username != "sports-user" || sportsCredentials.Password != "sports-password")
+        throw new InvalidOperationException("Protected multi-account Xtream credential round-trip failed.");
+    var credentialText = Encoding.UTF8.GetString(await File.ReadAllBytesAsync(credentialPath));
+    if (credentialText.Contains("probe-password", StringComparison.Ordinal) || credentialText.Contains("sports-password", StringComparison.Ordinal))
+        throw new InvalidOperationException("An Xtream password was persisted as clear text.");
+    await Task.WhenAll(Enumerable.Range(1, 4).Select(index => credentialStore.SaveAsync(
+        new XtreamCredentials($"https://account-{index}.invalid", $"user-{index}", $"password-{index}"))));
+    for (var index = 1; index <= 4; index++)
+    {
+        var concurrentCredentials = await credentialStore.TryLoadAsync($"account-{index}.invalid");
+        if (concurrentCredentials?.Username != $"user-{index}")
+            throw new InvalidOperationException("Concurrent Xtream account writes lost a protected account.");
+    }
+    await credentialStore.DeleteAsync("https://sports.invalid/");
+    if (await credentialStore.TryLoadAsync("sports.invalid") is not null ||
+        await credentialStore.TryLoadAsync("provider.invalid") is null)
+        throw new InvalidOperationException("Removing one Xtream account affected the wrong account.");
+
+    var legacyCredentialPath = Path.Combine(testRoot, "legacy-xtream-credentials.bin");
+    var legacyCredentialBytes = JsonSerializer.SerializeToUtf8Bytes(
+        new XtreamCredentials("https://legacy.invalid", "legacy-user", "legacy-password"));
+    try
+    {
+        var protectedLegacyCredentials = ProtectedData.Protect(
+            legacyCredentialBytes,
+            Encoding.UTF8.GetBytes("StreamVue.XtreamCredentials.v1"),
+            DataProtectionScope.CurrentUser);
+        await File.WriteAllBytesAsync(legacyCredentialPath, protectedLegacyCredentials);
+    }
+    finally
+    {
+        CryptographicOperations.ZeroMemory(legacyCredentialBytes);
+    }
+    var legacyCredentialStore = new XtreamCredentialStore(legacyCredentialPath);
+    var legacyCredentials = await legacyCredentialStore.TryLoadAsync("legacy.invalid/");
+    if (legacyCredentials?.Password != "legacy-password")
+        throw new InvalidOperationException("The 3.6 Xtream credential did not migrate into the 3.7 account vault.");
+    var migratedProtectedBytes = await File.ReadAllBytesAsync(legacyCredentialPath);
+    var migratedClearBytes = ProtectedData.Unprotect(
+        migratedProtectedBytes,
+        Encoding.UTF8.GetBytes("StreamVue.XtreamCredentials.v1"),
+        DataProtectionScope.CurrentUser);
+    try
+    {
+        using var migratedDocument = JsonDocument.Parse(migratedClearBytes);
+        if (migratedDocument.RootElement.GetProperty("Version").GetInt32() != 2 ||
+            migratedDocument.RootElement.GetProperty("Accounts").GetArrayLength() != 1)
+            throw new InvalidOperationException("The migrated Xtream account vault did not use the 3.7 envelope.");
+    }
+    finally
+    {
+        CryptographicOperations.ZeroMemory(migratedClearBytes);
+    }
 
     var tnt = new ChannelItem
     {
@@ -758,15 +929,22 @@ try
     var maintenance = new StreamVueMaintenanceService(testRoot);
     var managedCachePath = Path.Combine(testRoot, "playlist-cache.v1.bin");
     await File.WriteAllBytesAsync(managedCachePath, [1, 2, 3, 4]);
+    var managedSourceCacheFiles = Directory.GetFiles(sourceCacheDirectory, "*.bin");
+    var managedSourceCacheSnapshots = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+    foreach (var path in managedSourceCacheFiles)
+        managedSourceCacheSnapshots[Path.GetFileName(path)] = await File.ReadAllBytesAsync(path);
     var backupPath = Path.Combine(testRoot, "probe.streamvue-backup");
     var backupCount = await maintenance.CreateBackupAsync(backupPath);
-    if (backupCount != 2 || !File.Exists(backupPath))
+    if (backupCount != 2 + managedSourceCacheSnapshots.Count || !File.Exists(backupPath))
         throw new InvalidOperationException("StreamVue backup creation did not capture the expected protected data.");
     using (var backupArchive = ZipFile.OpenRead(backupPath))
     {
         var protectedSettings = backupArchive.GetEntry("data/settings.json.protected");
         if (protectedSettings is null || backupArchive.GetEntry("data/settings.json") is not null)
             throw new InvalidOperationException("The backup did not protect its settings payload.");
+        if (managedSourceCacheSnapshots.Keys.Any(name =>
+                backupArchive.GetEntry($"data/playlist-caches.v2/{name}") is null))
+            throw new InvalidOperationException("The backup omitted one or more per-source playlist caches.");
         using var protectedReader = new StreamReader(protectedSettings.Open());
         if ((await protectedReader.ReadToEndAsync()).Contains("playlist.m3u", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The backup exposed the playlist source as clear text.");
@@ -774,13 +952,61 @@ try
 
     await new AppSettingsStore(settingsPath).SaveAsync(new AppSettings { LastSourceType = "changed" });
     await File.WriteAllBytesAsync(managedCachePath, [9, 9]);
+    foreach (var path in Directory.GetFiles(sourceCacheDirectory, "*.bin"))
+        await File.WriteAllBytesAsync(path, [9, 9, 9]);
+    var staleSourceCachePath = Path.Combine(sourceCacheDirectory, $"{new string('C', 64)}.bin");
+    await File.WriteAllBytesAsync(staleSourceCachePath, [8, 8, 8]);
     var restoredCount = await maintenance.RestoreBackupAsync(backupPath);
     var restoredSettings = await new AppSettingsStore(settingsPath).LoadAsync();
     var restoredCache = await File.ReadAllBytesAsync(managedCachePath);
-    if (restoredCount != 2 || restoredSettings.LastChannelKey != first.StableKey ||
+    var sourceCachesRestored = managedSourceCacheSnapshots.All(snapshot =>
+        File.Exists(Path.Combine(sourceCacheDirectory, snapshot.Key)) &&
+        File.ReadAllBytes(Path.Combine(sourceCacheDirectory, snapshot.Key)).SequenceEqual(snapshot.Value));
+    if (restoredCount != 2 + managedSourceCacheSnapshots.Count || restoredSettings.LastChannelKey != first.StableKey ||
         !restoredSettings.ResumeLastChannelOnStartup || !restoredCache.SequenceEqual(new byte[] { 1, 2, 3, 4 }) ||
+        !sourceCachesRestored || File.Exists(staleSourceCachePath) ||
         !File.Exists(Path.Combine(testRoot, "before-last-restore.streamvue-backup")))
         throw new InvalidOperationException("StreamVue backup restore or automatic rollback protection failed.");
+
+    var legacyBackupPath = Path.Combine(testRoot, "legacy-3.6.streamvue-backup");
+    var legacyRestoreRoot = Path.Combine(testRoot, "legacy-restore");
+    var legacySettingsBytes = JsonSerializer.SerializeToUtf8Bytes(new AppSettings
+    {
+        LastSourceType = "url",
+        LastSource = "https://legacy-backup.invalid/list.m3u"
+    });
+    try
+    {
+        var protectedLegacySettings = ProtectedData.Protect(
+            legacySettingsBytes,
+            Encoding.UTF8.GetBytes("StreamVue.PortableBackup.v1"),
+            DataProtectionScope.CurrentUser);
+        await using var legacyBackupStream = File.Create(legacyBackupPath);
+        using var legacyArchive = new ZipArchive(legacyBackupStream, ZipArchiveMode.Create, leaveOpen: false);
+        var legacyManifestEntry = legacyArchive.CreateEntry("manifest.json");
+        await using (var manifestStream = legacyManifestEntry.Open())
+        {
+            await JsonSerializer.SerializeAsync(manifestStream, new
+            {
+                Product = "StreamVue",
+                FormatVersion = 1,
+                CreatedUtc = DateTimeOffset.UtcNow,
+                EncryptionScope = "Windows current-user encryption; restore with the same Windows account.",
+                Files = new[] { "settings.json" }
+            });
+        }
+        var legacySettingsEntry = legacyArchive.CreateEntry("data/settings.json.protected");
+        await using var legacySettingsStream = legacySettingsEntry.Open();
+        await legacySettingsStream.WriteAsync(protectedLegacySettings);
+    }
+    finally
+    {
+        CryptographicOperations.ZeroMemory(legacySettingsBytes);
+    }
+    var legacyRestoreCount = await new StreamVueMaintenanceService(legacyRestoreRoot).RestoreBackupAsync(legacyBackupPath);
+    var restoredLegacySettings = await new AppSettingsStore(Path.Combine(legacyRestoreRoot, "settings.json")).LoadAsync();
+    if (legacyRestoreCount != 1 || restoredLegacySettings.LastSource != "https://legacy-backup.invalid/list.m3u")
+        throw new InvalidOperationException("A StreamVue 3.6 backup could not be restored by 3.7.");
 
     await File.WriteAllTextAsync(Path.Combine(testRoot, "crash.log"),
         "Failure while opening https://provider.invalid/live/private.ts?token=secret from " + Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
@@ -813,6 +1039,8 @@ try
     Console.WriteLine("Stable URL-independent guide mapping identity: PASS");
     Console.WriteLine("Settings round-trip: PASS");
     Console.WriteLine("Concurrent settings writes: PASS");
+    Console.WriteLine("3.6-to-3.7 playlist source migration: PASS");
+    Console.WriteLine("Multi-source normalization, ordering, provenance, and exact deduplication: PASS");
     Console.WriteLine("Reconnect preferences: PASS");
     Console.WriteLine("Playlist refresh status: PASS");
     Console.WriteLine("Startup channel resume preference: PASS");
@@ -836,8 +1064,8 @@ try
     Console.WriteLine("Persistent four-view assignments: PASS");
     Console.WriteLine("Saved multiview layouts: PASS");
     Console.WriteLine("Single-audio multiview policy: PASS");
-    Console.WriteLine("Encrypted offline playlist cache: PASS");
-    Console.WriteLine("Protected Xtream auto-refresh credentials: PASS");
+    Console.WriteLine("Independent encrypted multi-source playlist caches: PASS");
+    Console.WriteLine("Protected multi-account Xtream vault and legacy migration: PASS");
     Console.WriteLine("XMLTV Now/Next, episode metadata, and call-sign matching: PASS");
     Console.WriteLine("Encrypted offline guide cache: PASS");
     Console.WriteLine("Protected multi-source guide configuration: PASS");
@@ -855,7 +1083,8 @@ try
     Console.WriteLine("Adaptive display cadence policy: PASS");
     Console.WriteLine("Monitor-accurate fullscreen bounds: PASS");
     Console.WriteLine("Background and multi-monitor video visibility: PASS");
-    Console.WriteLine("Encrypted recovery-safe settings backup and restore: PASS");
+    Console.WriteLine("Encrypted recovery-safe settings and multi-source cache backup/restore: PASS");
+    Console.WriteLine("StreamVue 3.6 backup restore compatibility: PASS");
     Console.WriteLine("Privacy-filtered diagnostics bundle: PASS");
     Console.WriteLine("Nearby unpaired wireless-display casting: PASS");
     Console.WriteLine("Public update channel configuration: PASS");

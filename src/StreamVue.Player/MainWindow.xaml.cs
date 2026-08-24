@@ -190,6 +190,7 @@ public partial class MainWindow : Window
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
         _settings = await _settingsStore.LoadAsync();
+        var playlistSourcesMigrated = PlaylistSourcePolicy.NormalizeSettings(_settings);
         _settings.Playback ??= new PlaybackPreferences();
         _settings.FavoriteChannelKeys ??= [];
         _settings.RecentChannelKeys ??= [];
@@ -226,6 +227,7 @@ public partial class MainWindow : Window
         _displayRefreshRate = new DisplayRefreshRateController(new WindowInteropHelper(this).Handle);
         _telemetryTimer.Start();
         _windowReady = true;
+        if (playlistSourcesMigrated) await _settingsStore.SaveAsync(_settings);
         if (_backgroundLaunch) _ = Dispatcher.BeginInvoke(() => HideToBackground(showNotice: false), DispatcherPriority.Background);
 
         var commandLineArguments = Environment.GetCommandLineArgs().Skip(1).ToArray();
@@ -828,6 +830,12 @@ public partial class MainWindow : Window
             _settings.PlaylistHealth.AddedChannels = previousKeys is null ? 0 : currentKeys.Count(key => !previousKeys.Contains(key));
             _settings.PlaylistHealth.RemovedChannels = previousKeys is null ? 0 : previousKeys.Count(key => !currentKeys.Contains(key));
             _settings.PlaylistHealth.UsedCachedFallback = false;
+            var playlistSource = PlaylistSourcePolicy.GetOrAdd(_settings, sourceType, sourceValue, result.DisplayName);
+            playlistSource.LastAttemptUtc = _settings.PlaylistHealth.LastAttemptUtc;
+            playlistSource.LastSuccessUtc = _settings.PlaylistHealth.LastSuccessUtc;
+            playlistSource.LastError = null;
+            playlistSource.ChannelCount = result.Channels.Count;
+            playlistSource.UsedCachedFallback = false;
             try
             {
                 await _playlistCache.SaveAsync(sourceType, sourceValue, result, _loadCancellation.Token);
@@ -875,6 +883,12 @@ public partial class MainWindow : Window
                     _settings.PlaylistHealth.LastError = SafeErrorMessage(exception);
                     _settings.PlaylistHealth.ChannelCount = cached.Playlist.Channels.Count;
                     _settings.PlaylistHealth.UsedCachedFallback = true;
+                    var playlistSource = PlaylistSourcePolicy.GetOrAdd(_settings, sourceType, sourceValue, cached.Playlist.DisplayName);
+                    playlistSource.LastAttemptUtc = _settings.PlaylistHealth.LastAttemptUtc;
+                    playlistSource.LastSuccessUtc ??= cached.Playlist.LoadedAt;
+                    playlistSource.LastError = _settings.PlaylistHealth.LastError;
+                    playlistSource.ChannelCount = cached.Playlist.Channels.Count;
+                    playlistSource.UsedCachedFallback = true;
                     await _settingsStore.SaveAsync(_settings);
                     _ = ConfigureGuideForPlaylistAsync(cached.Playlist, sourceType, sourceValue);
                     return true;
@@ -888,6 +902,13 @@ public partial class MainWindow : Window
             SourceRefreshText.Text = "Automatic refresh needs attention";
             _settings.PlaylistHealth.LastError = SafeErrorMessage(exception);
             _settings.PlaylistHealth.UsedCachedFallback = false;
+            var failedSource = PlaylistSourcePolicy.Find(_settings, sourceType, sourceValue);
+            if (failedSource is not null)
+            {
+                failedSource.LastAttemptUtc = _settings.PlaylistHealth.LastAttemptUtc;
+                failedSource.LastError = _settings.PlaylistHealth.LastError;
+                failedSource.UsedCachedFallback = false;
+            }
             await _settingsStore.SaveAsync(_settings);
             return false;
         }

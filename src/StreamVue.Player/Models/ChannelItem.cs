@@ -31,6 +31,8 @@ public sealed class ChannelItem : INotifyPropertyChanged
     public string? UserAgent { get; init; }
     public string? Referrer { get; init; }
     public ChannelKind Kind { get; init; }
+    public Guid? SourceId { get; init; }
+    public string? SourceName { get; init; }
 
     public bool IsFavorite
     {
@@ -139,7 +141,7 @@ public sealed class ChannelItem : INotifyPropertyChanged
         _ => "LIVE"
     };
 
-    public string SearchText => $"{Name}\n{Group}\n{TvgName}".ToUpperInvariant();
+    public string SearchText => $"{Name}\n{Group}\n{TvgName}\n{SourceName}".ToUpperInvariant();
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

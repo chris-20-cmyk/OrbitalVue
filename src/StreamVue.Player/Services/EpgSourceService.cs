@@ -61,7 +61,7 @@ public sealed class EpgSourceService
             AutomaticDecompression = DecompressionMethods.All
         };
         var client = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(5) };
-        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("StreamVue", "3.6.0"));
+        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("StreamVue", "3.7.0"));
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/xml"));
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/xml"));
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/gzip"));
