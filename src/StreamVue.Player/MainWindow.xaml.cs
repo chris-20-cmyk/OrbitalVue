@@ -19,6 +19,7 @@ using Microsoft.Win32;
 using Brush = System.Windows.Media.Brush;
 using Color = System.Windows.Media.Color;
 using ComboBox = System.Windows.Controls.ComboBox;
+using CheckBox = System.Windows.Controls.CheckBox;
 using Button = System.Windows.Controls.Button;
 using MessageBox = System.Windows.MessageBox;
 using TextBox = System.Windows.Controls.TextBox;
@@ -49,6 +50,7 @@ public partial class MainWindow : Window
     private readonly XtreamSourceService _xtreamSource = new();
     private readonly AppSettingsStore _settingsStore = new();
     private readonly PlaylistCacheStore _playlistCache = new();
+    private readonly PlaylistSourceRefreshService _playlistSourceRefresh;
     private readonly XtreamCredentialStore _xtreamCredentialStore = new();
     private readonly AppUpdateService _appUpdateService = new();
     private readonly EpgSourceService _epgSourceService = new();
@@ -156,6 +158,10 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _playlistSourceRefresh = new PlaylistSourceRefreshService(
+            LoadPlaylistSourceDefinitionAsync,
+            (sourceType, sourceValue, token) => _playlistCache.TryLoadAsync(sourceType, sourceValue, token),
+            (sourceType, sourceValue, playlist, token) => _playlistCache.SaveAsync(sourceType, sourceValue, playlist, token));
         var arguments = Environment.GetCommandLineArgs().Skip(1).ToArray();
         _backgroundLaunch = arguments.Contains("--background-dvr", StringComparer.OrdinalIgnoreCase);
         _automationRun = arguments.Any(argument =>
@@ -218,6 +224,7 @@ public partial class MainWindow : Window
         ApplySettingsToControls();
         RefreshSavedMultiviewLayouts();
         UpdatePlaylistHealthUi();
+        RefreshPlaylistSourceList();
         RecordingFolderBox.Text = _settings.RecordingsFolder;
         ApplySmartDvrSettingsToControls();
         NormalizeScheduledRecordings();
@@ -689,53 +696,223 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_settings.LastSourceType == "file" && !string.IsNullOrWhiteSpace(_settings.LastSource))
+        await PopulateLastSourceFieldsAsync();
+        if (_settings.PlaylistSources.Any(source => source.IsEnabled))
         {
-            FilePathBox.Text = _settings.LastSource;
-            var loaded = await LoadPlaylistAsync(
-                (progress, token) => _playlistSource.LoadFileAsync(_settings.LastSource!, progress, token),
-                "file",
-                _settings.LastSource!,
-                allowCachedFallback: true);
-            if (startupRefreshProbePath is not null) await CompleteStartupRefreshProbeAsync(startupRefreshProbePath, loaded);
-            return;
-        }
-
-        if (_settings.LastSourceType == "url" && !string.IsNullOrWhiteSpace(_settings.LastSource))
-        {
-            PlaylistUrlBox.Text = _settings.LastSource;
-            var loaded = await LoadPlaylistAsync(
-                (progress, token) => _playlistSource.LoadUrlAsync(_settings.LastSource!, progress, token),
-                "url",
-                _settings.LastSource!,
-                allowCachedFallback: true);
-            if (startupRefreshProbePath is not null) await CompleteStartupRefreshProbeAsync(startupRefreshProbePath, loaded);
-            return;
-        }
-
-        if (_settings.LastSourceType == "xtream" && !string.IsNullOrWhiteSpace(_settings.LastSource))
-        {
-            var credentials = await _xtreamCredentialStore.TryLoadAsync(_settings.LastSource);
-            if (credentials is not null)
-            {
-                XtreamServerBox.Text = credentials.Server;
-                XtreamUsernameBox.Text = credentials.Username;
-                XtreamPasswordBox.Password = credentials.Password;
-            }
-
-            var loaded = await LoadPlaylistAsync(
-                credentials is null
-                    ? (_, _) => Task.FromException<PlaylistResult>(new InvalidOperationException("Sign in to this Xtream account once to enable secure automatic refresh."))
-                    : (progress, token) => _xtreamSource.LoadAsync(credentials.Server, credentials.Username, credentials.Password, progress, token),
-                "xtream",
-                _settings.LastSource!,
-                allowCachedFallback: true);
+            var loaded = await LoadUnifiedPlaylistSourcesAsync(startup: true);
             if (startupRefreshProbePath is not null) await CompleteStartupRefreshProbeAsync(startupRefreshProbePath, loaded);
             return;
         }
 
         ShowModal(ImportOverlay);
         if (startupRefreshProbePath is not null) await CompleteStartupRefreshProbeAsync(startupRefreshProbePath, false);
+    }
+
+    private async Task PopulateLastSourceFieldsAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_settings.LastSourceType) || string.IsNullOrWhiteSpace(_settings.LastSource)) return;
+        switch (_settings.LastSourceType)
+        {
+            case "file":
+                FilePathBox.Text = _settings.LastSource;
+                break;
+            case "url":
+                PlaylistUrlBox.Text = _settings.LastSource;
+                break;
+            case "xtream":
+                var credentials = await _xtreamCredentialStore.TryLoadAsync(_settings.LastSource);
+                if (credentials is null) break;
+                XtreamServerBox.Text = credentials.Server;
+                XtreamUsernameBox.Text = credentials.Username;
+                XtreamPasswordBox.Password = credentials.Password;
+                break;
+        }
+    }
+
+    private async Task<PlaylistResult> LoadPlaylistSourceDefinitionAsync(
+        PlaylistSourceDefinition source,
+        IProgress<PlaylistProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        return source.SourceType switch
+        {
+            "file" => await _playlistSource.LoadFileAsync(source.SourceValue, progress, cancellationToken),
+            "url" => await _playlistSource.LoadUrlAsync(source.SourceValue, progress, cancellationToken),
+            "xtream" => await LoadSavedXtreamSourceAsync(source.SourceValue, progress, cancellationToken),
+            _ => throw new InvalidDataException("This saved playlist type is not supported.")
+        };
+    }
+
+    private async Task<PlaylistResult> LoadSavedXtreamSourceAsync(
+        string sourceValue,
+        IProgress<PlaylistProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        var credentials = await _xtreamCredentialStore.TryLoadAsync(sourceValue, cancellationToken);
+        if (credentials is null)
+            throw new InvalidOperationException("Sign in to this Xtream account once to enable secure automatic refresh.");
+        return await _xtreamSource.LoadAsync(
+            credentials.Server,
+            credentials.Username,
+            credentials.Password,
+            progress,
+            cancellationToken);
+    }
+
+    private async Task<bool> LoadUnifiedPlaylistSourcesAsync(bool startup, bool closeImportOnSuccess = false)
+    {
+        if (_isLoading) return false;
+        var enabledSources = (_settings.PlaylistSources ?? [])
+            .Where(source => source.IsEnabled)
+            .OrderBy(source => source.SortOrder)
+            .ThenBy(source => source.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (enabledSources.Count == 0) return false;
+
+        _isLoading = true;
+        _loadCancellation?.Cancel();
+        _loadCancellation?.Dispose();
+        _loadCancellation = new CancellationTokenSource();
+        var token = _loadCancellation.Token;
+        var previousKeys = _channels.Select(channel => channel.StableKey).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        ImportProgress.Visibility = Visibility.Visible;
+        ImportProgress.IsIndeterminate = true;
+        ImportStatusText.Text = startup ? "Refreshing your sources…" : "Refreshing enabled sources…";
+        ImportDetailText.Text = $"Preparing one library from {enabledSources.Count:N0} saved source{(enabledSources.Count == 1 ? string.Empty : "s")}";
+        FooterStatusDot.Fill = WarningBrush;
+
+        var progress = new Progress<PlaylistSourceRefreshProgress>(value =>
+        {
+            var stage = $"Source {value.SourceNumber:N0}/{value.SourceCount:N0} • {value.Message}";
+            ImportStatusText.Text = value.Message;
+            ImportDetailText.Text = stage;
+            FooterStatusText.Text = stage;
+            if (PlaylistHealthOverlay.Visibility == Visibility.Visible)
+            {
+                PlaylistHealthStateText.Text = value.Message;
+                PlaylistHealthDetailText.Text = stage;
+            }
+        });
+
+        try
+        {
+            var summary = await _playlistSourceRefresh.RefreshAsync(
+                enabledSources,
+                source => !startup || source.RefreshOnStartup,
+                progress,
+                token);
+            var now = DateTimeOffset.UtcNow;
+            _settings.PlaylistHealth ??= new PlaylistHealthPreferences();
+            _settings.PlaylistHealth.LastAttemptUtc = now;
+
+            if (!summary.HasPlaylist || summary.Merge is null)
+            {
+                _settings.PlaylistHealth.LastError = summary.FailedSourceCount == 1
+                    ? "The saved source could not be loaded and no encrypted copy was available."
+                    : $"{summary.FailedSourceCount:N0} saved sources could not be loaded and had no encrypted copies.";
+                _settings.PlaylistHealth.UsedCachedFallback = false;
+                await _settingsStore.SaveAsync(_settings);
+                RefreshPlaylistSourceList();
+                ImportStatusText.Text = "Saved sources need attention";
+                ImportDetailText.Text = _settings.PlaylistHealth.LastError;
+                FooterStatusDot.Fill = ErrorBrush;
+                FooterStatusText.Text = "No saved playlist source could be opened";
+                if (startup && !_backgroundLaunch)
+                {
+                    SourceTabs.SelectedItem = SavedSourcesTab;
+                    ShowModal(ImportOverlay);
+                }
+                return false;
+            }
+
+            var playlist = summary.Merge.Playlist;
+            var availableOutcomes = summary.Outcomes
+                .Where(outcome => outcome.Playlist is not null)
+                .OrderBy(outcome => outcome.Source.SortOrder)
+                .ToList();
+            if (availableOutcomes.Count == 1)
+            {
+                _activePlaylistSourceType = availableOutcomes[0].Source.SourceType;
+                _activePlaylistSourceValue = availableOutcomes[0].Source.SourceValue;
+            }
+            else
+            {
+                _activePlaylistSourceType = "multi";
+                _activePlaylistSourceValue = string.Join('|', availableOutcomes.Select(outcome => outcome.Source.Id.ToString("N")));
+            }
+
+            ApplyPlaylist(playlist);
+            var currentKeys = playlist.Channels.Select(channel => channel.StableKey).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _settings.LastPlaylistRefreshUtc = summary.LiveSourceCount > 0
+                ? now
+                : enabledSources.Where(source => source.LastSuccessUtc is not null)
+                    .Select(source => source.LastSuccessUtc!.Value)
+                    .DefaultIfEmpty(now)
+                    .Max();
+            _settings.PlaylistHealth.LastSuccessUtc = _settings.LastPlaylistRefreshUtc;
+            var attentionCount = summary.FailedSourceCount + summary.FallbackSourceCount;
+            _settings.PlaylistHealth.LastError = attentionCount == 0
+                ? null
+                : $"{attentionCount:N0} of {enabledSources.Count:N0} sources need attention.";
+            _settings.PlaylistHealth.ChannelCount = playlist.Channels.Count;
+            _settings.PlaylistHealth.AddedChannels = previousKeys.Count == 0 ? 0 : currentKeys.Count(key => !previousKeys.Contains(key));
+            _settings.PlaylistHealth.RemovedChannels = previousKeys.Count == 0 ? 0 : previousKeys.Count(key => !currentKeys.Contains(key));
+            _settings.PlaylistHealth.UsedCachedFallback = summary.CachedSourceCount > 0;
+            await _settingsStore.SaveAsync(_settings);
+            RefreshPlaylistSourceList();
+            UpdatePlaylistHealthUi();
+            if (closeImportOnSuccess) HideModal(ImportOverlay);
+
+            var refreshedAt = FormatPlaylistTime(_settings.LastPlaylistRefreshUtc ?? now);
+            SourceRefreshText.Text = summary.LiveSourceCount == 0
+                ? $"Offline copies • {availableOutcomes.Count:N0} sources"
+                : $"Updated {refreshedAt} • {summary.LiveSourceCount:N0}/{enabledSources.Count:N0} sources live";
+            FooterStatusDot.Fill = attentionCount == 0 ? LiveBrush : WarningBrush;
+            FooterStatusText.Text = availableOutcomes.Count == 1
+                ? $"Playlist ready • {playlist.Channels.Count:N0} channels"
+                : $"Unified library ready • {playlist.Channels.Count:N0} channels from {availableOutcomes.Count:N0} sources";
+            ImportStatusText.Text = attentionCount == 0 ? "Every enabled source is ready" : "Library ready with source alerts";
+            ImportDetailText.Text = $"{playlist.Channels.Count:N0} channels • {summary.Merge.DuplicateChannelCount:N0} exact duplicates removed";
+            _ = ConfigureGuideForPlaylistAsync(playlist, _activePlaylistSourceType, _activePlaylistSourceValue);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            ImportStatusText.Text = "Source refresh cancelled";
+            ImportDetailText.Text = "The existing library was left unchanged.";
+            return false;
+        }
+        catch (Exception exception)
+        {
+            ImportStatusText.Text = "Could not refresh saved sources";
+            ImportDetailText.Text = SafeErrorMessage(exception);
+            FooterStatusDot.Fill = ErrorBrush;
+            FooterStatusText.Text = "Saved source refresh failed";
+            return false;
+        }
+        finally
+        {
+            ImportProgress.Visibility = Visibility.Collapsed;
+            _isLoading = false;
+            RefreshPlaylistSourceList();
+        }
+    }
+
+    private void RefreshPlaylistSourceList()
+    {
+        if (PlaylistSourceList is null) return;
+        var sources = (_settings.PlaylistSources ?? [])
+            .OrderBy(source => source.SortOrder)
+            .ThenBy(source => source.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        PlaylistSourceList.ItemsSource = null;
+        PlaylistSourceList.ItemsSource = sources;
+        SourceManagerEmptyText.Visibility = sources.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        var enabled = sources.Count(source => source.IsEnabled);
+        SourceManagerSummaryText.Text = sources.Count == 0
+            ? "Add an M3U file, URL, or Xtream account to begin."
+            : $"{sources.Count:N0} saved • {enabled:N0} enabled • startup refresh is set per source";
+        SourceRefreshEnabledButton.IsEnabled = !_isLoading && enabled > 0;
     }
 
     private async Task CompleteStartupRefreshProbeAsync(string reportPath, bool loaded)
@@ -917,6 +1094,7 @@ public partial class MainWindow : Window
             ImportProgress.Visibility = Visibility.Collapsed;
             _isLoading = false;
             UpdatePlaylistHealthUi();
+            RefreshPlaylistSourceList();
         }
     }
 
@@ -941,7 +1119,7 @@ public partial class MainWindow : Window
             : FormatPlaylistTime(health.LastSuccessUtc.Value);
         PlaylistHealthCacheText.Text = health.LastSuccessUtc is null
             ? "Encrypted fallback ready after first load"
-            : health.UsedCachedFallback ? "Currently using the last working encrypted copy" : "Encrypted fallback verified and ready";
+            : health.UsedCachedFallback ? "Current library includes a protected offline copy" : "Encrypted fallback verified and ready";
         PlaylistHealthErrorText.Visibility = string.IsNullOrWhiteSpace(health.LastError) ? Visibility.Collapsed : Visibility.Visible;
         PlaylistHealthErrorText.Text = string.IsNullOrWhiteSpace(health.LastError) ? string.Empty : $"Latest provider response: {health.LastError}";
 
@@ -955,7 +1133,7 @@ public partial class MainWindow : Window
         {
             PlaylistHealthGlyph.Text = "↻";
             PlaylistHealthStateText.Text = "Protected by the last working copy";
-            PlaylistHealthDetailText.Text = "The provider was unavailable, so StreamVue kept the verified local library online.";
+            PlaylistHealthDetailText.Text = "One or more sources are using protected offline data, so the available library remains online.";
         }
         else
         {
@@ -976,9 +1154,21 @@ public partial class MainWindow : Window
     private async void RefreshPlaylistNow_Click(object sender, RoutedEventArgs e)
     {
         if (_isLoading) return;
+        if ((_settings.PlaylistSources ?? []).Any(source => source.IsEnabled))
+        {
+            PlaylistHealthGlyph.Text = "↻";
+            PlaylistHealthStateText.Text = "Refreshing every enabled source…";
+            PlaylistHealthDetailText.Text = "Each provider is checked independently, with its encrypted offline copy ready if needed.";
+            var unifiedLoaded = await LoadUnifiedPlaylistSourcesAsync(startup: false);
+            UpdatePlaylistHealthUi();
+            if (!unifiedLoaded) PlaylistHealthStateText.Text = "Playlist refresh needs attention";
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(_activePlaylistSourceType) || string.IsNullOrWhiteSpace(_activePlaylistSourceValue))
         {
             HideModal(PlaylistHealthOverlay);
+            RefreshPlaylistSourceList();
             ShowModal(ImportOverlay);
             return;
         }
@@ -2962,9 +3152,200 @@ public partial class MainWindow : Window
 
     private void OpenImport_Click(object sender, RoutedEventArgs e)
     {
+        RefreshPlaylistSourceList();
+        SourceTabs.SelectedItem = (_settings.PlaylistSources ?? []).Count > 0 ? SavedSourcesTab : FileSourceTab;
         ShowModal(ImportOverlay);
         ImportStatusText.Text = "Ready to connect";
-        ImportDetailText.Text = "Nothing is uploaded; StreamVue reads the source directly.";
+        ImportDetailText.Text = (_settings.PlaylistSources ?? []).Count > 0
+            ? "Choose a saved source, refresh the unified library, or add another provider."
+            : "Nothing is uploaded; StreamVue reads the source directly.";
+    }
+
+    private void AddPlaylistSource_Click(object sender, RoutedEventArgs e)
+    {
+        SourceTabs.SelectedItem = FileSourceTab;
+        ImportStatusText.Text = "Add another source";
+        ImportDetailText.Text = "Choose an M3U file, M3U URL, or Xtream login above.";
+    }
+
+    private async void SourceEnabled_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not CheckBox { Tag: PlaylistSourceDefinition source } checkBox) return;
+        source.IsEnabled = checkBox.IsChecked == true;
+        PlaylistSourcePolicy.NormalizeSettings(_settings);
+        await _settingsStore.SaveAsync(_settings);
+        RefreshPlaylistSourceList();
+        ImportStatusText.Text = source.IsEnabled ? $"{source.Name} enabled" : $"{source.Name} paused";
+        ImportDetailText.Text = source.IsEnabled
+            ? "It will be included the next time the unified library refreshes."
+            : "Its saved details and encrypted offline copy remain on this PC.";
+    }
+
+    private async void SourceStartupRefresh_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not CheckBox { Tag: PlaylistSourceDefinition source } checkBox) return;
+        source.RefreshOnStartup = checkBox.IsChecked == true;
+        PlaylistSourcePolicy.NormalizeSettings(_settings);
+        await _settingsStore.SaveAsync(_settings);
+        RefreshPlaylistSourceList();
+        ImportStatusText.Text = source.RefreshOnStartup
+            ? $"{source.Name} will refresh at launch"
+            : $"{source.Name} will open its offline copy at launch";
+        ImportDetailText.Text = source.RefreshOnStartup
+            ? "StreamVue will check this provider whenever the app opens."
+            : "Use Refresh enabled whenever you want to contact this provider manually.";
+    }
+
+    private async void UsePlaylistSource_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: PlaylistSourceDefinition source }) return;
+        await UsePlaylistSourceAsync(source);
+    }
+
+    private async Task<bool> UsePlaylistSourceAsync(PlaylistSourceDefinition source)
+    {
+        switch (source.SourceType)
+        {
+            case "file":
+                FilePathBox.Text = source.SourceValue;
+                return await LoadPlaylistAsync(
+                    (progress, token) => _playlistSource.LoadFileAsync(source.SourceValue, progress, token),
+                    source.SourceType,
+                    source.SourceValue,
+                    allowCachedFallback: true);
+            case "url":
+                PlaylistUrlBox.Text = source.SourceValue;
+                return await LoadPlaylistAsync(
+                    (progress, token) => _playlistSource.LoadUrlAsync(source.SourceValue, progress, token),
+                    source.SourceType,
+                    source.SourceValue,
+                    allowCachedFallback: true);
+            case "xtream":
+                var credentials = await _xtreamCredentialStore.TryLoadAsync(source.SourceValue);
+                if (credentials is null)
+                {
+                    XtreamServerBox.Text = source.SourceValue;
+                    XtreamUsernameBox.Clear();
+                    XtreamPasswordBox.Clear();
+                    SourceTabs.SelectedItem = XtreamSourceTab;
+                    ImportStatusText.Text = "Sign in to this account again";
+                    ImportDetailText.Text = "Enter the username and password once to restore encrypted automatic refresh.";
+                    return false;
+                }
+
+                XtreamServerBox.Text = credentials.Server;
+                XtreamUsernameBox.Text = credentials.Username;
+                XtreamPasswordBox.Password = credentials.Password;
+                return await LoadPlaylistAsync(
+                    (progress, token) => _xtreamSource.LoadAsync(
+                        credentials.Server,
+                        credentials.Username,
+                        credentials.Password,
+                        progress,
+                        token),
+                    source.SourceType,
+                    source.SourceValue,
+                    allowCachedFallback: true);
+            default:
+                ImportStatusText.Text = "Unsupported saved source";
+                ImportDetailText.Text = "Remove this entry and add it again using a supported source type.";
+                return false;
+        }
+    }
+
+    private async void RefreshEnabledSources_Click(object sender, RoutedEventArgs e)
+    {
+        await LoadUnifiedPlaylistSourcesAsync(startup: false);
+    }
+
+    private async void MovePlaylistSourceUp_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: PlaylistSourceDefinition source })
+            await MovePlaylistSourceAsync(source, -1);
+    }
+
+    private async void MovePlaylistSourceDown_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: PlaylistSourceDefinition source })
+            await MovePlaylistSourceAsync(source, 1);
+    }
+
+    private async Task MovePlaylistSourceAsync(PlaylistSourceDefinition source, int offset)
+    {
+        var ordered = (_settings.PlaylistSources ?? [])
+            .OrderBy(item => item.SortOrder)
+            .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var currentIndex = ordered.FindIndex(item => item.Id == source.Id);
+        var targetIndex = currentIndex + offset;
+        if (currentIndex < 0 || targetIndex < 0 || targetIndex >= ordered.Count) return;
+
+        (ordered[currentIndex], ordered[targetIndex]) = (ordered[targetIndex], ordered[currentIndex]);
+        for (var index = 0; index < ordered.Count; index++) ordered[index].SortOrder = index;
+        _settings.PlaylistSources = ordered;
+        PlaylistSourcePolicy.NormalizeSettings(_settings);
+        await _settingsStore.SaveAsync(_settings);
+        RefreshPlaylistSourceList();
+        ImportStatusText.Text = $"Moved {source.Name}";
+        ImportDetailText.Text = "Source order sets priority when two providers contain the same channel.";
+    }
+
+    private async void RemovePlaylistSource_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: PlaylistSourceDefinition source }) return;
+        var confirmation = MessageBox.Show(
+            this,
+            $"Remove {source.Name} from StreamVue?\n\nIts encrypted offline playlist will also be removed. Other sources and the currently playing channel are not affected.",
+            "Remove playlist source",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question,
+            MessageBoxResult.No);
+        if (confirmation != MessageBoxResult.Yes) return;
+
+        _settings.PlaylistSources.RemoveAll(item => item.Id == source.Id);
+        if (!string.IsNullOrWhiteSpace(_settings.LastSourceType) &&
+            !string.IsNullOrWhiteSpace(_settings.LastSource) &&
+            PlaylistSourcePolicy.Matches(source, _settings.LastSourceType, _settings.LastSource))
+        {
+            var next = _settings.PlaylistSources
+                .Where(item => item.IsEnabled)
+                .OrderBy(item => item.SortOrder)
+                .FirstOrDefault();
+            _settings.LastSourceType = next?.SourceType;
+            _settings.LastSource = next?.SourceValue;
+        }
+        PlaylistSourcePolicy.NormalizeSettings(_settings);
+        await _settingsStore.SaveAsync(_settings);
+
+        var cleanupWarning = false;
+        try
+        {
+            await _playlistCache.DeleteAsync(source.SourceType, source.SourceValue);
+        }
+        catch
+        {
+            cleanupWarning = true;
+        }
+
+        if (source.SourceType == "xtream" &&
+            !_settings.PlaylistSources.Any(item =>
+                item.SourceType == "xtream" && PlaylistSourcePolicy.Matches(item, "xtream", source.SourceValue)))
+        {
+            try
+            {
+                await _xtreamCredentialStore.DeleteAsync(source.SourceValue);
+            }
+            catch
+            {
+                cleanupWarning = true;
+            }
+        }
+
+        RefreshPlaylistSourceList();
+        ImportStatusText.Text = $"Removed {source.Name}";
+        ImportDetailText.Text = cleanupWarning
+            ? "The source was removed, but Windows could not delete all of its protected local data yet."
+            : "Its protected offline data was removed from this PC.";
     }
 
     private void OpenGuideSource_Click(object sender, RoutedEventArgs e)

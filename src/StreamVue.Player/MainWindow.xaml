@@ -1100,14 +1100,14 @@
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
                     <TextBlock Foreground="#566176" FontSize="9" Text="↑↓ CHANNELS • BACKSPACE LAST" />
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
-                    <TextBlock Foreground="#566176" FontSize="9" Text="3.7 MULTI-SOURCE" />
+                    <TextBlock Foreground="#566176" FontSize="9" Text="3.8 SOURCE MANAGER" />
                 </StackPanel>
             </Grid>
         </Border>
 
         <!-- Source connection modal -->
         <Grid x:Name="ImportOverlay" Grid.RowSpan="3" Panel.ZIndex="90" Background="#F0080B12" Visibility="Collapsed">
-            <Border Width="680" MaxHeight="720" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="28" CornerRadius="22" Background="#111722" BorderBrush="#344158" BorderThickness="1">
+            <Border Width="760" MaxHeight="760" Margin="24" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="28" CornerRadius="22" Background="#111722" BorderBrush="#344158" BorderThickness="1" ClipToBounds="True">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="36" ShadowDepth="8" Opacity="0.55" Color="#000000" />
                 </Border.Effect>
@@ -1156,7 +1156,83 @@
                             </Style>
                         </TabControl.Resources>
 
-                        <TabItem Header="M3U file">
+                        <TabItem x:Name="SavedSourcesTab" Header="My sources">
+                            <Grid Margin="2,20,2,0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Grid>
+                                    <StackPanel>
+                                        <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Your channel sources" />
+                                        <TextBlock x:Name="SourceManagerSummaryText" Margin="0,5,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" Text="Add an M3U file, URL, or Xtream account to begin." />
+                                    </StackPanel>
+                                    <Button HorizontalAlignment="Right" VerticalAlignment="Center" Padding="12,7" Style="{StaticResource SecondaryButton}" Click="AddPlaylistSource_Click" Content="+ Add source" />
+                                </Grid>
+                                <Border Grid.Row="1" Margin="0,13,0,10" Padding="12,9" CornerRadius="10" Background="#10211F" BorderBrush="#21443F" BorderThickness="1">
+                                    <TextBlock Foreground="#8EDDD3" FontSize="9.5" Text="Enabled sources become one library. Exact duplicate channels are removed automatically, while every source keeps its own encrypted offline copy." TextWrapping="Wrap" />
+                                </Border>
+                                <Grid Grid.Row="2" MinHeight="150">
+                                    <TextBlock x:Name="SourceManagerEmptyText" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#66758B" FontSize="10.5" Text="No sources saved yet" Visibility="Collapsed" />
+                                    <ListBox x:Name="PlaylistSourceList" MaxHeight="330" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                        <ListBox.ItemContainerStyle>
+                                            <Style TargetType="ListBoxItem">
+                                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                <Setter Property="Padding" Value="0" />
+                                                <Setter Property="Margin" Value="0,0,0,8" />
+                                                <Setter Property="Background" Value="Transparent" />
+                                                <Setter Property="BorderThickness" Value="0" />
+                                                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                                            </Style>
+                                        </ListBox.ItemContainerStyle>
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Padding="14,12" CornerRadius="12" Background="#0D141E" BorderBrush="#273247" BorderThickness="1">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <CheckBox Margin="0,2,12,0" VerticalAlignment="Top" IsChecked="{Binding IsEnabled, Mode=TwoWay}" Tag="{Binding}" Click="SourceEnabled_Click" ToolTip="Include this source in the unified library" />
+                                                        <StackPanel Grid.Column="1">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock MaxWidth="170" Foreground="#E7EDF6" FontSize="11.5" FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                                                                <Border Margin="9,-1,0,0" Padding="6,3" CornerRadius="5" Background="#17312F">
+                                                                    <TextBlock Foreground="{StaticResource AccentBrush}" FontSize="7.5" FontWeight="Bold" Text="{Binding TypeLabel}" />
+                                                                </Border>
+                                                                <TextBlock Margin="9,1,0,0" Foreground="#7C8BA0" FontSize="8" FontWeight="Bold" Text="{Binding StatusText}" />
+                                                            </StackPanel>
+                                                            <TextBlock Margin="0,5,12,0" Foreground="#718198" FontSize="9" Text="{Binding DisplayLocation}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DisplayLocation}" />
+                                                            <StackPanel Margin="0,7,0,0" Orientation="Horizontal">
+                                                                <TextBlock Foreground="#9EACBF" FontSize="8.5" Text="{Binding ChannelCountText}" />
+                                                                <TextBlock Margin="8,0" Foreground="#46566D" FontSize="8.5" Text="•" />
+                                                                <TextBlock Foreground="#718198" FontSize="8.5" Text="{Binding LastRefreshText}" />
+                                                                <CheckBox Margin="14,0,0,0" VerticalAlignment="Center" Foreground="#93A3B8" FontSize="8.5" IsChecked="{Binding RefreshOnStartup, Mode=TwoWay}" Tag="{Binding}" Click="SourceStartupRefresh_Click" Content="Refresh at launch" />
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="2" Margin="14,0,0,0" VerticalAlignment="Center" Orientation="Horizontal">
+                                                            <Button Padding="10,6" Style="{StaticResource PrimaryButton}" Tag="{Binding}" Click="UsePlaylistSource_Click" Content="Use now" />
+                                                            <Button Width="30" Height="30" Margin="6,0,0,0" Padding="0" Style="{StaticResource SecondaryButton}" Tag="{Binding}" Click="MovePlaylistSourceUp_Click" Content="↑" ToolTip="Move source up" />
+                                                            <Button Width="30" Height="30" Margin="5,0,0,0" Padding="0" Style="{StaticResource SecondaryButton}" Tag="{Binding}" Click="MovePlaylistSourceDown_Click" Content="↓" ToolTip="Move source down" />
+                                                            <Button Width="30" Height="30" Margin="5,0,0,0" Padding="0" Style="{StaticResource SecondaryButton}" Foreground="#FF8997" Tag="{Binding}" Click="RemovePlaylistSource_Click" Content="×" ToolTip="Remove source" />
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </Grid>
+                                <Grid Grid.Row="3" Margin="0,10,0,0">
+                                    <TextBlock VerticalAlignment="Center" Foreground="#65748A" FontSize="8.5" Text="SOURCE ORDER SETS CHANNEL PRIORITY" />
+                                    <Button x:Name="SourceRefreshEnabledButton" HorizontalAlignment="Right" Padding="13,7" Style="{StaticResource PrimaryButton}" Click="RefreshEnabledSources_Click" Content="Refresh enabled" />
+                                </Grid>
+                            </Grid>
+                        </TabItem>
+
+                        <TabItem x:Name="FileSourceTab" Header="M3U file">
                             <StackPanel Margin="2,24,2,0">
                                 <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Playlist on this PC" />
                                 <TextBlock Margin="0,6,0,14" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Supports .m3u, .m3u8, and IPTV text exports of any size." />
@@ -1172,7 +1248,7 @@
                             </StackPanel>
                         </TabItem>
 
-                        <TabItem Header="M3U URL">
+                        <TabItem x:Name="UrlSourceTab" Header="M3U URL">
                             <StackPanel Margin="2,24,2,0">
                                 <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Provider playlist address" />
                                 <TextBlock Margin="0,6,0,14" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Paste the complete M3U or M3U8 URL supplied by your provider." />
@@ -1181,7 +1257,7 @@
                             </StackPanel>
                         </TabItem>
 
-                        <TabItem Header="Xtream login">
+                        <TabItem x:Name="XtreamSourceTab" Header="Xtream login">
                             <StackPanel Margin="2,24,2,0">
                                 <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Android-style provider login" />
                                 <TextBlock Margin="0,6,0,14" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Use the server, username, and password accepted by Xtream-compatible apps." />

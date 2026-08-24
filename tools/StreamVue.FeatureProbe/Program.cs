@@ -369,6 +369,63 @@ try
         !merge.Playlist.GuideSource.Contains("regional.xml", StringComparison.Ordinal))
         throw new InvalidOperationException("Multi-source ordering, provenance, exact deduplication, or guide merging failed.");
 
+    var liveSource = PlaylistSourcePolicy.Create("url", "https://live.invalid/list.m3u", "Live source", 0);
+    var cacheOnlySource = PlaylistSourcePolicy.Create("file", Path.Combine(testRoot, "cache-only.m3u"), "Cache only", 1);
+    cacheOnlySource.RefreshOnStartup = false;
+    var fallbackSource = PlaylistSourcePolicy.Create("url", "https://fallback.invalid/list.m3u", "Fallback source", 2);
+    var failedSource = PlaylistSourcePolicy.Create("url", "https://failed.invalid/list.m3u", "Failed source", 3);
+    var cachedSnapshots = new Dictionary<string, CachedPlaylist>(StringComparer.OrdinalIgnoreCase)
+    {
+        [cacheOnlySource.SourceValue] = new(
+            new PlaylistResult([distinct], "Cache only", "encrypted cache", DateTimeOffset.UtcNow.AddMinutes(-8)),
+            DateTimeOffset.UtcNow.AddMinutes(-8)),
+        [fallbackSource.SourceValue] = new(
+            new PlaylistResult([regional], "Fallback source", "encrypted cache", DateTimeOffset.UtcNow.AddMinutes(-5)),
+            DateTimeOffset.UtcNow.AddMinutes(-5))
+    };
+    var liveRefreshCalls = new List<Guid>();
+    var cacheWrites = new List<string>();
+    var refreshService = new PlaylistSourceRefreshService(
+        (source, _, _) =>
+        {
+            liveRefreshCalls.Add(source.Id);
+            if (source.Id == liveSource.Id)
+                return Task.FromResult(new PlaylistResult(
+                    [first],
+                    "Live source",
+                    "provider",
+                    DateTimeOffset.UtcNow));
+            throw new HttpRequestException("Provider unavailable");
+        },
+        (_, sourceValue, _) => Task.FromResult(cachedSnapshots.GetValueOrDefault(sourceValue)),
+        (_, sourceValue, _, _) =>
+        {
+            cacheWrites.Add(sourceValue);
+            return Task.CompletedTask;
+        });
+    var refreshSummary = await refreshService.RefreshAsync(
+        [liveSource, cacheOnlySource, fallbackSource, failedSource],
+        source => source.RefreshOnStartup);
+    var liveOutcome = refreshSummary.Outcomes.Single(outcome => outcome.Source.Id == liveSource.Id);
+    var cacheOnlyOutcome = refreshSummary.Outcomes.Single(outcome => outcome.Source.Id == cacheOnlySource.Id);
+    var fallbackOutcome = refreshSummary.Outcomes.Single(outcome => outcome.Source.Id == fallbackSource.Id);
+    var failedOutcome = refreshSummary.Outcomes.Single(outcome => outcome.Source.Id == failedSource.Id);
+    if (!refreshSummary.HasPlaylist || refreshSummary.Merge is null ||
+        refreshSummary.LiveSourceCount != 1 || refreshSummary.CachedSourceCount != 2 ||
+        refreshSummary.FallbackSourceCount != 1 || refreshSummary.FailedSourceCount != 1 ||
+        liveRefreshCalls.Count != 3 || liveRefreshCalls.Contains(cacheOnlySource.Id) ||
+        cacheWrites.Count != 1 || cacheWrites[0] != liveSource.SourceValue ||
+        liveOutcome.Mode != PlaylistSourceLoadMode.Live || cacheOnlyOutcome.Mode != PlaylistSourceLoadMode.CachedOnly ||
+        fallbackOutcome.Mode != PlaylistSourceLoadMode.CachedFallback || failedOutcome.Mode != PlaylistSourceLoadMode.Failed ||
+        liveSource.LastSuccessUtc is null || liveSource.LastError is not null || liveSource.ChannelCount != 1 ||
+        fallbackSource.LastError != "The provider could not be reached." || !fallbackSource.UsedCachedFallback ||
+        failedSource.LastError != "The provider could not be reached." || failedOutcome.Playlist is not null ||
+        refreshSummary.Merge.SourceCount != 3 || refreshSummary.Merge.Playlist.Channels.Count != 3 ||
+        refreshSummary.Merge.Playlist.Channels[0].SourceId != liveSource.Id ||
+        refreshSummary.Merge.Playlist.Channels[1].SourceId != cacheOnlySource.Id ||
+        refreshSummary.Merge.Playlist.Channels[2].SourceId != fallbackSource.Id)
+        throw new InvalidOperationException("Per-source startup refresh, encrypted fallback isolation, or unified merge coordination failed.");
+
     using (var multiview = new MultiviewSession(expected.Playback))
     {
         multiview.RestoreChannel(0, first);
@@ -1041,6 +1098,7 @@ try
     Console.WriteLine("Concurrent settings writes: PASS");
     Console.WriteLine("3.6-to-3.7 playlist source migration: PASS");
     Console.WriteLine("Multi-source normalization, ordering, provenance, and exact deduplication: PASS");
+    Console.WriteLine("Per-source startup refresh, offline fallback isolation, and unified recovery: PASS");
     Console.WriteLine("Reconnect preferences: PASS");
     Console.WriteLine("Playlist refresh status: PASS");
     Console.WriteLine("Startup channel resume preference: PASS");
