@@ -1,0 +1,101 @@
+name: Publish Preview Assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing draft release tag
+        required: true
+        default: v4.0.0-alpha.1
+      package_version:
+        description: Velopack package version
+        required: true
+        default: 4.0.0-alpha.1
+      base_release_tag:
+        description: Previous release containing the base full package
+        required: true
+        default: v3.9.0-alpha.1
+      base_package_name:
+        description: Previous full package filename
+        required: true
+        default: Chris.StreamVue-3.9.0-alpha.1-full.nupkg
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      PACKAGE_VERSION: ${{ inputs.package_version }}
+      BASE_RELEASE_TAG: ${{ inputs.base_release_tag }}
+      BASE_PACKAGE_NAME: ${{ inputs.base_package_name }}
+
+    steps:
+      - name: Check out the exact release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag }}
+
+      - name: Install .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore StreamVue.Native.slnx
+
+      - name: Verify the release
+        shell: pwsh
+        run: |
+          dotnet build StreamVue.Native.slnx -c Release --no-restore
+          dotnet run --project tools/StreamVue.FeatureProbe/StreamVue.FeatureProbe.csproj -c Release --no-build
+          dotnet run --project tools/StreamVue.PlaylistProbe/StreamVue.PlaylistProbe.csproj -c Release --no-build -- --routing-scale 70000
+
+      - name: Publish the Windows application
+        run: dotnet publish src/StreamVue.Player/StreamVue.Player.csproj -c Release -r win-x64 --self-contained true --no-restore -o artifacts/streamvue-publish
+
+      - name: Install Velopack
+        run: dotnet tool install vpk --version 1.2.0 --tool-path .tools
+
+      - name: Build installer and update packages
+        shell: pwsh
+        run: |
+          $releaseDirectory = Join-Path $PWD 'artifacts/streamvue-releases'
+          New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
+          gh release download $env:BASE_RELEASE_TAG --repo $env:GITHUB_REPOSITORY --pattern $env:BASE_PACKAGE_NAME --dir $releaseDirectory
+          .\.tools\vpk.exe pack `
+            --packId Chris.StreamVue `
+            --packVersion $env:PACKAGE_VERSION `
+            --packDir artifacts/streamvue-publish `
+            --mainExe StreamVue.exe `
+            --packTitle StreamVue `
+            --packAuthors Chris `
+            --icon src/StreamVue.Player/Assets/streamvue.ico `
+            --releaseNotes RELEASE_NOTES.md `
+            --outputDir $releaseDirectory `
+            --runtime win-x64
+
+      - name: Prove the incremental update reconstructs the full package
+        shell: pwsh
+        run: |
+          $releaseDirectory = Join-Path $PWD 'artifacts/streamvue-releases'
+          $basePackage = Join-Path $releaseDirectory $env:BASE_PACKAGE_NAME
+          $deltaPackage = Join-Path $releaseDirectory "Chris.StreamVue-$($env:PACKAGE_VERSION)-delta.nupkg"
+          $fullPackage = Join-Path $releaseDirectory "Chris.StreamVue-$($env:PACKAGE_VERSION)-full.nupkg"
+          $reconstructed = Join-Path $PWD 'artifacts/reconstructed-full.nupkg'
+          .\.tools\vpk.exe delta patch --base $basePackage --patch $deltaPackage --output $reconstructed
+          $expected = (Get-FileHash -Algorithm SHA256 -LiteralPath $fullPackage).Hash
+          $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $reconstructed).Hash
+          if ($expected -ne $actual) {
+            throw "Delta reconstruction mismatch: $actual != $expected"
+          }
+
+      - name: Upload every release asset to the existing draft
+        shell: pwsh
+        run: |
+          $assets = Get-ChildItem -LiteralPath artifacts/streamvue-releases -File | Select-Object -ExpandProperty FullName
+          gh release upload $env:RELEASE_TAG $assets --repo $env:GITHUB_REPOSITORY --clobber
