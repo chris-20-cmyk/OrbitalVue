@@ -73,11 +73,16 @@ public partial class MainWindow : Window
     private MultiviewSession? _multiviewSession;
     private DisplayRefreshRateController? _displayRefreshRate;
     private IReadOnlyList<ChannelItem> _channels = [];
+    private IReadOnlyList<ChannelItem> _allChannels = [];
+    private IReadOnlyList<SignalRoute> _signalRoutes = [];
+    private IReadOnlyDictionary<string, SignalRoute> _signalRoutesByKey = new Dictionary<string, SignalRoute>(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlyDictionary<string, SignalRoute> _signalRoutesByFeedKey = new Dictionary<string, SignalRoute>(StringComparer.OrdinalIgnoreCase);
     private ICollectionView? _channelView;
     private CancellationTokenSource? _loadCancellation;
     private CancellationTokenSource? _updateCancellation;
     private CancellationTokenSource? _guideCancellation;
     private ChannelItem? _currentChannel;
+    private ChannelItem? _activeSignalFeed;
     private ChannelItem? _previousChannel;
     private ProgramReminder? _activeReminder;
     private EpgSchedule? _guideSchedule;
@@ -115,6 +120,16 @@ public partial class MainWindow : Window
     private bool _synchronizingGuideScroll;
     private string _trackControlSignature = string.Empty;
     private string _learnedProfileSignature = string.Empty;
+    private string? _selectedSignalRouteKey;
+    private readonly HashSet<string> _attemptedSignalFeedKeys = new(StringComparer.OrdinalIgnoreCase);
+    private int _automaticSignalSwitches;
+    private bool _signalSessionSuccessRecorded;
+    private bool _signalSessionFailureRecorded;
+    private int _lastSignalBufferEvents;
+    private int _lastSignalReconnects;
+    private int _lastSignalStallRecoveries;
+    private int _lastSignalDroppedFrames;
+    private DateTimeOffset _lastSignalHistorySaveUtc = DateTimeOffset.MinValue;
     private string _handledDvrTerminalSignature = string.Empty;
     private string _dvrScheduleSignature = string.Empty;
     private string _dvrLibrarySignature = string.Empty;
@@ -203,6 +218,11 @@ public partial class MainWindow : Window
         _settings.ChannelProfiles = _settings.ChannelProfiles is null
             ? new Dictionary<string, ChannelPlaybackProfile>(StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, ChannelPlaybackProfile>(_settings.ChannelProfiles, StringComparer.OrdinalIgnoreCase);
+        _settings.SignalRouting ??= new SignalRoutingPreferences();
+        _settings.SignalRouting.MaximumAutomaticSwitches = Math.Clamp(_settings.SignalRouting.MaximumAutomaticSwitches, 1, 8);
+        _settings.SignalRouting.FeedHealth = _settings.SignalRouting.FeedHealth is null
+            ? new Dictionary<string, SignalFeedHealth>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, SignalFeedHealth>(_settings.SignalRouting.FeedHealth, StringComparer.OrdinalIgnoreCase);
         _settings.PlaylistHealth ??= new PlaylistHealthPreferences();
         _settings.ProgramReminders ??= [];
         _settings.SmartDvr ??= new SmartDvrPreferences();
@@ -403,7 +423,7 @@ public partial class MainWindow : Window
             CatalogHeading.Text = "Multiview channels";
             EnsureMultiviewSession();
             for (var index = 0; index < Math.Min(4, _channels.Count); index++)
-                _multiviewSession!.RestoreChannel(index, _channels[index]);
+                _multiviewSession!.RestoreChannel(index, ResolveBestSignalFeed(_channels[index]));
             _multiviewSession!.SelectSlot(1);
             _multiviewSession.SetAudioSlot(1);
             _multiviewSession.PrepareAssignedSurfaces();
@@ -548,6 +568,21 @@ public partial class MainWindow : Window
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
             await Task.Delay(500);
             CaptureWindow(commandLineArguments[castCaptureArgumentIndex + 1]);
+            Close();
+            Application.Current.Shutdown(0);
+            return;
+        }
+
+        var signalRoutingCaptureArgumentIndex = Array.FindIndex(commandLineArguments, argument => argument == "--capture-signal-routing-ui");
+        if (signalRoutingCaptureArgumentIndex >= 0 && signalRoutingCaptureArgumentIndex + 1 < commandLineArguments.Length)
+        {
+            PrepareSignalRoutingPreview();
+            if (commandLineArguments.Contains("--maximized", StringComparer.OrdinalIgnoreCase))
+                WindowState = WindowState.Maximized;
+            OpenSignalRoutingPanel();
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
+            await Task.Delay(500);
+            CaptureWindow(commandLineArguments[signalRoutingCaptureArgumentIndex + 1]);
             Close();
             Application.Current.Shutdown(0);
             return;
@@ -842,7 +877,7 @@ public partial class MainWindow : Window
             }
 
             ApplyPlaylist(playlist);
-            var currentKeys = playlist.Channels.Select(channel => channel.StableKey).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var currentKeys = _channels.Select(channel => channel.StableKey).ToHashSet(StringComparer.OrdinalIgnoreCase);
             _settings.LastPlaylistRefreshUtc = summary.LiveSourceCount > 0
                 ? now
                 : enabledSources.Where(source => source.LastSuccessUtc is not null)
@@ -996,10 +1031,10 @@ public partial class MainWindow : Window
             _settings.LastSource = sourceValue;
             _settings.LastPlaylistRefreshUtc = DateTimeOffset.UtcNow;
             var previousKeys = previousPlaylist?.Playlist.Channels
-                .Select(channel => channel.StableKey)
+                .Select(SmartSignalRoutingPolicy.CreateLogicalChannelKey)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var currentKeys = result.Channels
-                .Select(channel => channel.StableKey)
+            var currentKeys = _channels
+                .Select(channel => channel.SignalRouteKey ?? SmartSignalRoutingPolicy.CreateLogicalChannelKey(channel))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             _settings.PlaylistHealth.LastSuccessUtc = _settings.LastPlaylistRefreshUtc;
             _settings.PlaylistHealth.LastError = null;
@@ -1210,8 +1245,27 @@ public partial class MainWindow : Window
         var rebuildMultiview = _multiviewSession is not null;
         _multiviewSession?.Dispose();
         _multiviewSession = null;
-        _channels = result.Channels;
-        foreach (var channel in _channels) channel.IsFavorite = _favoriteKeys.Contains(channel.StableKey);
+        _allChannels = result.Channels;
+        _signalRoutes = SmartSignalRoutingPolicy.BuildRoutes(_allChannels);
+        _signalRoutesByKey = _signalRoutes.ToDictionary(route => route.Key, StringComparer.OrdinalIgnoreCase);
+        _signalRoutesByFeedKey = _signalRoutes
+            .SelectMany(route => route.Feeds.Select(feed => new KeyValuePair<string, SignalRoute>(feed.StableKey, route)))
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+        foreach (var route in _signalRoutes.Where(route => route.Feeds.All(feed =>
+                     !SmartSignalRoutingPolicy.Score(feed, _settings.SignalRouting).IsEligible)))
+            SmartSignalRoutingPolicy.GetOrCreateHealth(_settings.SignalRouting, route.Representative, route.Key).Preference = SignalFeedPreference.Auto;
+        _favoriteKeys = _favoriteKeys
+            .Select(key => _signalRoutesByFeedKey.TryGetValue(key, out var route) ? route.Representative.StableKey : key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _settings.FavoriteChannelKeys = _favoriteKeys.Order(StringComparer.OrdinalIgnoreCase).ToList();
+        _settings.RecentChannelKeys = (_settings.RecentChannelKeys ?? [])
+            .Select(key => _signalRoutesByFeedKey.TryGetValue(key, out var route) ? route.Representative.StableKey : key)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(24)
+            .ToList();
+        _channels = _signalRoutes.Select(route => route.Representative).ToList();
+        foreach (var route in _signalRoutes)
+            route.Representative.IsFavorite = route.Feeds.Any(channel => _favoriteKeys.Contains(channel.StableKey));
         _channelView = CollectionViewSource.GetDefaultView(_channels);
         _channelView.Filter = FilterChannel;
         _categoryFilter = string.Empty;
@@ -1232,7 +1286,13 @@ public partial class MainWindow : Window
         _kindFilter = "All";
         AllFilter.IsChecked = true;
         RefreshChannelCount();
-        NowPlayingSubheading.Text = $"{result.Channels.Count:N0} channels ready • select one to tune";
+        var alternateFeedCount = Math.Max(0, _allChannels.Count - _channels.Count);
+        NowPlayingSubheading.Text = alternateFeedCount == 0
+            ? $"{_channels.Count:N0} channels ready • select one to tune"
+            : $"{_channels.Count:N0} channels • {alternateFeedCount:N0} backup feeds ready";
+        SignalRoutesButton.Visibility = _signalRoutes.Any(route => route.HasAlternates)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         if (rebuildMultiview && _multiviewMode)
         {
             EnsureMultiviewSession();
@@ -1240,6 +1300,36 @@ public partial class MainWindow : Window
         }
         TryResumeLastChannelAfterPlaylistLoad();
     }
+
+    private SignalRoute? GetSignalRoute(ChannelItem? channel)
+    {
+        if (channel is null) return null;
+        if (!string.IsNullOrWhiteSpace(channel.SignalRouteKey) &&
+            _signalRoutesByKey.TryGetValue(channel.SignalRouteKey, out var route))
+            return route;
+        return _signalRoutesByFeedKey.TryGetValue(channel.StableKey, out route) ? route : null;
+    }
+
+    private ChannelItem ResolveBestSignalFeed(ChannelItem channel, IReadOnlySet<string>? excludedFeedKeys = null)
+    {
+        var route = GetSignalRoute(channel);
+        if (route is null || channel.Kind != ChannelKind.Live || !_settings.SignalRouting.Enabled)
+            return route?.Representative ?? channel;
+        return SmartSignalRoutingPolicy.SelectBestFeed(route, _settings.SignalRouting, excludedFeedKeys)
+               ?? route.Representative;
+    }
+
+    private ChannelItem? FindLogicalChannel(string? storedKey)
+    {
+        if (string.IsNullOrWhiteSpace(storedKey)) return null;
+        var channel = _channels.FirstOrDefault(candidate =>
+            candidate.StableKey.Equals(storedKey, StringComparison.OrdinalIgnoreCase));
+        if (channel is not null) return channel;
+        return _signalRoutesByFeedKey.TryGetValue(storedKey, out var route) ? route.Representative : null;
+    }
+
+    private string? GetLogicalChannelKey(ChannelItem? channel) =>
+        channel is null ? null : GetSignalRoute(channel)?.Representative.StableKey ?? channel.StableKey;
 
     private void TryResumeLastChannelAfterPlaylistLoad()
     {
@@ -1249,6 +1339,8 @@ public partial class MainWindow : Window
 
         var channel = _channels.FirstOrDefault(item =>
             string.Equals(item.StableKey, _settings.LastChannelKey, StringComparison.OrdinalIgnoreCase));
+        if (channel is null && _signalRoutesByFeedKey.TryGetValue(_settings.LastChannelKey, out var legacyRoute))
+            channel = legacyRoute.Representative;
         if (channel is null) return;
 
         ChannelList.SelectedItem = channel;
@@ -1330,7 +1422,7 @@ public partial class MainWindow : Window
                 {
                     schedules.Add(await _epgSourceService.LoadAsync(
                         source,
-                        _channels,
+                        _allChannels.Count > 0 ? _allChannels : _channels,
                         _guideMappings.Values.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
                         progress,
                         token));
@@ -1403,16 +1495,21 @@ public partial class MainWindow : Window
         UpdateCurrentGuide(_currentChannel);
     }
 
-    private IReadOnlyList<EpgProgram> GetGuideProgrammes(ChannelItem channel) =>
-        _guideSchedule?.GetProgrammes(channel, _guideMappings) ?? [];
+    private IReadOnlyList<EpgProgram> GetGuideProgrammes(ChannelItem channel)
+    {
+        if (_guideSchedule is null) return [];
+        var feeds = GetSignalRoute(channel)?.Feeds ?? [channel];
+        return SmartSignalRoutingPolicy.MergeProgrammes(
+            feeds.Select(feed => _guideSchedule.GetProgrammes(feed, _guideMappings)));
+    }
 
     private EpgNowNext GetGuideNowNext(ChannelItem channel, DateTimeOffset now) =>
-        _guideSchedule?.GetNowNext(channel, now, _guideMappings) ?? new EpgNowNext(null, null);
+        SmartSignalRoutingPolicy.GetNowNext(GetGuideProgrammes(channel), now);
 
     private GuideChannelRow BuildGuideRow(ChannelItem channel, EpgSchedule schedule, DateTimeOffset now)
     {
-        var programmes = schedule.GetProgrammes(channel, _guideMappings);
-        var nowNext = schedule.GetNowNext(channel, now, _guideMappings);
+        var programmes = GetGuideProgrammes(channel);
+        var nowNext = SmartSignalRoutingPolicy.GetNowNext(programmes, now);
         var current = nowNext.Current;
         var next = nowNext.Next;
         if (current is null && next is null)
@@ -1581,7 +1678,7 @@ public partial class MainWindow : Window
     private void SetGuideReadyStatus(EpgSchedule schedule, string sourceLabel)
     {
         var liveChannels = _channels.Count(channel => channel.Kind == ChannelKind.Live);
-        var matched = _channels.Count(channel => channel.Kind == ChannelKind.Live && schedule.GetProgrammes(channel, _guideMappings).Count > 0);
+        var matched = _channels.Count(channel => channel.Kind == ChannelKind.Live && GetGuideProgrammes(channel).Count > 0);
         var percentage = liveChannels == 0 ? 0 : matched * 100d / liveChannels;
         GuideStatusText.Text = $"Updated {schedule.LoadedAt.ToLocalTime():h:mm tt} from {sourceLabel} • {schedule.ProgramCount:N0} programmes";
         var manualCount = _guideMappings.Count(mapping => _channels.Any(channel => channel.GuideMappingKey == mapping.Key));
@@ -1709,6 +1806,71 @@ public partial class MainWindow : Window
         FooterStatusDot.Fill = LiveBrush;
         FooterStatusText.Text = "Native interface preview • Direct MPEG-TS ready";
         SourceRefreshText.Text = "Interface preview library";
+    }
+
+    private void PrepareSignalRoutingPreview()
+    {
+        var primarySource = Guid.NewGuid();
+        var backupSource = Guid.NewGuid();
+        var regionalSource = Guid.NewGuid();
+        var previewChannels = new List<ChannelItem>
+        {
+            new() { Number = 1, Name = "World News HD", Group = "Newsroom", Url = "https://primary.invalid/live/world-news.ts", TvgId = "world.news", Kind = ChannelKind.Live, SourceId = primarySource, SourceName = "Primary lineup" },
+            new() { Number = 2, Name = "US: World News FHD (D)", Group = "US News", Url = "https://backup.invalid/live/world-news.m3u8", TvgId = "world.news", Kind = ChannelKind.Live, SourceId = backupSource, SourceName = "Fiber backup" },
+            new() { Number = 3, Name = "World News SD", Group = "Regional News", Url = "https://regional.invalid/live/world-news.ts", TvgId = "world.news", Kind = ChannelKind.Live, SourceId = regionalSource, SourceName = "Regional fallback" },
+            new() { Number = 4, Name = "Stadium Sports HD", Group = "Live Sports", Url = "https://primary.invalid/live/stadium.ts", TvgId = "stadium.sports", Kind = ChannelKind.Live, SourceId = primarySource, SourceName = "Primary lineup" },
+            new() { Number = 5, Name = "Stadium Sports FHD", Group = "Sports", Url = "https://backup.invalid/live/stadium.m3u8", TvgId = "stadium.sports", Kind = ChannelKind.Live, SourceId = backupSource, SourceName = "Fiber backup" },
+            new() { Number = 6, Name = "Cinema One", Group = "Movies", Url = "https://primary.invalid/movie/cinema.mp4", Kind = ChannelKind.Movie, SourceId = primarySource, SourceName = "Primary lineup" }
+        };
+        ApplyPlaylist(new PlaylistResult(previewChannels, "Three connected sources", "signal-routing-preview", DateTimeOffset.Now));
+        var route = _signalRoutes.First(candidate => candidate.Representative.Name.Contains("World News", StringComparison.OrdinalIgnoreCase));
+        var primary = SmartSignalRoutingPolicy.GetOrCreateHealth(_settings.SignalRouting, route.Feeds[0], route.Key);
+        primary.SuccessfulStarts = 42;
+        primary.FailedStarts = 2;
+        primary.BufferEvents = 3;
+        primary.Reconnects = 1;
+        primary.LastStartupMilliseconds = 940;
+        primary.LastResolutionHeight = 1080;
+        primary.LastFramesPerSecond = 59.94;
+        primary.LastInputBitrateMbps = 8.4;
+        primary.LastAttemptUtc = DateTimeOffset.UtcNow.AddMinutes(-2);
+        primary.LastSuccessUtc = DateTimeOffset.UtcNow.AddMinutes(-2);
+        primary.Preference = SignalFeedPreference.Preferred;
+        var backup = SmartSignalRoutingPolicy.GetOrCreateHealth(_settings.SignalRouting, route.Feeds[1], route.Key);
+        backup.SuccessfulStarts = 19;
+        backup.FailedStarts = 1;
+        backup.BufferEvents = 2;
+        backup.LastStartupMilliseconds = 1_420;
+        backup.LastResolutionHeight = 1080;
+        backup.LastFramesPerSecond = 59.94;
+        backup.LastInputBitrateMbps = 7.1;
+        backup.LastAttemptUtc = DateTimeOffset.UtcNow.AddHours(-3);
+        backup.LastSuccessUtc = DateTimeOffset.UtcNow.AddHours(-3);
+        var regional = SmartSignalRoutingPolicy.GetOrCreateHealth(_settings.SignalRouting, route.Feeds[2], route.Key);
+        regional.SuccessfulStarts = 3;
+        regional.FailedStarts = 5;
+        regional.BufferEvents = 14;
+        regional.Reconnects = 7;
+        regional.LastStartupMilliseconds = 6_800;
+        regional.LastResolutionHeight = 576;
+        regional.LastInputBitrateMbps = 2.1;
+        regional.LastAttemptUtc = DateTimeOffset.UtcNow.AddDays(-1);
+        regional.LastFailureUtc = DateTimeOffset.UtcNow.AddDays(-1);
+        regional.Preference = SignalFeedPreference.Blocked;
+        _settings.SignalRouting.Enabled = true;
+        _settings.SignalRouting.AutomaticFailover = true;
+        _currentChannel = route.Representative;
+        _activeSignalFeed = route.Feeds[0];
+        NowPlayingHeading.Text = route.Representative.Name;
+        NowPlayingSubheading.Text = route.Representative.Group;
+        InspectorChannelName.Text = route.Representative.Name;
+        InspectorGroupName.Text = route.Representative.Group;
+        InspectorInitials.Text = route.Representative.Initials;
+        ActiveFeedValue.Text = SmartSignalRoutingPolicy.SourceLabel(_activeSignalFeed);
+        UpdateSignalRouteAvailability();
+        FooterStatusDot.Fill = LiveBrush;
+        FooterStatusText.Text = "Smart routing preview • automatic failover armed";
+        SourceRefreshText.Text = "Three source routes indexed";
     }
 
     private static EpgSchedule CreatePreviewGuideSchedule(IReadOnlyList<ChannelItem> channels)
@@ -1926,8 +2088,8 @@ public partial class MainWindow : Window
         _multiviewLayout = MultiviewLayout.Duo;
         SetGuideMode(false);
         SetMultiviewMode(true);
-        _multiviewSession!.AssignChannel(0, channels[0]);
-        _multiviewSession.AssignChannel(1, channels[1]);
+        _multiviewSession!.AssignChannel(0, ResolveBestSignalFeed(channels[0]));
+        _multiviewSession.AssignChannel(1, ResolveBestSignalFeed(channels[1]));
         _multiviewSession.SelectSlot(0);
         _multiviewSession.SetAudioSlot(0);
         UpdateMultiviewLayout();
@@ -2156,7 +2318,10 @@ public partial class MainWindow : Window
         if (_categoryFilter.Length > 0 && !channel.Group.Equals(_categoryFilter, StringComparison.OrdinalIgnoreCase)) return false;
 
         var query = SearchBox.Text.Trim();
-        return query.Length == 0 || channel.SearchText.Contains(query.ToUpperInvariant(), StringComparison.Ordinal);
+        if (query.Length == 0) return true;
+        var normalized = query.ToUpperInvariant();
+        return channel.SearchText.Contains(normalized, StringComparison.Ordinal) ||
+               GetSignalRoute(channel)?.Feeds.Any(feed => feed.SearchText.Contains(normalized, StringComparison.Ordinal)) == true;
     }
 
     private void RefreshFilters()
@@ -2184,7 +2349,7 @@ public partial class MainWindow : Window
         if (_multiviewMode)
         {
             EnsureMultiviewSession();
-            _multiviewSession!.AssignChannel(_multiviewSession.ActiveSlot, channel);
+            _multiviewSession!.AssignChannel(_multiviewSession.ActiveSlot, ResolveBestSignalFeed(channel));
             UpdateMultiviewPresentation();
             await PersistMultiviewAsync();
             FooterStatusDot.Fill = LiveBrush;
@@ -2194,35 +2359,199 @@ public partial class MainWindow : Window
         TuneChannel(channel);
     }
 
-    private void TuneChannel(ChannelItem channel, string? recordingPath = null)
+    private void TuneChannel(ChannelItem channel, string? recordingPath = null, ChannelItem? requestedSignalFeed = null)
     {
-        if (ReferenceEquals(channel, _currentChannel) &&
-            string.Equals(recordingPath, _currentRecordingPath, StringComparison.OrdinalIgnoreCase)) return;
+        var route = string.IsNullOrWhiteSpace(recordingPath) ? GetSignalRoute(channel) : null;
+        var logicalChannel = route?.Representative ?? channel;
+        if (ReferenceEquals(logicalChannel, _currentChannel) &&
+            string.Equals(recordingPath, _currentRecordingPath, StringComparison.OrdinalIgnoreCase) &&
+            (requestedSignalFeed is null || string.Equals(requestedSignalFeed.StableKey, _activeSignalFeed?.StableKey, StringComparison.OrdinalIgnoreCase))) return;
+        CaptureSignalTelemetry(_playback?.GetSnapshot(), persist: false);
         SaveCurrentRecordingProgress(force: true);
         _displayRefreshRate?.Restore();
-        if (_currentChannel is not null && string.IsNullOrWhiteSpace(_currentRecordingPath)) _previousChannel = _currentChannel;
+        if (_currentChannel is not null && string.IsNullOrWhiteSpace(_currentRecordingPath) && !ReferenceEquals(_currentChannel, logicalChannel))
+            _previousChannel = _currentChannel;
         _currentRecordingPath = string.IsNullOrWhiteSpace(recordingPath) ? null : Path.GetFullPath(recordingPath);
         _recordingResumeApplied = _currentRecordingPath is null;
-        _currentChannel = channel;
-        if (_currentRecordingPath is null) _settings.LastChannelKey = channel.StableKey;
+        _currentChannel = logicalChannel;
+        if (_currentRecordingPath is null) _settings.LastChannelKey = logicalChannel.StableKey;
         _learnedProfileSignature = string.Empty;
-        NowPlayingHeading.Text = channel.Name;
-        NowPlayingSubheading.Text = channel.Group;
-        InspectorChannelName.Text = channel.Name;
-        InspectorGroupName.Text = channel.Group;
-        InspectorInitials.Text = channel.Initials;
-        UpdateCurrentFavoriteButton(channel);
-        UpdateCurrentGuide(channel);
-        _showPlayerTopStatus = channel.Kind == ChannelKind.Live;
+        NowPlayingHeading.Text = logicalChannel.Name;
+        NowPlayingSubheading.Text = logicalChannel.Group;
+        InspectorChannelName.Text = logicalChannel.Name;
+        InspectorGroupName.Text = logicalChannel.Group;
+        InspectorInitials.Text = logicalChannel.Initials;
+        UpdateCurrentFavoriteButton(logicalChannel);
+        UpdateCurrentGuide(logicalChannel);
+        _showPlayerTopStatus = logicalChannel.Kind == ChannelKind.Live;
         RefreshPlayerSurfaceVisibility();
-        PlaybackDetailText.Text = channel.Group;
-        var profile = GetOrCreateChannelProfile(channel);
+        PlaybackDetailText.Text = logicalChannel.Group;
+        var profile = GetOrCreateChannelProfile(logicalChannel);
         _applyingChannelProfile = true;
         SelectComboByContent(AspectBox, profile.AspectRatio ?? _settings.Playback.AspectRatio);
         _applyingChannelProfile = false;
-        _playback?.Play(channel, profile);
-        if (_currentRecordingPath is null) TouchRecentChannel(channel);
+        _attemptedSignalFeedKeys.Clear();
+        _automaticSignalSwitches = 0;
+        if (route is not null && logicalChannel.Kind == ChannelKind.Live)
+        {
+            var feed = requestedSignalFeed is not null && route.Feeds.Any(candidate => candidate.StableKey == requestedSignalFeed.StableKey)
+                ? requestedSignalFeed
+                : ResolveBestSignalFeed(logicalChannel);
+            PlaySignalFeed(route, feed, profile);
+        }
+        else
+        {
+            _activeSignalFeed = logicalChannel;
+            ResetSignalSessionCounters();
+            _playback?.Play(logicalChannel, profile);
+        }
+        if (_currentRecordingPath is null) TouchRecentChannel(logicalChannel);
+        UpdateSignalRouteAvailability();
         UpdateFullscreenHud();
+    }
+
+    private void PlaySignalFeed(SignalRoute route, ChannelItem feed, ChannelPlaybackProfile? profile = null)
+    {
+        _activeSignalFeed = feed;
+        _attemptedSignalFeedKeys.Add(feed.StableKey);
+        ResetSignalSessionCounters();
+        var health = SmartSignalRoutingPolicy.GetOrCreateHealth(_settings.SignalRouting, feed, route.Key);
+        health.LastAttemptUtc = DateTimeOffset.UtcNow;
+        PlaybackDetailText.Text = route.HasAlternates
+            ? $"{route.Representative.Group} • {SmartSignalRoutingPolicy.SourceLabel(feed)} • feed {_attemptedSignalFeedKeys.Count:N0}/{route.FeedCount:N0}"
+            : route.Representative.Group;
+        ActiveFeedValue.Text = SmartSignalRoutingPolicy.SourceLabel(feed);
+        ActiveFeedValue.ToolTip = feed.Name;
+        _playback?.Play(feed, profile ?? GetOrCreateChannelProfile(route.Representative));
+        if (SignalRoutingOverlay.Visibility == Visibility.Visible) RefreshSignalRoutingPanel(route.Key);
+    }
+
+    private void ResetSignalSessionCounters()
+    {
+        _signalSessionSuccessRecorded = false;
+        _signalSessionFailureRecorded = false;
+        _lastSignalBufferEvents = 0;
+        _lastSignalReconnects = 0;
+        _lastSignalStallRecoveries = 0;
+        _lastSignalDroppedFrames = 0;
+    }
+
+    private void RetuneCurrentPlayback(ChannelPlaybackProfile? profile = null)
+    {
+        if (_currentChannel is null) return;
+        CaptureSignalTelemetry(_playback?.GetSnapshot(), persist: false);
+        var route = GetSignalRoute(_currentChannel);
+        if (route is not null && _currentChannel.Kind == ChannelKind.Live && _currentRecordingPath is null)
+        {
+            var currentEligible = _activeSignalFeed is not null && route.Feeds.Any(feed => feed.StableKey == _activeSignalFeed.StableKey) &&
+                                  SmartSignalRoutingPolicy.Score(_activeSignalFeed, _settings.SignalRouting).IsEligible;
+            var feed = currentEligible ? _activeSignalFeed! : ResolveBestSignalFeed(_currentChannel);
+            _attemptedSignalFeedKeys.Clear();
+            _automaticSignalSwitches = 0;
+            PlaySignalFeed(route, feed, profile ?? GetOrCreateChannelProfile(_currentChannel));
+            return;
+        }
+
+        _activeSignalFeed = _currentChannel;
+        ResetSignalSessionCounters();
+        _playback?.Play(_currentChannel, profile ?? GetOrCreateChannelProfile(_currentChannel));
+    }
+
+    private bool TryAutomaticSignalFailover(PlaybackStatus status)
+    {
+        if (!status.IsTerminalFailure || _currentRecordingPath is not null || _currentChannel?.Kind != ChannelKind.Live ||
+            _activeSignalFeed is null || !_settings.SignalRouting.Enabled || !_settings.SignalRouting.AutomaticFailover)
+            return false;
+        var route = GetSignalRoute(_currentChannel);
+        if (route is null || !route.HasAlternates) return false;
+
+        RecordSignalFailure(status.TechnicalDetail ?? status.Message);
+        var maximum = Math.Clamp(_settings.SignalRouting.MaximumAutomaticSwitches, 1, 8);
+        if (_automaticSignalSwitches >= maximum) return false;
+        var next = SmartSignalRoutingPolicy.SelectBestFeed(route, _settings.SignalRouting, _attemptedSignalFeedKeys);
+        if (next is null) return false;
+
+        var previous = _activeSignalFeed;
+        var previousHealth = SmartSignalRoutingPolicy.GetOrCreateHealth(_settings.SignalRouting, previous, route.Key);
+        previousHealth.AutomaticFailovers++;
+        _automaticSignalSwitches++;
+        _showRecoveryOverlay = true;
+        RecoveryHeading.Text = "Switching to a backup feed";
+        RecoveryDetail.Text = $"{SmartSignalRoutingPolicy.SourceLabel(previous)} stopped responding. " +
+                              $"Trying {SmartSignalRoutingPolicy.SourceLabel(next)} automatically.";
+        FooterStatusDot.Fill = WarningBrush;
+        FooterStatusText.Text = $"Signal routing • backup {_automaticSignalSwitches:N0}/{maximum:N0}";
+        PlaySignalFeed(route, next, GetOrCreateChannelProfile(_currentChannel));
+        _ = _settingsStore.SaveAsync(_settings);
+        RefreshPlayerSurfaceVisibility();
+        return true;
+    }
+
+    private void RecordSignalFailure(string reason)
+    {
+        if (_signalSessionFailureRecorded || _activeSignalFeed is null || _currentChannel?.Kind != ChannelKind.Live) return;
+        _signalSessionFailureRecorded = true;
+        CaptureSignalTelemetry(_playback?.GetSnapshot(), persist: false);
+        var route = GetSignalRoute(_currentChannel);
+        if (route is null) return;
+        var health = SmartSignalRoutingPolicy.GetOrCreateHealth(_settings.SignalRouting, _activeSignalFeed, route.Key);
+        health.FailedStarts++;
+        health.LastFailureUtc = DateTimeOffset.UtcNow;
+        health.LastFailureReason = reason;
+        _lastSignalHistorySaveUtc = DateTimeOffset.UtcNow;
+        _ = _settingsStore.SaveAsync(_settings);
+    }
+
+    private void RecordSignalSuccess(PlaybackSnapshot snapshot)
+    {
+        if (_signalSessionSuccessRecorded || _activeSignalFeed is null || _currentChannel?.Kind != ChannelKind.Live) return;
+        var route = GetSignalRoute(_currentChannel);
+        if (route is null) return;
+        _signalSessionSuccessRecorded = true;
+        var health = SmartSignalRoutingPolicy.GetOrCreateHealth(_settings.SignalRouting, _activeSignalFeed, route.Key);
+        health.SuccessfulStarts++;
+        health.LastSuccessUtc = DateTimeOffset.UtcNow;
+        health.LastStartupMilliseconds = snapshot.StartupMilliseconds;
+        ApplySignalQuality(health, snapshot);
+        _lastSignalHistorySaveUtc = DateTimeOffset.UtcNow;
+        _ = _settingsStore.SaveAsync(_settings);
+    }
+
+    private void CaptureSignalTelemetry(PlaybackSnapshot? snapshot, bool persist)
+    {
+        if (snapshot is null || _activeSignalFeed is null || _currentChannel?.Kind != ChannelKind.Live) return;
+        var route = GetSignalRoute(_currentChannel);
+        if (route is null) return;
+        var health = SmartSignalRoutingPolicy.GetOrCreateHealth(_settings.SignalRouting, _activeSignalFeed, route.Key);
+        health.BufferEvents += CounterDelta(snapshot.BufferEvents, ref _lastSignalBufferEvents);
+        health.Reconnects += CounterDelta(snapshot.ReconnectAttempts, ref _lastSignalReconnects);
+        health.StallRecoveries += CounterDelta(snapshot.StallRecoveries, ref _lastSignalStallRecoveries);
+        health.DroppedFrames += CounterDelta(snapshot.DroppedFrames, ref _lastSignalDroppedFrames);
+        ApplySignalQuality(health, snapshot);
+        if (snapshot.IsPlaying) RecordSignalSuccess(snapshot);
+        var now = DateTimeOffset.UtcNow;
+        if (persist || now - _lastSignalHistorySaveUtc >= TimeSpan.FromSeconds(20))
+        {
+            _lastSignalHistorySaveUtc = now;
+            _ = _settingsStore.SaveAsync(_settings);
+        }
+    }
+
+    private static int CounterDelta(int current, ref int previous)
+    {
+        current = Math.Max(0, current);
+        var delta = current >= previous ? current - previous : current;
+        previous = current;
+        return delta;
+    }
+
+    private static void ApplySignalQuality(SignalFeedHealth health, PlaybackSnapshot snapshot)
+    {
+        var height = SmartSignalRoutingPolicy.ParseResolutionHeight(snapshot.Resolution);
+        if (height > 0) health.LastResolutionHeight = height;
+        if (snapshot.InputBitrateMbps > 0) health.LastInputBitrateMbps = snapshot.InputBitrateMbps;
+        if (snapshot.FramesPerSecond > 0) health.LastFramesPerSecond = snapshot.FramesPerSecond;
+        if (snapshot.StartupMilliseconds > 0) health.LastStartupMilliseconds = snapshot.StartupMilliseconds;
     }
 
     private ChannelPlaybackProfile GetOrCreateChannelProfile(ChannelItem channel)
@@ -2247,6 +2576,8 @@ public partial class MainWindow : Window
     {
         Dispatcher.BeginInvoke(() =>
         {
+            if (status.IsTerminalFailure && TryAutomaticSignalFailover(status)) return;
+            if (status.IsTerminalFailure) RecordSignalFailure(status.TechnicalDetail ?? status.Message);
             StreamStateValue.Text = status.State.ToString();
             PlaybackStatusText.Text = status.Message.ToUpperInvariant();
             PlaybackDetailText.Text = status.TechnicalDetail ?? _currentChannel?.Group ?? "Native playback engine";
@@ -2287,6 +2618,7 @@ public partial class MainWindow : Window
                     PlayPauseGlyph.Text = "Ⅱ";
                     break;
                 case PlaybackState.Playing:
+                    if (_playback is not null) RecordSignalSuccess(_playback.GetSnapshot());
                     _showRecoveryOverlay = false;
                     RefreshPlayerSurfaceVisibility();
                     FooterStatusDot.Fill = LiveBrush;
@@ -2359,6 +2691,7 @@ public partial class MainWindow : Window
         UpdateFullscreenHud(snapshot);
         UpdateRecordingPlayback(snapshot);
         LearnCurrentChannelProfile(snapshot);
+        CaptureSignalTelemetry(snapshot, persist: false);
         CheckProgramReminders();
         var dvrSnapshot = _dvrRecording.Poll(DateTimeOffset.UtcNow);
         ApplyDvrScheduleState(dvrSnapshot);
@@ -2573,7 +2906,7 @@ public partial class MainWindow : Window
         CatalogHeading.Text = "Channels";
         RefreshFilters();
         if (_currentChannel is not null && _playback?.MediaPlayer.Media is null)
-            _playback?.Play(_currentChannel, GetOrCreateChannelProfile(_currentChannel));
+            RetuneCurrentPlayback();
     }
 
     private void FavoritesNavigation_Checked(object sender, RoutedEventArgs e)
@@ -2585,7 +2918,7 @@ public partial class MainWindow : Window
         CatalogHeading.Text = "Favorites";
         RefreshFilters();
         if (_currentChannel is not null && _playback?.MediaPlayer.Media is null)
-            _playback?.Play(_currentChannel, GetOrCreateChannelProfile(_currentChannel));
+            RetuneCurrentPlayback();
     }
 
     private void GuideNavigation_Checked(object sender, RoutedEventArgs e)
@@ -2605,7 +2938,8 @@ public partial class MainWindow : Window
         InspectorPanel.Visibility = showGuide ? Visibility.Collapsed : Visibility.Visible;
         _playerChromeSuppressed = showGuide || ImportOverlay.Visibility == Visibility.Visible || PlaylistHealthOverlay.Visibility == Visibility.Visible ||
                                   SettingsOverlay.Visibility == Visibility.Visible || UpdateOverlay.Visibility == Visibility.Visible ||
-                                  MappingOverlay.Visibility == Visibility.Visible;
+                                  CastOverlay.Visibility == Visibility.Visible || DvrOverlay.Visibility == Visibility.Visible ||
+                                  SignalRoutingOverlay.Visibility == Visibility.Visible || MappingOverlay.Visibility == Visibility.Visible;
         RefreshPlayerSurfaceVisibility();
     }
 
@@ -2632,6 +2966,7 @@ public partial class MainWindow : Window
 
         _multiviewMode = true;
         _displayRefreshRate?.Restore();
+        CaptureSignalTelemetry(_playback?.GetSnapshot(), persist: true);
         _playback?.Stop();
         _showBufferOverlay = false;
         GuideWorkspace.Visibility = Visibility.Collapsed;
@@ -2670,12 +3005,12 @@ public partial class MainWindow : Window
         {
             var key = keys[index];
             if (string.IsNullOrWhiteSpace(key)) continue;
-            var channel = _channels.FirstOrDefault(candidate => string.Equals(candidate.StableKey, key, StringComparison.OrdinalIgnoreCase));
-            if (channel is not null) _multiviewSession.RestoreChannel(index, channel);
+            var channel = FindLogicalChannel(key);
+            if (channel is not null) _multiviewSession.RestoreChannel(index, ResolveBestSignalFeed(channel));
         }
 
         if (_multiviewSession.Tiles.All(tile => !tile.HasChannel) && _currentChannel is not null)
-            _multiviewSession.RestoreChannel(0, _currentChannel);
+            _multiviewSession.RestoreChannel(0, ResolveBestSignalFeed(_currentChannel));
     }
 
     private void UpdateMultiviewLayout(bool managePlayback = true)
@@ -2827,7 +3162,7 @@ public partial class MainWindow : Window
             Layout = _multiviewLayout.ToString(),
             ActiveSlot = _multiviewSession.ActiveSlot,
             AudioSlot = _multiviewSession.AudioSlot,
-            ChannelKeys = _multiviewSession.Tiles.Select(tile => tile.Channel?.StableKey).ToList()
+            ChannelKeys = _multiviewSession.Tiles.Select(tile => GetLogicalChannelKey(tile.Channel)).ToList()
         };
         var existing = _settings.Multiview.SavedLayouts.FindIndex(item => item.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
         if (existing >= 0) _settings.Multiview.SavedLayouts[existing] = preset;
@@ -2846,8 +3181,8 @@ public partial class MainWindow : Window
         {
             var key = preset.ChannelKeys[index];
             if (string.IsNullOrWhiteSpace(key)) continue;
-            var channel = _channels.FirstOrDefault(candidate => candidate.StableKey.Equals(key, StringComparison.OrdinalIgnoreCase));
-            if (channel is not null) _multiviewSession.RestoreChannel(index, channel);
+            var channel = FindLogicalChannel(key);
+            if (channel is not null) _multiviewSession.RestoreChannel(index, ResolveBestSignalFeed(channel));
         }
         _multiviewLayout = Enum.TryParse<MultiviewLayout>(preset.Layout, true, out var layout) ? layout : MultiviewLayout.Quad;
         _multiviewSession.SelectSlot(Math.Clamp(preset.ActiveSlot, 0, MultiviewSession.MaximumTiles - 1));
@@ -2896,7 +3231,7 @@ public partial class MainWindow : Window
         if ((sender as FrameworkElement)?.DataContext is not MultiviewTile target || _multiviewSession is null) return;
         if (e.Data.GetDataPresent(typeof(ChannelItem)) && e.Data.GetData(typeof(ChannelItem)) is ChannelItem channel)
         {
-            _multiviewSession.AssignChannel(target.Index, channel);
+            _multiviewSession.AssignChannel(target.Index, ResolveBestSignalFeed(channel));
         }
         else if (e.Data.GetDataPresent(typeof(MultiviewTile)) && e.Data.GetData(typeof(MultiviewTile)) is MultiviewTile source)
         {
@@ -2915,7 +3250,7 @@ public partial class MainWindow : Window
         _settings.Multiview.Layout = _multiviewLayout.ToString();
         _settings.Multiview.ActiveSlot = _multiviewSession.ActiveSlot;
         _settings.Multiview.AudioSlot = _multiviewSession.AudioSlot;
-        _settings.Multiview.ChannelKeys = _multiviewSession.Tiles.Select(tile => tile.Channel?.StableKey).ToList();
+        _settings.Multiview.ChannelKeys = _multiviewSession.Tiles.Select(tile => GetLogicalChannelKey(tile.Channel)).ToList();
         await _settingsStore.SaveAsync(_settings);
     }
 
@@ -3128,8 +3463,9 @@ public partial class MainWindow : Window
     {
         if (channel.Kind == ChannelKind.Recording) return;
         channel.IsFavorite = !channel.IsFavorite;
-        if (channel.IsFavorite) _favoriteKeys.Add(channel.StableKey);
-        else _favoriteKeys.Remove(channel.StableKey);
+        var route = GetSignalRoute(channel);
+        foreach (var feed in route?.Feeds ?? [channel]) _favoriteKeys.Remove(feed.StableKey);
+        if (channel.IsFavorite) _favoriteKeys.Add(route?.Representative.StableKey ?? channel.StableKey);
 
         _settings.FavoriteChannelKeys = _favoriteKeys.Order(StringComparer.OrdinalIgnoreCase).ToList();
         await _settingsStore.SaveAsync(_settings);
@@ -3149,6 +3485,183 @@ public partial class MainWindow : Window
         if (channel is null || channel.Kind == ChannelKind.Recording) return;
         CurrentFavoriteButton.Content = channel.IsFavorite ? "★ Favorited" : "☆ Add favorite";
     }
+
+    private void UpdateSignalRouteAvailability()
+    {
+        if (SignalRoutesButton is null) return;
+        var currentRoute = GetSignalRoute(_currentChannel);
+        SignalRoutesButton.Visibility = currentRoute is not null || _signalRoutes.Any(route => route.HasAlternates)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        SignalRoutesButton.Content = currentRoute?.HasAlternates == true
+            ? $"◉ Choose from {currentRoute.FeedCount:N0} feeds"
+            : "◉ Signal history";
+    }
+
+    private void OpenSignalRouting_Click(object sender, RoutedEventArgs e) => OpenSignalRoutingPanel();
+
+    private void OpenSignalRoutingPanel()
+    {
+        var currentRoute = GetSignalRoute(_currentChannel);
+        var routes = _signalRoutes
+            .Where(route => route.HasAlternates || ReferenceEquals(route, currentRoute) || route.Feeds.Any(feed =>
+                _settings.SignalRouting.FeedHealth.TryGetValue(feed.StableKey, out var health) && health.CompletedStarts > 0))
+            .OrderBy(route => route.Representative.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(route => route.Representative.Group, StringComparer.OrdinalIgnoreCase)
+            .Select(route => new SignalRouteChoice(route.Key, route.Representative.Name, route.Representative.Group, route.FeedCount))
+            .ToList();
+        if (routes.Count == 0)
+        {
+            FooterStatusDot.Fill = WarningBrush;
+            FooterStatusText.Text = "Signal routing will appear when a live channel is available";
+            return;
+        }
+
+        SignalRouteChannelBox.ItemsSource = null;
+        SignalRouteChannelBox.ItemsSource = routes;
+        SignalRoutingAutoCheck.IsChecked = _settings.SignalRouting.AutomaticFailover;
+        var selectedKey = currentRoute?.Key ?? _selectedSignalRouteKey ?? routes[0].RouteKey;
+        SignalRouteChannelBox.SelectedItem = routes.FirstOrDefault(route => route.RouteKey.Equals(selectedKey, StringComparison.OrdinalIgnoreCase)) ?? routes[0];
+        ShowModal(SignalRoutingOverlay);
+        RefreshSignalRoutingPanel(selectedKey);
+    }
+
+    private void SignalRouteChannelBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (SignalRouteChannelBox.SelectedItem is SignalRouteChoice choice)
+            RefreshSignalRoutingPanel(choice.RouteKey);
+    }
+
+    private void RefreshSignalRoutingPanel(string? routeKey)
+    {
+        if (string.IsNullOrWhiteSpace(routeKey) || !_signalRoutesByKey.TryGetValue(routeKey, out var route)) return;
+        _selectedSignalRouteKey = route.Key;
+        var activeKey = GetSignalRoute(_currentChannel)?.Key.Equals(route.Key, StringComparison.OrdinalIgnoreCase) == true
+            ? _activeSignalFeed?.StableKey
+            : null;
+        var rows = route.Feeds
+            .Select(feed => SmartSignalRoutingPolicy.CreateRow(
+                route,
+                feed,
+                _settings.SignalRouting,
+                string.Equals(feed.StableKey, activeKey, StringComparison.OrdinalIgnoreCase)))
+            .OrderByDescending(row => row.IsActive)
+            .ThenByDescending(row => row.IsPreferred)
+            .ThenBy(row => row.IsBlocked)
+            .ThenByDescending(row => SmartSignalRoutingPolicy.Score(row.Feed, _settings.SignalRouting).Score)
+            .ThenBy(row => row.SourceLabel, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        SignalRouteList.ItemsSource = null;
+        SignalRouteList.ItemsSource = rows;
+        var measured = route.Feeds.Count(feed =>
+            _settings.SignalRouting.FeedHealth.TryGetValue(feed.StableKey, out var health) && health.CompletedStarts > 0);
+        var eligible = rows.Count(row => !row.IsBlocked);
+        SignalRouteHeadingText.Text = route.Representative.Name;
+        SignalRouteSummaryText.Text = $"{route.FeedCount:N0} provider feed{(route.FeedCount == 1 ? string.Empty : "s")} • {eligible:N0} eligible • {measured:N0} measured • unified guide fallback active";
+        SignalRouteStatusText.Text = _settings.SignalRouting.AutomaticFailover && route.HasAlternates
+            ? "AUTO FAILOVER ARMED"
+            : route.HasAlternates ? "MANUAL ROUTING" : "SINGLE FEED";
+    }
+
+    private async void SignalRoutingAutoCheck_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.SignalRouting.AutomaticFailover = SignalRoutingAutoCheck.IsChecked == true;
+        await _settingsStore.SaveAsync(_settings);
+        RefreshSignalRoutingPanel(_selectedSignalRouteKey);
+        FooterStatusText.Text = _settings.SignalRouting.AutomaticFailover
+            ? "Automatic backup-feed switching is armed"
+            : "Signal feeds will be changed manually";
+    }
+
+    private void UseSignalFeed_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not SignalFeedRow row ||
+            !_signalRoutesByKey.TryGetValue(row.RouteKey, out var route) || row.IsBlocked) return;
+        HideModal(SignalRoutingOverlay);
+        TuneChannel(route.Representative, requestedSignalFeed: row.Feed);
+        ChannelList.SelectedItem = route.Representative;
+        ChannelList.ScrollIntoView(route.Representative);
+        FooterStatusDot.Fill = WarningBrush;
+        FooterStatusText.Text = $"Manual feed selected • {row.SourceLabel}";
+    }
+
+    private async void PreferSignalFeed_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not SignalFeedRow row ||
+            !_signalRoutesByKey.TryGetValue(row.RouteKey, out var route)) return;
+        var selected = SmartSignalRoutingPolicy.GetOrCreateHealth(_settings.SignalRouting, row.Feed, route.Key);
+        var makePreferred = selected.Preference != SignalFeedPreference.Preferred;
+        foreach (var feed in route.Feeds)
+        {
+            var health = SmartSignalRoutingPolicy.GetOrCreateHealth(_settings.SignalRouting, feed, route.Key);
+            if (health.Preference == SignalFeedPreference.Blocked && feed.StableKey != row.Feed.StableKey) continue;
+            health.Preference = makePreferred && feed.StableKey == row.Feed.StableKey
+                ? SignalFeedPreference.Preferred
+                : SignalFeedPreference.Auto;
+        }
+        await _settingsStore.SaveAsync(_settings);
+        RefreshSignalRoutingPanel(route.Key);
+        FooterStatusText.Text = makePreferred
+            ? $"Preferred feed • {row.SourceLabel}"
+            : $"Automatic feed ranking restored • {route.Representative.Name}";
+    }
+
+    private async void BlockSignalFeed_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not SignalFeedRow row ||
+            !_signalRoutesByKey.TryGetValue(row.RouteKey, out var route)) return;
+        var health = SmartSignalRoutingPolicy.GetOrCreateHealth(_settings.SignalRouting, row.Feed, route.Key);
+        if (health.Preference == SignalFeedPreference.Blocked)
+        {
+            health.Preference = SignalFeedPreference.Auto;
+            await _settingsStore.SaveAsync(_settings);
+            RefreshSignalRoutingPanel(route.Key);
+            FooterStatusText.Text = $"Feed allowed again • {row.SourceLabel}";
+            return;
+        }
+
+        var otherEligible = route.Feeds.Any(feed => feed.StableKey != row.Feed.StableKey &&
+            SmartSignalRoutingPolicy.Score(feed, _settings.SignalRouting).IsEligible);
+        if (!otherEligible)
+        {
+            FooterStatusDot.Fill = WarningBrush;
+            FooterStatusText.Text = "At least one feed must remain available for this channel";
+            return;
+        }
+
+        health.Preference = SignalFeedPreference.Blocked;
+        await _settingsStore.SaveAsync(_settings);
+        if (row.IsActive)
+        {
+            var next = SmartSignalRoutingPolicy.SelectBestFeed(route, _settings.SignalRouting);
+            if (next is not null) TuneChannel(route.Representative, requestedSignalFeed: next);
+        }
+        RefreshSignalRoutingPanel(route.Key);
+        FooterStatusText.Text = $"Feed excluded from automatic routing • {row.SourceLabel}";
+    }
+
+    private async void ResetSignalHistory_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_selectedSignalRouteKey) || !_signalRoutesByKey.TryGetValue(_selectedSignalRouteKey, out var route)) return;
+        foreach (var feed in route.Feeds)
+        {
+            var preference = _settings.SignalRouting.FeedHealth.TryGetValue(feed.StableKey, out var existing)
+                ? existing.Preference
+                : SignalFeedPreference.Auto;
+            _settings.SignalRouting.FeedHealth[feed.StableKey] = new SignalFeedHealth
+            {
+                LogicalChannelKey = route.Key,
+                ChannelName = feed.Name,
+                SourceName = SmartSignalRoutingPolicy.SourceLabel(feed),
+                Preference = preference
+            };
+        }
+        await _settingsStore.SaveAsync(_settings);
+        RefreshSignalRoutingPanel(route.Key);
+        FooterStatusText.Text = $"Signal history reset • {route.Representative.Name}";
+    }
+
+    private void CloseSignalRouting_Click(object sender, RoutedEventArgs e) => HideModal(SignalRoutingOverlay);
 
     private void OpenImport_Click(object sender, RoutedEventArgs e)
     {
@@ -3615,13 +4128,14 @@ public partial class MainWindow : Window
         if (_playback?.MediaPlayer.Media is null)
         {
             if (_currentRecordingPath is not null) _recordingResumeApplied = false;
-            _playback?.Play(_currentChannel, GetOrCreateChannelProfile(_currentChannel));
+            RetuneCurrentPlayback();
         }
         else _playback?.TogglePause();
     }
 
     private void Stop_Click(object sender, RoutedEventArgs e)
     {
+        CaptureSignalTelemetry(_playback?.GetSnapshot(), persist: true);
         SaveCurrentRecordingProgress(force: true);
         _playback?.Stop();
         if (_currentRecordingPath is not null) _recordingResumeApplied = false;
@@ -3810,10 +4324,10 @@ public partial class MainWindow : Window
         };
         if (profile.BufferPreset == BufferPreset.Stable) profile.LearnedInstability = Math.Max(3, profile.LearnedInstability);
         profile.UpdatedUtc = DateTimeOffset.UtcNow;
-        _playback?.ResetChannelLearning(_currentChannel);
+        _playback?.ResetChannelLearning(_activeSignalFeed ?? _currentChannel);
         await _settingsStore.SaveAsync(_settings);
         _learnedProfileSignature = string.Empty;
-        _playback?.Play(_currentChannel, profile);
+        RetuneCurrentPlayback(profile);
         HideModal(SettingsOverlay);
         FooterStatusDot.Fill = WarningBrush;
         FooterStatusText.Text = $"Playback IQ profile applied to {_currentChannel.Name}";
@@ -3823,12 +4337,12 @@ public partial class MainWindow : Window
     {
         if (_currentChannel is null) return;
         _settings.ChannelProfiles.Remove(_currentChannel.StableKey);
-        _playback?.ResetChannelLearning(_currentChannel);
+        _playback?.ResetChannelLearning(_activeSignalFeed ?? _currentChannel);
         await _settingsStore.SaveAsync(_settings);
         _applyingChannelProfile = true;
         SelectComboByContent(AspectBox, _settings.Playback.AspectRatio);
         _applyingChannelProfile = false;
-        _playback?.Play(_currentChannel);
+        RetuneCurrentPlayback(new ChannelPlaybackProfile());
         UpdateCurrentChannelProfileCard();
         FooterStatusText.Text = $"Reset remembered playback choices for {_currentChannel.Name}";
     }
@@ -3924,6 +4438,7 @@ public partial class MainWindow : Window
         _sleepTimer.Stop();
         if (_isFullscreen) ExitFullscreen();
         _multiviewSession?.StopAll();
+        CaptureSignalTelemetry(_playback?.GetSnapshot(), persist: true);
         _playback?.Stop();
         UpdateSleepTimerStatus();
         FooterStatusDot.Fill = IdleBrush;
@@ -4524,7 +5039,7 @@ public partial class MainWindow : Window
     {
         if (_multiviewMode && _multiviewSession is not null)
             return _multiviewSession.Tiles[_multiviewSession.ActiveSlot].Channel;
-        return _currentChannel;
+        return _activeSignalFeed ?? _currentChannel;
     }
 
     private async Task ToggleScheduledRecordingAsync(GuideProgrammeBlock block)
@@ -4886,7 +5401,8 @@ public partial class MainWindow : Window
                         return;
                     }
                     _handledDvrTerminalSignature = string.Empty;
-                    var snapshot = _dvrRecording.Start(channel, folder, due.ProgramTitle, due.StopUtc, due.Id);
+                    var recordingFeed = ResolveBestSignalFeed(channel);
+                    var snapshot = _dvrRecording.Start(recordingFeed, folder, due.ProgramTitle, due.StopUtc, due.Id);
                     due.Status = "Recording";
                     due.NextRecoveryUtc = null;
                     due.Detail = due.RecoveryAttempts > 0
@@ -5384,7 +5900,7 @@ public partial class MainWindow : Window
         {
             var channel = _currentChannel;
             CreatePlaybackEngine();
-            if (channel is not null) _playback?.Play(channel, GetOrCreateChannelProfile(channel));
+            if (channel is not null) RetuneCurrentPlayback(GetOrCreateChannelProfile(channel));
         }
         _lastDvrLibraryRefreshUtc = DateTimeOffset.MinValue;
         UpdateDvrUi(_dvrRecording.Poll(DateTimeOffset.UtcNow));
@@ -5826,7 +6342,10 @@ public partial class MainWindow : Window
             results = _channels
                 .Where(channel => channel.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                                   channel.Group.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                                  channel.TvgName?.Contains(query, StringComparison.OrdinalIgnoreCase) == true)
+                                  channel.TvgName?.Contains(query, StringComparison.OrdinalIgnoreCase) == true ||
+                                  GetSignalRoute(channel)?.Feeds.Any(feed =>
+                                      feed.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                                      feed.SourceName?.Contains(query, StringComparison.OrdinalIgnoreCase) == true) == true)
                 .OrderByDescending(channel => channel.Name.StartsWith(query, StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(channel => channel.IsFavorite)
                 .ThenBy(channel => channel.Number);
@@ -5918,6 +6437,7 @@ public partial class MainWindow : Window
         else if (e.Key == Key.Escape)
         {
             if (QuickTuneOverlay.Visibility == Visibility.Visible) CloseQuickTune();
+            else if (SignalRoutingOverlay.Visibility == Visibility.Visible) HideModal(SignalRoutingOverlay);
             else if (MappingOverlay.Visibility == Visibility.Visible) HideModal(MappingOverlay);
             else if (ImportOverlay.Visibility == Visibility.Visible && !_isLoading) HideModal(ImportOverlay);
             else if (PlaylistHealthOverlay.Visibility == Visibility.Visible && !_isLoading) HideModal(PlaylistHealthOverlay);
@@ -6064,6 +6584,7 @@ public partial class MainWindow : Window
         if (!ReferenceEquals(overlay, UpdateOverlay)) UpdateOverlay.Visibility = Visibility.Collapsed;
         if (!ReferenceEquals(overlay, CastOverlay)) CastOverlay.Visibility = Visibility.Collapsed;
         if (!ReferenceEquals(overlay, DvrOverlay)) DvrOverlay.Visibility = Visibility.Collapsed;
+        if (!ReferenceEquals(overlay, SignalRoutingOverlay)) SignalRoutingOverlay.Visibility = Visibility.Collapsed;
         if (!ReferenceEquals(overlay, MappingOverlay)) MappingOverlay.Visibility = Visibility.Collapsed;
 
         _playerChromeSuppressed = true;
@@ -6074,7 +6595,7 @@ public partial class MainWindow : Window
     private void HideModal(Grid overlay)
     {
         overlay.Visibility = Visibility.Collapsed;
-        if (ImportOverlay.Visibility != Visibility.Visible && PlaylistHealthOverlay.Visibility != Visibility.Visible && SettingsOverlay.Visibility != Visibility.Visible && UpdateOverlay.Visibility != Visibility.Visible && CastOverlay.Visibility != Visibility.Visible && DvrOverlay.Visibility != Visibility.Visible && MappingOverlay.Visibility != Visibility.Visible)
+        if (ImportOverlay.Visibility != Visibility.Visible && PlaylistHealthOverlay.Visibility != Visibility.Visible && SettingsOverlay.Visibility != Visibility.Visible && UpdateOverlay.Visibility != Visibility.Visible && CastOverlay.Visibility != Visibility.Visible && DvrOverlay.Visibility != Visibility.Visible && SignalRoutingOverlay.Visibility != Visibility.Visible && MappingOverlay.Visibility != Visibility.Visible)
         {
             _playerChromeSuppressed = GuideWorkspace.Visibility == Visibility.Visible || _multiviewMode;
             RefreshPlayerSurfaceVisibility();
@@ -6083,7 +6604,7 @@ public partial class MainWindow : Window
 
     private bool IsAnyModalVisible() =>
         ImportOverlay.Visibility == Visibility.Visible || PlaylistHealthOverlay.Visibility == Visibility.Visible || SettingsOverlay.Visibility == Visibility.Visible ||
-        UpdateOverlay.Visibility == Visibility.Visible || CastOverlay.Visibility == Visibility.Visible || DvrOverlay.Visibility == Visibility.Visible || MappingOverlay.Visibility == Visibility.Visible;
+        UpdateOverlay.Visibility == Visibility.Visible || CastOverlay.Visibility == Visibility.Visible || DvrOverlay.Visibility == Visibility.Visible || SignalRoutingOverlay.Visibility == Visibility.Visible || MappingOverlay.Visibility == Visibility.Visible;
 
     private void RefreshPlayerSurfaceVisibility()
     {
@@ -6188,6 +6709,7 @@ public partial class MainWindow : Window
     private void HideToBackground(bool showNotice = true)
     {
         if (_hiddenToTray || _automationRun) return;
+        CaptureSignalTelemetry(_playback?.GetSnapshot(), persist: true);
         SaveCurrentRecordingProgress(force: true);
         if (_isFullscreen) ExitFullscreen();
         _multiviewSession?.StopAll();
@@ -6328,6 +6850,7 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
+        CaptureSignalTelemetry(_playback?.GetSnapshot(), persist: true);
         SaveCurrentRecordingProgress(force: true);
         PersistRecordingsFolder();
         if (!_allowFinalClose && !_automationRun && _settings.SmartDvr.BackgroundRecordingEnabled)

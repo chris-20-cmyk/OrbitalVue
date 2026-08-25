@@ -17,6 +17,7 @@ public sealed class AppSettings
     public List<string> FavoriteChannelKeys { get; set; } = [];
     public List<string> RecentChannelKeys { get; set; } = [];
     public Dictionary<string, ChannelPlaybackProfile> ChannelProfiles { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public SignalRoutingPreferences SignalRouting { get; set; } = new();
     public PlaylistHealthPreferences PlaylistHealth { get; set; } = new();
     public List<ProgramReminder> ProgramReminders { get; set; } = [];
     public string? RecordingsFolder { get; set; }

@@ -546,7 +546,7 @@ public sealed class NativePlaybackEngine : IDisposable
         if (_disposed || DateTimeOffset.UtcNow < _ignoreTerminationUntilUtc) return;
         if (_currentChannel?.Kind == ChannelKind.Recording)
         {
-            Publish(PlaybackState.Error, "Recording playback error", technicalDetail: technicalDetail);
+            Publish(PlaybackState.Error, "Recording playback error", technicalDetail: technicalDetail, isTerminalFailure: true);
             return;
         }
 
@@ -559,9 +559,10 @@ public sealed class NativePlaybackEngine : IDisposable
             return;
         }
 
-        Publish(PlaybackState.Error, "Playback error", technicalDetail: technicalDetail);
+        var canRecover = _preferences.AutoReconnect && _currentChannel?.Kind == ChannelKind.Live;
+        Publish(PlaybackState.Error, "Playback error", technicalDetail: technicalDetail, isTerminalFailure: !canRecover);
 
-        if (!_preferences.AutoReconnect || _currentChannel?.Kind != ChannelKind.Live)
+        if (!canRecover)
             return;
 
         ScheduleReconnect(technicalDetail);
@@ -594,7 +595,8 @@ public sealed class NativePlaybackEngine : IDisposable
                 Publish(
                     PlaybackState.Error,
                     "The signal could not be restored",
-                    technicalDetail: $"{technicalDetail} Automatic recovery reached its {maximumAttempts}-attempt limit.");
+                    technicalDetail: $"{technicalDetail} Automatic recovery reached its {maximumAttempts}-attempt limit.",
+                    isTerminalFailure: true);
                 return;
             }
 
@@ -858,8 +860,13 @@ public sealed class NativePlaybackEngine : IDisposable
         _stabilityCancellation = null;
     }
 
-    private void Publish(PlaybackState state, string message, float bufferPercent = 0, string? technicalDetail = null) =>
-        StatusChanged?.Invoke(this, new PlaybackStatus(state, message, bufferPercent, technicalDetail));
+    private void Publish(
+        PlaybackState state,
+        string message,
+        float bufferPercent = 0,
+        string? technicalDetail = null,
+        bool isTerminalFailure = false) =>
+        StatusChanged?.Invoke(this, new PlaybackStatus(state, message, bufferPercent, technicalDetail, isTerminalFailure));
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 }

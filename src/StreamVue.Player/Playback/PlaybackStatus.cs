@@ -16,7 +16,8 @@ public sealed record PlaybackStatus(
     PlaybackState State,
     string Message,
     float BufferPercent = 0,
-    string? TechnicalDetail = null)
+    string? TechnicalDetail = null,
+    bool IsTerminalFailure = false)
 {
     public const float BufferCompleteThreshold = 99.5f;
 

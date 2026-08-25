@@ -130,6 +130,29 @@ try
                 UpdatedUtc = DateTimeOffset.UtcNow
             }
         },
+        SignalRouting = new SignalRoutingPreferences
+        {
+            Enabled = true,
+            AutomaticFailover = true,
+            MaximumAutomaticSwitches = 4,
+            FeedHealth = new Dictionary<string, SignalFeedHealth>(StringComparer.OrdinalIgnoreCase)
+            {
+                [first.StableKey] = new SignalFeedHealth
+                {
+                    LogicalChannelKey = "route-probe",
+                    ChannelName = first.Name,
+                    SourceName = "Primary",
+                    Preference = SignalFeedPreference.Preferred,
+                    SuccessfulStarts = 9,
+                    FailedStarts = 1,
+                    BufferEvents = 2,
+                    LastStartupMilliseconds = 1_120,
+                    LastResolutionHeight = 1080,
+                    LastInputBitrateMbps = 7.4,
+                    LastSuccessUtc = DateTimeOffset.UtcNow
+                }
+            }
+        },
         PlaylistHealth = new PlaylistHealthPreferences
         {
             LastAttemptUtc = DateTimeOffset.UtcNow,
@@ -257,6 +280,13 @@ try
         channelProfile.LastStartupMilliseconds != 1_450 || channelProfile.LastSuccessfulUtc is null ||
         channelProfile.LastRecoveryReason != "Expanded smart buffer")
         throw new InvalidOperationException("Recent-channel history or per-channel playback profiles did not persist.");
+    if (!actual.SignalRouting.Enabled || !actual.SignalRouting.AutomaticFailover ||
+        actual.SignalRouting.MaximumAutomaticSwitches != 4 ||
+        !actual.SignalRouting.FeedHealth.TryGetValue(first.StableKey, out var persistedSignalHealth) ||
+        persistedSignalHealth.Preference != SignalFeedPreference.Preferred || persistedSignalHealth.SuccessfulStarts != 9 ||
+        persistedSignalHealth.FailedStarts != 1 || persistedSignalHealth.LastResolutionHeight != 1080 ||
+        persistedSignalHealth.LastInputBitrateMbps != 7.4)
+        throw new InvalidOperationException("Smart signal preferences or private feed history did not persist.");
     if (actual.PlaylistHealth.ChannelCount != 2 || actual.PlaylistHealth.AddedChannels != 1 ||
         actual.PlaylistHealth.LastSuccessUtc is null)
         throw new InvalidOperationException("Playlist health history did not persist.");
@@ -368,6 +398,92 @@ try
         merge.Playlist.GuideSource is null || !merge.Playlist.GuideSource.Contains("primary.xml", StringComparison.Ordinal) ||
         !merge.Playlist.GuideSource.Contains("regional.xml", StringComparison.Ordinal))
         throw new InvalidOperationException("Multi-source ordering, provenance, exact deduplication, or guide merging failed.");
+
+    var alternateFeed = new ChannelItem
+    {
+        Number = 101,
+        Name = "US: World News FHD (D)",
+        Group = "International News",
+        Url = "https://backup.invalid/world-news.m3u8",
+        TvgId = "world.news.backup",
+        Kind = ChannelKind.Live,
+        SourceId = Guid.NewGuid(),
+        SourceName = "Backup provider"
+    };
+    var unrelatedFeed = new ChannelItem
+    {
+        Number = 102,
+        Name = "City News HD",
+        Group = "Newsroom",
+        Url = "https://backup.invalid/city-news.m3u8",
+        TvgId = "city.news",
+        Kind = ChannelKind.Live,
+        SourceName = "Backup provider"
+    };
+    var signalRoutes = SmartSignalRoutingPolicy.BuildRoutes([first, alternateFeed, unrelatedFeed]);
+    var worldNewsRoute = signalRoutes.Single(route => route.Feeds.Contains(first));
+    if (signalRoutes.Count != 2 || worldNewsRoute.FeedCount != 2 ||
+        worldNewsRoute.Representative != first || first.SignalFeedCount != 2 || !first.HasAlternateFeeds ||
+        SmartSignalRoutingPolicy.CreateLogicalChannelKey(first) == SmartSignalRoutingPolicy.CreateLogicalChannelKey(unrelatedFeed))
+        throw new InvalidOperationException(
+            $"Equivalent-feed matching did not create a stable logical channel route " +
+            $"(routes={signalRoutes.Count}, feeds={worldNewsRoute.FeedCount}, first={EpgSchedule.SignatureName(first.Name)}, alternate={EpgSchedule.SignatureName(alternateFeed.Name)})." );
+
+    var tvgAliasRoutes = SmartSignalRoutingPolicy.BuildRoutes([
+        new ChannelItem { Number = 201, Name = "Provider Label One", Group = "News", Url = "https://one.invalid/feed.ts", TvgId = "shared.channel", Kind = ChannelKind.Live },
+        new ChannelItem { Number = 202, Name = "Completely Different Label", Group = "International", Url = "https://two.invalid/feed.ts", TvgId = "shared.channel", Kind = ChannelKind.Live }
+    ]);
+    var scheduleVariantRoutes = SmartSignalRoutingPolicy.BuildRoutes([
+        new ChannelItem { Number = 203, Name = "Premium Movies East", Group = "Movies", Url = "https://one.invalid/east.ts", TvgId = "premium.movies", Kind = ChannelKind.Live },
+        new ChannelItem { Number = 204, Name = "Premium Movies West", Group = "Movies", Url = "https://two.invalid/west.ts", TvgId = "premium.movies", Kind = ChannelKind.Live }
+    ]);
+    var numberedChannelRoutes = SmartSignalRoutingPolicy.BuildRoutes([
+        new ChannelItem { Number = 205, Name = "Local News 12 HD", Group = "Local", Url = "https://one.invalid/news-12.ts", TvgId = "local.news.12", Kind = ChannelKind.Live },
+        new ChannelItem { Number = 206, Name = "Local News 12 FHD", Group = "Local", Url = "https://two.invalid/news-12.ts", TvgId = "backup.local.news.12", Kind = ChannelKind.Live },
+        new ChannelItem { Number = 207, Name = "Local News 13 HD", Group = "Local", Url = "https://one.invalid/news-13.ts", TvgId = "local.news.13", Kind = ChannelKind.Live }
+    ]);
+    if (tvgAliasRoutes.Count != 1 || scheduleVariantRoutes.Count != 2 ||
+        numberedChannelRoutes.Count != 2 || numberedChannelRoutes.Single(route => route.FeedCount == 2).Representative.Name != "Local News 12 HD")
+        throw new InvalidOperationException("TVG aliases, numbered channels, or East/West schedules were not grouped safely.");
+
+    var routingPreferences = new SignalRoutingPreferences();
+    var primaryHealth = SmartSignalRoutingPolicy.GetOrCreateHealth(routingPreferences, first, worldNewsRoute.Key);
+    primaryHealth.SuccessfulStarts = 1;
+    primaryHealth.FailedStarts = 4;
+    primaryHealth.BufferEvents = 12;
+    primaryHealth.Reconnects = 5;
+    primaryHealth.LastStartupMilliseconds = 8_500;
+    primaryHealth.LastFailureUtc = DateTimeOffset.UtcNow;
+    var backupHealth = SmartSignalRoutingPolicy.GetOrCreateHealth(routingPreferences, alternateFeed, worldNewsRoute.Key);
+    backupHealth.SuccessfulStarts = 12;
+    backupHealth.FailedStarts = 0;
+    backupHealth.LastStartupMilliseconds = 850;
+    backupHealth.LastResolutionHeight = 1080;
+    backupHealth.LastInputBitrateMbps = 8.2;
+    backupHealth.LastSuccessUtc = DateTimeOffset.UtcNow;
+    if (SmartSignalRoutingPolicy.SelectBestFeed(worldNewsRoute, routingPreferences) != alternateFeed)
+        throw new InvalidOperationException("Signal scoring did not favor the faster, more reliable feed.");
+    primaryHealth.Preference = SignalFeedPreference.Preferred;
+    if (SmartSignalRoutingPolicy.SelectBestFeed(worldNewsRoute, routingPreferences) != first)
+        throw new InvalidOperationException("A manually preferred feed did not take priority.");
+    primaryHealth.Preference = SignalFeedPreference.Blocked;
+    if (SmartSignalRoutingPolicy.SelectBestFeed(worldNewsRoute, routingPreferences) != alternateFeed)
+        throw new InvalidOperationException("A Never use feed remained eligible for routing.");
+    var attemptedFeeds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { alternateFeed.StableKey };
+    if (SmartSignalRoutingPolicy.SelectBestFeed(worldNewsRoute, routingPreferences, attemptedFeeds) is not null)
+        throw new InvalidOperationException("Failover selection retried an attempted or blocked feed.");
+    if (SmartSignalRoutingPolicy.ParseResolutionHeight("3840×2160") != 2160 ||
+        SmartSignalRoutingPolicy.ParseResolutionHeight("1080p") != 1080)
+        throw new InvalidOperationException("Signal quality resolution parsing failed.");
+
+    var signalGuideNow = DateTimeOffset.UtcNow;
+    var primaryProgramme = new EpgProgram("world.news", "World Report", null, "News", signalGuideNow.AddMinutes(-20), signalGuideNow.AddMinutes(10));
+    var backupProgramme = new EpgProgram("world.news.alt", "World Report", null, "News", signalGuideNow.AddMinutes(-20), signalGuideNow.AddMinutes(10));
+    var nextProgramme = new EpgProgram("world.news.alt", "Market Close", null, "News", signalGuideNow.AddMinutes(10), signalGuideNow.AddMinutes(40));
+    var unifiedProgrammes = SmartSignalRoutingPolicy.MergeProgrammes([[primaryProgramme], [backupProgramme, nextProgramme]]);
+    var unifiedNowNext = SmartSignalRoutingPolicy.GetNowNext(unifiedProgrammes, signalGuideNow);
+    if (unifiedProgrammes.Count != 2 || unifiedNowNext.Current?.Title != "World Report" || unifiedNowNext.Next?.Title != "Market Close")
+        throw new InvalidOperationException("Equivalent-feed guide listings were not unified.");
 
     var liveSource = PlaylistSourcePolicy.Create("url", "https://live.invalid/list.m3u", "Live source", 0);
     var cacheOnlySource = PlaylistSourcePolicy.Create("file", Path.Combine(testRoot, "cache-only.m3u"), "Cache only", 1);
@@ -650,8 +766,12 @@ try
     var partialBuffer = new PlaybackStatus(PlaybackState.Buffering, "Buffering 62%", 62);
     var completeBuffer = new PlaybackStatus(PlaybackState.Buffering, "Buffering 100%", 100);
     var playing = new PlaybackStatus(PlaybackState.Playing, "Live");
+    var recoverableSignalError = new PlaybackStatus(PlaybackState.Error, "Playback error", TechnicalDetail: "Reconnect pending");
+    var terminalSignalError = new PlaybackStatus(PlaybackState.Error, "The signal could not be restored", TechnicalDetail: "Recovery exhausted", IsTerminalFailure: true);
     if (!partialBuffer.ShouldShowBufferOverlay || completeBuffer.ShouldShowBufferOverlay || playing.ShouldShowBufferOverlay)
         throw new InvalidOperationException("Buffer overlay visibility policy failed.");
+    if (recoverableSignalError.IsTerminalFailure || !terminalSignalError.IsTerminalFailure)
+        throw new InvalidOperationException("Playback recovery did not distinguish recoverable errors from terminal feed failures.");
 
     var firstSmartCache = PlaybackHealthPolicy.SelectCacheMilliseconds(BufferPreset.Smart, "https://provider.invalid/live/channel.ts");
     var unstableSmartCache = PlaybackHealthPolicy.SelectCacheMilliseconds(BufferPreset.Smart, "https://provider.invalid/live/channel.ts", 4);
@@ -1098,6 +1218,9 @@ try
     Console.WriteLine("Concurrent settings writes: PASS");
     Console.WriteLine("3.6-to-3.7 playlist source migration: PASS");
     Console.WriteLine("Multi-source normalization, ordering, provenance, and exact deduplication: PASS");
+    Console.WriteLine("Equivalent-feed logical channel matching: PASS");
+    Console.WriteLine("Signal quality scoring, preference, exclusion, and failover selection: PASS");
+    Console.WriteLine("Unified duplicate-feed guide schedule: PASS");
     Console.WriteLine("Per-source startup refresh, offline fallback isolation, and unified recovery: PASS");
     Console.WriteLine("Reconnect preferences: PASS");
     Console.WriteLine("Playlist refresh status: PASS");
@@ -1132,6 +1255,7 @@ try
     Console.WriteLine("Mapped-channel supplemental programme loading: PASS");
     Console.WriteLine("Expanded aspect-ratio mapping: PASS");
     Console.WriteLine("Completed-buffer overlay dismissal: PASS");
+    Console.WriteLine("Terminal-only automatic feed failover trigger: PASS");
     Console.WriteLine("Per-channel smart buffer policy: PASS");
     Console.WriteLine("Playback IQ fast-tune planning: PASS");
     Console.WriteLine("Playback IQ staged recovery planning: PASS");

@@ -2,6 +2,15 @@
 
 StreamVue is a Windows-native IPTV player built with .NET, WPF, LibVLCSharp, the VideoLAN playback engine, and Velopack packaging.
 
+## 3.9 smart signal routing
+
+- Equivalent live feeds from different providers appear as one logical channel while every underlying stream remains available privately
+- Automatic signal scoring learns startup speed, successful tunes, buffering, reconnects, dropped frames, resolution, and bitrate
+- Backup-feed switching begins only after native reconnect, smart buffering, watchdog, and decoder recovery have been exhausted
+- A polished feed chooser provides Use now, Prefer, Never use, per-feed quality details, and private signal history
+- Guide listings are unified across equivalent feeds so a missing provider mapping can fall back to another feed's XMLTV match
+- Signal preferences and measurements stay on the PC and never expose playlist addresses or account details
+
 ## 3.8 source manager
 
 - A polished My sources workspace for saved M3U files, M3U URLs, and protected Xtream accounts

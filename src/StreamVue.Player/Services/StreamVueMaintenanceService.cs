@@ -103,6 +103,8 @@ public sealed class StreamVueMaintenanceService
                     FavoriteCount = settings.FavoriteChannelKeys?.Count ?? 0,
                     RecentChannelCount = settings.RecentChannelKeys?.Count ?? 0,
                     ChannelProfileCount = settings.ChannelProfiles?.Count ?? 0,
+                    SignalFeedHistoryCount = settings.SignalRouting?.FeedHealth?.Count ?? 0,
+                    AutomaticSignalFailover = settings.SignalRouting?.AutomaticFailover ?? true,
                     ReminderCount = settings.ProgramReminders?.Count ?? 0,
                     ScheduledRecordingCount = settings.ScheduledRecordings?.Count ?? 0,
                     SeriesRecordingRuleCount = settings.SeriesRecordingRules?.Count ?? 0,

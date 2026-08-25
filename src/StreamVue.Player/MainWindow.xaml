@@ -291,7 +291,7 @@
                                                 <TextBlock x:Name="FavoriteGlyph" FontSize="17" Text="{Binding FavoriteGlyph}" />
                                             </Button>
                                             <Border Padding="6,2" CornerRadius="4" Background="#152D2E">
-                                                <TextBlock Foreground="{StaticResource AccentBrush}" FontSize="8" FontWeight="Bold" Text="{Binding KindLabel}" />
+                                                <TextBlock Foreground="{StaticResource AccentBrush}" FontSize="8" FontWeight="Bold" Text="{Binding SignalFeedLabel}" />
                                             </Border>
                                         </StackPanel>
                                     </Grid>
@@ -573,6 +573,7 @@
                                     </StackPanel>
                                 </Border>
                                 <Button x:Name="CurrentFavoriteButton" Margin="0,12,0,0" HorizontalAlignment="Left" Style="{StaticResource SecondaryButton}" MinHeight="32" Padding="11,6" Click="ToggleCurrentFavorite_Click" Content="☆ Add favorite" Visibility="Collapsed" />
+                                <Button x:Name="SignalRoutesButton" Margin="0,8,0,0" HorizontalAlignment="Left" Style="{StaticResource SecondaryButton}" MinHeight="32" Padding="11,6" Foreground="{StaticResource AccentBrush}" Click="OpenSignalRouting_Click" Content="◉ Choose feed &amp; history" Visibility="Collapsed" />
                                 <WrapPanel Margin="0,14,0,0">
                                     <Border Padding="7,4" Margin="0,0,6,6" CornerRadius="5" Background="#17312F">
                                         <TextBlock Foreground="{StaticResource AccentBrush}" FontSize="8.5" FontWeight="Bold" Text="NATIVE" />
@@ -605,6 +606,11 @@
                                 <Grid Margin="0,9">
                                     <TextBlock Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" Text="Tune strategy" />
                                     <TextBlock x:Name="TuneStrategyValue" MaxWidth="150" HorizontalAlignment="Right" FontSize="10.5" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="Smart tune" TextTrimming="CharacterEllipsis" />
+                                </Grid>
+                                <Border Height="1" Background="#202A39" />
+                                <Grid Margin="0,9">
+                                    <TextBlock Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" Text="Active feed" />
+                                    <TextBlock x:Name="ActiveFeedValue" MaxWidth="150" HorizontalAlignment="Right" FontSize="10.5" FontWeight="SemiBold" Foreground="#75B9FF" Text="—" TextTrimming="CharacterEllipsis" />
                                 </Grid>
                                 <Border Height="1" Background="#202A39" />
                                 <Grid Margin="0,9">
@@ -1100,7 +1106,7 @@
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
                     <TextBlock Foreground="#566176" FontSize="9" Text="↑↓ CHANNELS • BACKSPACE LAST" />
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
-                    <TextBlock Foreground="#566176" FontSize="9" Text="3.8 SOURCE MANAGER" />
+                    <TextBlock Foreground="#566176" FontSize="9" Text="3.9 SMART ROUTING" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -2088,6 +2094,117 @@
                             <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                                 <Button Margin="0,0,10,0" Style="{StaticResource SecondaryButton}" Click="CloseDvr_Click" Content="Close" />
                                 <Button x:Name="DvrActionButton" Style="{StaticResource PrimaryButton}" Click="DvrRecordNow_Click" Content="Record now" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Smart signal routing and feed history -->
+        <Grid x:Name="SignalRoutingOverlay" Grid.RowSpan="3" Panel.ZIndex="124" Background="#F4080B12" Visibility="Collapsed">
+            <Border Width="1010" MaxHeight="780" Margin="22" HorizontalAlignment="Center" VerticalAlignment="Center" CornerRadius="22" Background="#111722" BorderBrush="#344158" BorderThickness="1" ClipToBounds="True">
+                <Border.Effect><DropShadowEffect BlurRadius="38" ShadowDepth="8" Opacity="0.58" Color="#000000" /></Border.Effect>
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+
+                    <Grid Margin="28,24,28,18">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Smart signal routing" />
+                                <Border Margin="10,3,0,0" Padding="8,4" CornerRadius="6" Background="#17312F" VerticalAlignment="Top"><TextBlock Foreground="{StaticResource AccentBrush}" FontSize="8" FontWeight="Bold" Text="3.9 SIGNAL ENGINE" /></Border>
+                            </StackPanel>
+                            <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="One channel, every available provider feed, ranked from real playback history." />
+                        </StackPanel>
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseSignalRouting_Click"><TextBlock FontSize="18" Text="×" /></Button>
+                    </Grid>
+
+                    <Grid Grid.Row="1" Margin="24,0">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                            <Border Padding="16,14" CornerRadius="14" Background="#0D131D" BorderBrush="#273247" BorderThickness="1">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Foreground="#7E8DA3" FontSize="8.5" FontWeight="Bold" Text="CHANNEL ROUTE" />
+                                        <ComboBox x:Name="SignalRouteChannelBox" Width="430" Height="38" Margin="0,7,0,0" HorizontalAlignment="Left" DisplayMemberPath="DisplayText" SelectionChanged="SignalRouteChannelBox_SelectionChanged" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Width="310" Margin="24,0,0,0" VerticalAlignment="Center">
+                                        <CheckBox x:Name="SignalRoutingAutoCheck" Foreground="#E2E9F3" FontSize="11" FontWeight="SemiBold" Click="SignalRoutingAutoCheck_Click" Content="Automatic backup-feed switching" />
+                                        <TextBlock Margin="23,5,0,0" Foreground="#708096" FontSize="9" LineHeight="14" Text="Switch only after native reconnect and decoder recovery are exhausted." TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <Border Grid.Row="1" Margin="0,12,0,12" Padding="16,12" CornerRadius="12" Background="#10201F" BorderBrush="#28504C" BorderThickness="1">
+                                <Grid>
+                                    <StackPanel>
+                                        <TextBlock x:Name="SignalRouteHeadingText" Foreground="#E8F0F8" FontSize="13" FontWeight="SemiBold" Text="Select a channel route" />
+                                        <TextBlock x:Name="SignalRouteSummaryText" Margin="0,5,0,0" Foreground="#85A8A5" FontSize="9.5" Text="Feed scores improve as StreamVue observes real playback." />
+                                    </StackPanel>
+                                    <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="9,5" CornerRadius="7" Background="#17312F">
+                                        <TextBlock x:Name="SignalRouteStatusText" Foreground="{StaticResource AccentBrush}" FontSize="8.5" FontWeight="Bold" Text="READY" />
+                                    </Border>
+                                </Grid>
+                            </Border>
+
+                            <ListBox x:Name="SignalRouteList" Grid.Row="2" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+                                <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,9" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border x:Name="SignalFeedCard" Padding="16,14" CornerRadius="14" Background="#0D131D" BorderBrush="#273247" BorderThickness="1">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="205" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Ellipse Width="7" Height="7" Margin="0,0,7,0" VerticalAlignment="Center" Fill="#526075" />
+                                                        <TextBlock Foreground="#E3EAF4" FontSize="11.5" FontWeight="SemiBold" Text="{Binding SourceLabel}" TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                    <TextBlock Margin="14,5,0,0" Foreground="#718198" FontSize="9" Text="{Binding FeedName}" TextTrimming="CharacterEllipsis" />
+                                                    <Border Margin="14,8,0,0" Padding="7,3" HorizontalAlignment="Left" CornerRadius="5" Background="#172432">
+                                                        <TextBlock x:Name="SignalFeedStatusText" Foreground="#75B9FF" FontSize="8" FontWeight="Bold" Text="{Binding StatusText}" />
+                                                    </Border>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Margin="16,0,20,0" VerticalAlignment="Center">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Foreground="{StaticResource AccentBrush}" FontSize="10" FontWeight="Bold" Text="{Binding ScoreText}" />
+                                                        <TextBlock Margin="10,0,0,0" Foreground="#B9AFFF" FontSize="10" FontWeight="SemiBold" Text="{Binding Grade}" />
+                                                    </StackPanel>
+                                                    <TextBlock Margin="0,5,0,0" Foreground="#93A2B6" FontSize="9" Text="{Binding QualityText}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Margin="0,4,0,0" Foreground="#8290A4" FontSize="9" Text="{Binding ReliabilityText}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Margin="0,4,0,0" Foreground="#66758B" FontSize="8.5" Text="{Binding HistoryText}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Margin="0,4,0,0" Foreground="#58677B" FontSize="8" Text="{Binding LastSeenText}" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2" Width="230" VerticalAlignment="Center">
+                                                    <Button x:Name="UseSignalFeedButton" Padding="11,7" Style="{StaticResource PrimaryButton}" Click="UseSignalFeed_Click" IsEnabled="{Binding CanUse}" Content="{Binding UseActionLabel}" />
+                                                    <Grid Margin="0,7,0,0">
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                        <Button x:Name="PreferSignalFeedButton" Margin="0,0,4,0" Padding="9,6" Style="{StaticResource SecondaryButton}" Click="PreferSignalFeed_Click" Content="{Binding PreferenceActionLabel}" />
+                                                        <Button Grid.Column="1" Margin="4,0,0,0" Padding="9,6" Style="{StaticResource SecondaryButton}" Foreground="#FF9AA8" Click="BlockSignalFeed_Click" Content="{Binding BlockActionLabel}" />
+                                                    </Grid>
+                                                    <TextBlock Margin="0,7,0,0" HorizontalAlignment="Center" Foreground="#5F6E82" FontSize="7.8" Text="{Binding ScoreExplanation}" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding IsActive}" Value="True"><Setter TargetName="SignalFeedCard" Property="Background" Value="#102520" /><Setter TargetName="SignalFeedCard" Property="BorderBrush" Value="#34716A" /><Setter TargetName="SignalFeedStatusText" Property="Foreground" Value="{StaticResource AccentBrush}" /></DataTrigger>
+                                            <DataTrigger Binding="{Binding IsPreferred}" Value="True"><Setter TargetName="SignalFeedCard" Property="BorderBrush" Value="#625376" /></DataTrigger>
+                                            <DataTrigger Binding="{Binding IsBlocked}" Value="True"><Setter TargetName="SignalFeedCard" Property="Opacity" Value="0.58" /><Setter TargetName="PreferSignalFeedButton" Property="IsEnabled" Value="False" /></DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <Border Grid.Row="3" Margin="0,3,0,2" Padding="15,12" CornerRadius="12" Background="#151C28" BorderBrush="#2B374A" BorderThickness="1">
+                                <TextBlock Foreground="#8291A6" FontSize="9.5" LineHeight="15" Text="Scores combine startup speed, successful tunes, buffering, reconnects, dropped frames, resolution, and bitrate. Playlist addresses and account details never appear in signal history." TextWrapping="Wrap" />
+                            </Border>
+                    </Grid>
+
+                    <Border Grid.Row="2" Margin="0,18,0,0" Padding="28,16" Background="#0D131D" BorderBrush="#273247" BorderThickness="0,1,0,0">
+                        <Grid>
+                            <TextBlock VerticalAlignment="Center" Foreground="#65748A" FontSize="9.5" Text="HISTORY STAYS PRIVATE ON THIS PC" />
+                            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                                <Button Margin="0,0,10,0" Style="{StaticResource SecondaryButton}" Click="ResetSignalHistory_Click" Content="Reset selected history" />
+                                <Button Style="{StaticResource PrimaryButton}" Click="CloseSignalRouting_Click" Content="Done" />
                             </StackPanel>
                         </Grid>
                     </Border>

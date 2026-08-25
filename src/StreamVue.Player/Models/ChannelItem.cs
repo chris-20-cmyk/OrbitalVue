@@ -20,6 +20,8 @@ public sealed class ChannelItem : INotifyPropertyChanged
     private string? _currentProgramTitle;
     private string? _nextProgramTitle;
     private string? _currentProgramTime;
+    private string? _signalRouteKey;
+    private int _signalFeedCount = 1;
 
     public required int Number { get; init; }
     public required string Name { get; init; }
@@ -33,6 +35,35 @@ public sealed class ChannelItem : INotifyPropertyChanged
     public ChannelKind Kind { get; init; }
     public Guid? SourceId { get; init; }
     public string? SourceName { get; init; }
+
+    public string? SignalRouteKey
+    {
+        get => _signalRouteKey;
+        set
+        {
+            if (_signalRouteKey == value) return;
+            _signalRouteKey = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public int SignalFeedCount
+    {
+        get => _signalFeedCount;
+        set
+        {
+            var normalized = Math.Max(1, value);
+            if (_signalFeedCount == normalized) return;
+            _signalFeedCount = normalized;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasAlternateFeeds));
+            OnPropertyChanged(nameof(SignalFeedLabel));
+        }
+    }
+
+    public bool HasAlternateFeeds => SignalFeedCount > 1;
+
+    public string SignalFeedLabel => HasAlternateFeeds ? $"{SignalFeedCount:N0} FEEDS" : KindLabel;
 
     public bool IsFavorite
     {
