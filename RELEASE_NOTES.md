@@ -1,42 +1,41 @@
-# StreamVue 3.8.0 Source Manager
+# StreamVue 3.9.0 Smart Signal Routing
 
-StreamVue 3.8 turns the multi-source foundation into a complete source workspace and refreshes every enabled IPTV provider into one resilient library when the app opens.
+StreamVue 3.9 turns duplicate live streams from multiple IPTV providers into one intelligent channel that can select and recover through the best available feed automatically.
 
-## Manage every provider in one place
+## One channel, every available feed
 
-- Open the new My sources workspace to see every saved M3U file, M3U URL, and protected Xtream account
-- Enable or pause a source without deleting its saved details or encrypted offline copy
-- Reorder sources to control which provider wins when the same exact channel appears more than once
-- Load one source immediately, refresh all enabled sources together, or safely remove a source and its private cached data
-- See a privacy-safe location, connection state, channel count, and last successful refresh for every source
+- Combine equivalent live feeds into one clean library entry while keeping every underlying stream available
+- Match reliable duplicate feeds by TVG identity or channel name without collapsing East, West, or numbered channel variants
+- Preserve existing favorites, recent channels, startup resume, Multiview layouts, DVR schedules, and per-channel playback settings as logical channel identities migrate
+- Search alternate feed names and source names without filling the channel list with duplicates
 
-## Build one library automatically
+## Learn the strongest signal path
 
-- Refresh every enabled provider whenever StreamVue opens instead of checking only the most recently connected playlist
-- Merge all available channels in the chosen source order and suppress exact duplicates automatically
-- Preserve source identity on every merged channel so favorites and guide matching remain stable
-- Keep manually connected sources in the manager automatically for future launches
+- Score feeds locally from successful tunes, startup speed, buffering, reconnects, watchdog recovery, dropped frames, resolution, frame rate, and bitrate
+- Prefer a chosen provider, return it to automatic selection, or mark an unreliable feed as Never use
+- Keep all provider addresses, account details, and channel URLs out of the signal-history display and saved measurements
+- Index very large libraries efficiently, including a verified 70,000-feed routing test
 
-## Stay online when providers struggle
+## Recover automatically
 
-- Refresh and recover each source independently so one unavailable provider cannot take the rest of the library offline
-- Fall back to the affected source's Windows-user-encrypted last-known-good playlist while healthy providers remain live
-- Allow startup network refresh to be disabled per source and open that source's encrypted copy instead
-- Report which sources are live, using protected offline data, or need attention without exposing provider tokens
+- Switch to the next eligible feed only after native reconnect, smart buffering, frozen-stream watchdog, and decoder recovery have been exhausted
+- Avoid retry loops by remembering every attempted feed during the current tune and limiting automatic switches
+- Keep the logical channel selected while the underlying provider changes
+- Use the same best-feed policy for regular playback, scheduled recordings, and Multiview assignments
 
-## Keep account data private
+## Stay in control
 
-- Hide playlist query strings, tokens, and Xtream account details from the source-manager display
-- Retain protected Xtream credentials only while another saved source still uses the same account
-- Delete only the selected source's encrypted cache without disturbing other providers
-- Preserve the complete 3.7 source catalog, caches, account vault, settings, and channel order during the in-place update
+- Open the new Signal routes workspace from the Signal desk to review every feed behind a channel
+- See a private signal score, quality, reliability, buffer history, reconnects, failovers, and last measurement for each feed
+- Switch feeds immediately, manage preferences, reset learned history, or disable automatic failover
+- Merge guide listings across equivalent feeds so Now/Next and the full guide can use the best available XMLTV match
 
 ## Verification
 
 - Pass a zero-warning Release build across the complete solution
-- Verify live refresh, intentional cache-only startup, provider-failure fallback, and no-cache failure in one coordinated run
-- Verify deterministic merging, source provenance, exact duplicate suppression, independent encrypted caches, and protected multi-account credentials
-- Visually verify the source manager at desktop scale with no player or modal overlap
-- Pass the existing playback, DVR, timeshift, guide, fullscreen, Multiview, multi-monitor, Cast, backup, diagnostics, and updater regression suite
+- Pass the full playback, DVR, timeshift, guide, fullscreen, Multiview, multi-monitor, Cast, backup, diagnostics, source-manager, and updater regression suite
+- Verify grouping safeguards for different TVG labels, numbered channels, and East/West schedule variants
+- Verify feed scoring, preference, exclusion, terminal-only failover, guide merging, encrypted settings persistence, and 70,000-feed routing performance
+- Visually verify the Signal routes workspace at desktop scale with correct modal layering and no player overlap
 
 This prerelease installs in place through StreamVue's UPDATE button. Existing settings, source catalog, encrypted playlists, Xtream logins, favorites, guide data, mappings, reminders, Playback IQ profiles, schedules, series rules, recordings, backups, Cast behavior, and Multiview assignments are preserved.
