@@ -235,6 +235,10 @@ public static class PlaylistMergePolicy
         TvgName = channel.TvgName,
         UserAgent = channel.UserAgent,
         Referrer = channel.Referrer,
+        CatchupMode = channel.CatchupMode,
+        CatchupSource = channel.CatchupSource,
+        CatchupDays = channel.CatchupDays,
+        CatchupCorrectionMinutes = channel.CatchupCorrectionMinutes,
         Kind = channel.Kind,
         SourceId = source.Id,
         SourceName = source.Name

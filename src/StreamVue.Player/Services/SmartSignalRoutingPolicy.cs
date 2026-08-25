@@ -14,13 +14,26 @@ public static partial class SmartSignalRoutingPolicy
         "WEATHER", "RADIO", "PPV", "PREMIUM", "NETWORK", "CHANNEL", "TELEVISION"
     };
 
-    public static IReadOnlyList<SignalRoute> BuildRoutes(IEnumerable<ChannelItem> channels)
+    public static IReadOnlyList<SignalRoute> BuildRoutes(
+        IEnumerable<ChannelItem> channels,
+        SignalRoutingPreferences? preferences = null)
     {
+        preferences ??= new SignalRoutingPreferences();
+        NormalizeManualRoutes(preferences);
+        var manualMembership = preferences.ManualRoutes
+            .SelectMany(route => route.FeedKeys.Select(key => (key, route)))
+            .GroupBy(item => item.key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().route, StringComparer.OrdinalIgnoreCase);
+        var separated = preferences.SeparatedFeedKeys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var builders = new List<RouteBuilder>();
         var buildersByAlias = new Dictionary<string, RouteBuilder>(StringComparer.OrdinalIgnoreCase);
         foreach (var channel in channels)
         {
-            var aliases = CreateLogicalAliases(channel);
+            var aliases = separated.Contains(channel.StableKey)
+                ? [$"FEED:{channel.StableKey}"]
+                : manualMembership.TryGetValue(channel.StableKey, out var manualRoute)
+                    ? [$"MANUAL:{manualRoute.Id:N}"]
+                    : CreateLogicalAliases(channel);
             var matches = aliases
                 .Select(alias => buildersByAlias.GetValueOrDefault(alias))
                 .Where(builder => builder is not null && builder.IsActive)
@@ -30,7 +43,12 @@ public static partial class SmartSignalRoutingPolicy
             RouteBuilder target;
             if (matches.Count == 0)
             {
-                target = new RouteBuilder(CreateLogicalChannelKey(channel), builders.Count);
+                var key = aliases[0].StartsWith("MANUAL:", StringComparison.Ordinal)
+                    ? aliases[0]
+                    : aliases[0].StartsWith("FEED:", StringComparison.Ordinal)
+                        ? aliases[0]
+                        : CreateLogicalChannelKey(channel);
+                target = new RouteBuilder(key, builders.Count);
                 builders.Add(target);
             }
             else
@@ -67,6 +85,66 @@ public static partial class SmartSignalRoutingPolicy
             routes.Add(new SignalRoute(builder.Key, builder.Feeds[0], builder.Feeds));
         }
         return routes;
+    }
+
+    public static void LinkFeedToRoute(
+        SignalRoutingPreferences preferences,
+        SignalRoute route,
+        ChannelItem candidate)
+    {
+        NormalizeManualRoutes(preferences);
+        var keys = route.Feeds.Select(feed => feed.StableKey)
+            .Append(candidate.StableKey)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var intersecting = preferences.ManualRoutes
+            .Where(manual => manual.FeedKeys.Any(keys.Contains))
+            .ToList();
+        foreach (var manual in intersecting)
+            foreach (var key in manual.FeedKeys) keys.Add(key);
+        foreach (var manual in intersecting) preferences.ManualRoutes.Remove(manual);
+        preferences.SeparatedFeedKeys.RemoveAll(keys.Contains);
+        preferences.ManualRoutes.Add(new ManualSignalRoute
+        {
+            Id = intersecting.FirstOrDefault()?.Id ?? Guid.NewGuid(),
+            Name = route.Representative.Name,
+            FeedKeys = keys.Order(StringComparer.OrdinalIgnoreCase).ToList()
+        });
+    }
+
+    public static bool ToggleFeedSeparation(SignalRoutingPreferences preferences, ChannelItem feed)
+    {
+        NormalizeManualRoutes(preferences);
+        var separated = preferences.SeparatedFeedKeys.Contains(feed.StableKey, StringComparer.OrdinalIgnoreCase);
+        if (separated)
+        {
+            preferences.SeparatedFeedKeys.RemoveAll(key => key.Equals(feed.StableKey, StringComparison.OrdinalIgnoreCase));
+            return false;
+        }
+
+        preferences.SeparatedFeedKeys.Add(feed.StableKey);
+        foreach (var manual in preferences.ManualRoutes)
+            manual.FeedKeys.RemoveAll(key => key.Equals(feed.StableKey, StringComparison.OrdinalIgnoreCase));
+        preferences.ManualRoutes.RemoveAll(manual => manual.FeedKeys.Distinct(StringComparer.OrdinalIgnoreCase).Count() < 2);
+        return true;
+    }
+
+    public static void NormalizeManualRoutes(SignalRoutingPreferences preferences)
+    {
+        preferences.ManualRoutes ??= [];
+        preferences.SeparatedFeedKeys ??= [];
+        preferences.SeparatedFeedKeys = preferences.SeparatedFeedKeys
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        foreach (var route in preferences.ManualRoutes)
+        {
+            route.FeedKeys ??= [];
+            route.FeedKeys = route.FeedKeys
+                .Where(key => !string.IsNullOrWhiteSpace(key))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        preferences.ManualRoutes.RemoveAll(route => route.FeedKeys.Count < 2);
     }
 
     public static string CreateLogicalChannelKey(ChannelItem channel)
@@ -291,7 +369,11 @@ public static partial class SmartSignalRoutingPolicy
             isActive,
             health.Preference == SignalFeedPreference.Preferred,
             health.Preference == SignalFeedPreference.Blocked,
-            !isActive && health.Preference != SignalFeedPreference.Blocked);
+            !isActive && health.Preference != SignalFeedPreference.Blocked,
+            preferences.SeparatedFeedKeys.Contains(feed.StableKey, StringComparer.OrdinalIgnoreCase)
+                ? "Allow auto matching"
+                : "Keep separate",
+            feed.Kind == ChannelKind.Live);
     }
 
     public static IReadOnlyList<EpgProgram> MergeProgrammes(IEnumerable<IReadOnlyList<EpgProgram>> programmeSets) =>

@@ -3,7 +3,7 @@ namespace StreamVue.Player.Services;
 public sealed class StreamVueSingleInstance : IDisposable
 {
     private const string DefaultScope = "StreamVue.Native";
-    private readonly Mutex _mutex;
+    private readonly Semaphore _instanceGate;
     private readonly string _activationEventName;
     private EventWaitHandle? _activationEvent;
     private RegisteredWaitHandle? _activationWait;
@@ -13,15 +13,8 @@ public sealed class StreamVueSingleInstance : IDisposable
     {
         scope = string.IsNullOrWhiteSpace(scope) ? DefaultScope : scope.Trim();
         _activationEventName = $@"Local\{scope}.Activate";
-        _mutex = new Mutex(false, $@"Local\{scope}.SingleInstance");
-        try
-        {
-            _ownsMutex = _mutex.WaitOne(waitForPreviousInstance ? TimeSpan.FromSeconds(15) : TimeSpan.Zero);
-        }
-        catch (AbandonedMutexException)
-        {
-            _ownsMutex = true;
-        }
+        _instanceGate = new Semaphore(1, 1, $@"Local\{scope}.SingleInstance");
+        _ownsMutex = _instanceGate.WaitOne(waitForPreviousInstance ? TimeSpan.FromSeconds(15) : TimeSpan.Zero);
 
         if (!_ownsMutex) return;
         _activationEvent = new EventWaitHandle(false, EventResetMode.AutoReset, _activationEventName);
@@ -57,10 +50,10 @@ public sealed class StreamVueSingleInstance : IDisposable
         _activationEvent = null;
         if (_ownsMutex)
         {
-            try { _mutex.ReleaseMutex(); }
-            catch (ApplicationException) { }
+            try { _instanceGate.Release(); }
+            catch (SemaphoreFullException) { }
             _ownsMutex = false;
         }
-        _mutex.Dispose();
+        _instanceGate.Dispose();
     }
 }

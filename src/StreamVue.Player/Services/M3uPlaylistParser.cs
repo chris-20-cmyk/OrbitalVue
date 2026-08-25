@@ -96,7 +96,11 @@ public sealed partial class M3uPlaylistParser
                 TvgName = EmptyToNull(pending.TvgName),
                 UserAgent = EmptyToNull(pending.UserAgent),
                 Referrer = EmptyToNull(pending.Referrer),
-                Kind = InferKind(group, line)
+                Kind = InferKind(group, line),
+                CatchupMode = EmptyToNull(pending.CatchupMode),
+                CatchupSource = EmptyToNull(pending.CatchupSource),
+                CatchupDays = Math.Max(0, pending.CatchupDays),
+                CatchupCorrectionMinutes = pending.CatchupCorrectionMinutes
             });
 
             pending = null;
@@ -162,6 +166,16 @@ public sealed partial class M3uPlaylistParser
         attributes.TryGetValue("group-title", out var group);
         attributes.TryGetValue("http-user-agent", out var userAgent);
         attributes.TryGetValue("http-referrer", out var referrer);
+        attributes.TryGetValue("catchup", out var catchupMode);
+        attributes.TryGetValue("catchup-source", out var catchupSource);
+        attributes.TryGetValue("catchup-days", out var catchupDaysText);
+        if (string.IsNullOrWhiteSpace(catchupDaysText)) attributes.TryGetValue("timeshift", out catchupDaysText);
+        attributes.TryGetValue("catchup-correction", out var correctionText);
+        _ = int.TryParse(catchupDaysText, out var catchupDays);
+        var correctionMinutes = 0;
+        if (double.TryParse(correctionText, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var correctionHours))
+            correctionMinutes = (int)Math.Round(correctionHours * 60d);
 
         return new PendingChannel
         {
@@ -171,7 +185,11 @@ public sealed partial class M3uPlaylistParser
             LogoUrl = logo,
             Group = group,
             UserAgent = userAgent,
-            Referrer = referrer
+            Referrer = referrer,
+            CatchupMode = catchupMode,
+            CatchupSource = catchupSource,
+            CatchupDays = Math.Max(0, catchupDays),
+            CatchupCorrectionMinutes = correctionMinutes
         };
     }
 
@@ -226,5 +244,9 @@ public sealed partial class M3uPlaylistParser
         public string? TvgName { get; set; }
         public string? UserAgent { get; set; }
         public string? Referrer { get; set; }
+        public string? CatchupMode { get; set; }
+        public string? CatchupSource { get; set; }
+        public int CatchupDays { get; set; }
+        public int CatchupCorrectionMinutes { get; set; }
     }
 }

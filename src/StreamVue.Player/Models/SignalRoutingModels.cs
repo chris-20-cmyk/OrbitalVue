@@ -15,6 +15,15 @@ public sealed class SignalRoutingPreferences
     public bool AutomaticFailover { get; set; } = true;
     public int MaximumAutomaticSwitches { get; set; } = 3;
     public Dictionary<string, SignalFeedHealth> FeedHealth { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public List<ManualSignalRoute> ManualRoutes { get; set; } = [];
+    public List<string> SeparatedFeedKeys { get; set; } = [];
+}
+
+public sealed class ManualSignalRoute
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Name { get; set; } = "Custom route";
+    public List<string> FeedKeys { get; set; } = [];
 }
 
 public sealed class SignalFeedHealth
@@ -65,6 +74,11 @@ public sealed record SignalRouteChoice(string RouteKey, string ChannelName, stri
     public override string ToString() => DisplayText;
 }
 
+public sealed record SignalRouteCandidate(ChannelItem Feed, string DisplayText)
+{
+    public override string ToString() => DisplayText;
+}
+
 public sealed record SignalFeedRow(
     ChannelItem Feed,
     string RouteKey,
@@ -84,4 +98,6 @@ public sealed record SignalFeedRow(
     bool IsActive,
     bool IsPreferred,
     bool IsBlocked,
-    bool CanUse);
+    bool CanUse,
+    string RouteEditActionLabel,
+    bool CanEditRoute);

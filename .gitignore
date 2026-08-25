@@ -4,6 +4,7 @@
 **/obj/
 artifacts/
 .qa/
+.tools/
 *.user
 *.suo
 *.log

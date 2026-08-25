@@ -13,6 +13,8 @@ public sealed class AppSettings
     public DateTimeOffset? LastPlaylistRefreshUtc { get; set; }
     public bool ResumeLastChannelOnStartup { get; set; }
     public bool MiniPlayerAlwaysOnTop { get; set; } = true;
+    public bool RestoreUnexpectedSession { get; set; } = true;
+    public AppUpdatePreferences Updates { get; set; } = new();
     public PlaybackPreferences Playback { get; set; } = new();
     public List<string> FavoriteChannelKeys { get; set; } = [];
     public List<string> RecentChannelKeys { get; set; } = [];
@@ -26,6 +28,20 @@ public sealed class AppSettings
     public List<ScheduledRecording> ScheduledRecordings { get; set; } = [];
     public Dictionary<string, DvrPlaybackProgress> RecordingPlaybackProgress { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public MultiviewPreferences Multiview { get; set; } = new();
+}
+
+public enum AppUpdateChannel
+{
+    Stable,
+    Preview
+}
+
+public sealed class AppUpdatePreferences
+{
+    public AppUpdateChannel Channel { get; set; } = AppUpdateChannel.Preview;
+    public bool AutomaticRollback { get; set; } = true;
+    public DateTimeOffset? LastRollbackUtc { get; set; }
+    public string? LastRollbackVersion { get; set; }
 }
 
 public sealed class ChannelPlaybackProfile

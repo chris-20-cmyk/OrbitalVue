@@ -56,6 +56,8 @@ public sealed class XtreamSourceService
                 var extension = ReadString(item, "container_extension");
                 if (string.IsNullOrWhiteSpace(extension)) extension = "ts";
                 var streamUrl = new Uri(baseUri, $"live/{Uri.EscapeDataString(username)}/{Uri.EscapeDataString(password)}/{streamId}.{extension}");
+                var archiveEnabled = ReadString(item, "tv_archive") is "1" or "true" or "True";
+                _ = int.TryParse(ReadString(item, "tv_archive_duration"), out var archiveDays);
 
                 channels.Add(new ChannelItem
                 {
@@ -65,7 +67,12 @@ public sealed class XtreamSourceService
                     Group = string.IsNullOrWhiteSpace(group) ? "Live TV" : group,
                     LogoUrl = NullIfBlank(ReadString(item, "stream_icon")),
                     TvgId = NullIfBlank(ReadString(item, "epg_channel_id")),
-                    Kind = ChannelKind.Live
+                    Kind = ChannelKind.Live,
+                    CatchupMode = archiveEnabled ? "xtream" : null,
+                    CatchupSource = archiveEnabled
+                        ? new Uri(baseUri, $"timeshift/{Uri.EscapeDataString(username)}/{Uri.EscapeDataString(password)}/{{duration_minutes}}/{{Y}}-{{m}}-{{d}}:{{H}}-{{M}}/{streamId}.{extension}").ToString()
+                        : null,
+                    CatchupDays = archiveEnabled ? Math.Max(1, archiveDays) : 0
                 });
 
                 if (channels.Count % 1_000 == 0)
@@ -116,7 +123,7 @@ public sealed class XtreamSourceService
     private static HttpClient CreateClient()
     {
         var client = new HttpClient { Timeout = TimeSpan.FromMinutes(3) };
-        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("StreamVue", "3.9.0"));
+        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("StreamVue", "4.0.0"));
         return client;
     }
 }

@@ -862,6 +862,7 @@
                                                                 <Button.ContextMenu>
                                                                     <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}" Background="#121A26" Foreground="#E3EAF4" BorderBrush="#344158" BorderThickness="1" Padding="4">
                                                                         <MenuItem Header="Watch now" Click="GuideContextWatch_Click" />
+                                                                        <MenuItem Header="Watch replay" Click="GuideContextReplay_Click" IsEnabled="{Binding CanReplay}" />
                                                                         <Separator Background="#344158" />
                                                                         <MenuItem Header="Set or remove reminder" Click="GuideContextReminder_Click" />
                                                                         <MenuItem Header="Schedule or cancel recording" Click="GuideContextRecording_Click" />
@@ -1106,7 +1107,7 @@
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
                     <TextBlock Foreground="#566176" FontSize="9" Text="↑↓ CHANNELS • BACKSPACE LAST" />
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
-                    <TextBlock Foreground="#566176" FontSize="9" Text="3.9 SMART ROUTING" />
+                    <TextBlock Foreground="#566176" FontSize="9" Text="4.0 RESILIENCE" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -1354,10 +1355,72 @@
                     </Grid>
                     <TextBlock x:Name="PlaylistHealthErrorText" Margin="0,14,0,0" Foreground="#FF8997" FontSize="10" TextWrapping="Wrap" Visibility="Collapsed" />
                     <StackPanel Margin="0,22,0,0" HorizontalAlignment="Right" Orientation="Horizontal">
+                        <Button Margin="0,0,8,0" Padding="14,8" Style="{StaticResource SecondaryButton}" Click="OpenChannelHealth_Click" Content="Channel health center" />
                         <Button Padding="14,8" Style="{StaticResource SecondaryButton}" Click="ClosePlaylistHealth_Click" Content="Close" />
                         <Button Margin="8,0,0,0" Padding="14,8" Style="{StaticResource PrimaryButton}" Click="RefreshPlaylistNow_Click" Content="Refresh now" />
                     </StackPanel>
                 </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Channel metadata and observed playback health -->
+        <Grid x:Name="ChannelHealthOverlay" Grid.RowSpan="3" Panel.ZIndex="98" Background="#F2080B12" Visibility="Collapsed">
+            <Border Width="1040" MaxHeight="790" Margin="22" HorizontalAlignment="Center" VerticalAlignment="Center" CornerRadius="22" Background="#111722" BorderBrush="#344158" BorderThickness="1" ClipToBounds="True">
+                <Border.Effect><DropShadowEffect BlurRadius="38" ShadowDepth="8" Opacity="0.58" Color="#000000" /></Border.Effect>
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                    <Grid Margin="28,24,28,18">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Channel health center" />
+                                <Border Margin="10,3,0,0" Padding="8,4" CornerRadius="6" Background="#17312F" VerticalAlignment="Top"><TextBlock Foreground="{StaticResource AccentBrush}" FontSize="8" FontWeight="Bold" Text="PRIVATE LOCAL ANALYSIS" /></Border>
+                            </StackPanel>
+                            <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Find missing guide data, artwork gaps, weak feeds, duplicate routes, and replay-ready channels." />
+                        </StackPanel>
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseChannelHealth_Click"><TextBlock FontSize="18" Text="×" /></Button>
+                    </Grid>
+                    <Grid Grid.Row="1" Margin="24,0,24,0">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <Border Padding="14,12" CornerRadius="12" Background="#0D141E" BorderBrush="#263144" BorderThickness="1"><StackPanel><TextBlock Foreground="#718198" FontSize="8" FontWeight="Bold" Text="NEEDS ATTENTION" /><TextBlock x:Name="HealthAttentionCount" Margin="0,6,0,0" Foreground="#FF9AA8" FontSize="17" FontWeight="SemiBold" Text="0" /></StackPanel></Border>
+                            <Border Grid.Column="2" Padding="14,12" CornerRadius="12" Background="#0D141E" BorderBrush="#263144" BorderThickness="1"><StackPanel><TextBlock Foreground="#718198" FontSize="8" FontWeight="Bold" Text="GUIDE GAPS" /><TextBlock x:Name="HealthGuideCount" Margin="0,6,0,0" Foreground="#F4BD6B" FontSize="17" FontWeight="SemiBold" Text="0" /></StackPanel></Border>
+                            <Border Grid.Column="4" Padding="14,12" CornerRadius="12" Background="#0D141E" BorderBrush="#263144" BorderThickness="1"><StackPanel><TextBlock Foreground="#718198" FontSize="8" FontWeight="Bold" Text="DUPLICATE ROUTES" /><TextBlock x:Name="HealthDuplicateCount" Margin="0,6,0,0" Foreground="#B9AFFF" FontSize="17" FontWeight="SemiBold" Text="0" /></StackPanel></Border>
+                            <Border Grid.Column="6" Padding="14,12" CornerRadius="12" Background="#0D141E" BorderBrush="#263144" BorderThickness="1"><StackPanel><TextBlock Foreground="#718198" FontSize="8" FontWeight="Bold" Text="REPLAY READY" /><TextBlock x:Name="HealthReplayCount" Margin="0,6,0,0" Foreground="{StaticResource AccentBrush}" FontSize="17" FontWeight="SemiBold" Text="0" /></StackPanel></Border>
+                        </Grid>
+                        <Grid Grid.Row="1" Margin="0,12">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="220" /></Grid.ColumnDefinitions>
+                            <TextBox x:Name="HealthChannelSearchBox" Height="38" Padding="12,8" TextChanged="HealthChannelSearchBox_TextChanged" ToolTip="Search channels, groups, or health details" />
+                            <ComboBox x:Name="HealthChannelFilterBox" Grid.Column="1" Margin="10,0,0,0" Height="38" SelectionChanged="HealthChannelFilterBox_SelectionChanged" SelectedIndex="0">
+                                <ComboBoxItem Content="All channels" Tag="All" />
+                                <ComboBoxItem Content="Needs attention" Tag="NeedsAttention" />
+                                <ComboBoxItem Content="Missing guide" Tag="MissingGuide" />
+                                <ComboBoxItem Content="Missing logo" Tag="MissingLogo" />
+                                <ComboBoxItem Content="Unreliable" Tag="Unreliable" />
+                                <ComboBoxItem Content="Duplicate routes" Tag="Duplicates" />
+                                <ComboBoxItem Content="Replay ready" Tag="Replay" />
+                            </ComboBox>
+                        </Grid>
+                        <ListBox x:Name="ChannelHealthList" Grid.Row="2" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+                            <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,8" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border x:Name="HealthCard" Padding="14,12" CornerRadius="12" Background="#0D131D" BorderBrush="#273247" BorderThickness="1">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="42" /><ColumnDefinition Width="245" /><ColumnDefinition Width="*" /><ColumnDefinition Width="180" /></Grid.ColumnDefinitions>
+                                            <Border Width="34" Height="34" CornerRadius="9" Background="#192433"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#B8C5D8" FontSize="8.5" FontWeight="Bold" Text="{Binding Initials}" /></Border>
+                                            <StackPanel Grid.Column="1" Margin="9,0,14,0" VerticalAlignment="Center"><TextBlock Foreground="#E3EAF4" FontSize="11" FontWeight="SemiBold" Text="{Binding ChannelName}" TextTrimming="CharacterEllipsis" /><TextBlock Margin="0,4,0,0" Foreground="#718198" FontSize="8.5" Text="{Binding Group}" TextTrimming="CharacterEllipsis" /></StackPanel>
+                                            <StackPanel Grid.Column="2" VerticalAlignment="Center"><StackPanel Orientation="Horizontal"><TextBlock x:Name="HealthStatus" Foreground="{StaticResource AccentBrush}" FontSize="8.5" FontWeight="Bold" Text="{Binding Status}" /><TextBlock Margin="10,0,0,0" Foreground="#7E8DA3" FontSize="8.5" Text="{Binding FeedLabel}" /></StackPanel><TextBlock Margin="0,5,12,0" Foreground="#8290A4" FontSize="9" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" /></StackPanel>
+                                            <Grid Grid.Column="3"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Button Margin="0,0,4,0" Padding="9,6" Style="{StaticResource SecondaryButton}" Click="ReviewChannelHealth_Click" Content="Review" /><Button Grid.Column="1" Margin="4,0,0,0" Padding="9,6" Style="{StaticResource PrimaryButton}" Click="TuneChannelHealth_Click" Content="Tune" /></Grid>
+                                        </Grid>
+                                    </Border>
+                                    <DataTemplate.Triggers><DataTrigger Binding="{Binding NeedsAttention}" Value="True"><Setter TargetName="HealthCard" Property="BorderBrush" Value="#584034" /><Setter TargetName="HealthStatus" Property="Foreground" Value="#F4BD6B" /></DataTrigger><DataTrigger Binding="{Binding Unreliable}" Value="True"><Setter TargetName="HealthCard" Property="BorderBrush" Value="#633642" /><Setter TargetName="HealthStatus" Property="Foreground" Value="#FF8997" /></DataTrigger></DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                    <Border Grid.Row="2" Margin="0,18,0,0" Padding="28,16" Background="#0D131D" BorderBrush="#273247" BorderThickness="0,1,0,0"><Grid><TextBlock x:Name="HealthVisibleCount" VerticalAlignment="Center" Foreground="#65748A" FontSize="9.5" Text="0 LIVE CHANNELS ANALYZED" /><Button HorizontalAlignment="Right" Style="{StaticResource PrimaryButton}" Click="CloseChannelHealth_Click" Content="Done" /></Grid></Border>
+                </Grid>
             </Border>
         </Grid>
 
@@ -1559,6 +1622,13 @@
                                         </StackPanel>
                                     </CheckBox>
                                     <Border Height="1" Margin="0,14" Background="#222D3E" />
+                                    <CheckBox x:Name="UnexpectedSessionRecoveryCheck" Foreground="{StaticResource TextBrush}" IsChecked="True" Checked="SettingsChanged" Unchecked="SettingsChanged">
+                                        <StackPanel Margin="9,0,0,0">
+                                            <TextBlock FontSize="12" FontWeight="SemiBold" Text="Recover an interrupted session" />
+                                            <TextBlock Margin="0,4,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" Text="After a crash, power loss, or forced restart, restore the channel, Guide workspace, filters, and Multiview assignments that were active." TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                    <Border Height="1" Margin="0,14" Background="#222D3E" />
                                     <CheckBox x:Name="MiniPlayerTopmostCheck" Foreground="{StaticResource TextBrush}" IsChecked="True" Checked="SettingsChanged" Unchecked="SettingsChanged">
                                         <StackPanel Margin="9,0,0,0">
                                             <TextBlock FontSize="12" FontWeight="SemiBold" Text="Keep Mini Player above other apps" />
@@ -1664,8 +1734,30 @@
                                 </Grid>
                             </Border>
 
+                            <Border Margin="0,14,0,0" Padding="17,15" CornerRadius="14" Background="#0D131D" BorderBrush="#273247" BorderThickness="1">
+                                <StackPanel>
+                                    <Grid>
+                                        <StackPanel>
+                                            <TextBlock Foreground="#AAB6C8" FontSize="10" FontWeight="SemiBold" Text="RELEASE CHANNEL" />
+                                            <TextBlock Margin="0,4,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" Text="Stable favors finished releases. Preview includes early feature builds." />
+                                        </StackPanel>
+                                        <ComboBox x:Name="UpdateChannelBox" Width="132" HorizontalAlignment="Right" VerticalAlignment="Center" SelectionChanged="UpdateChannel_SelectionChanged">
+                                            <ComboBoxItem Content="Stable" Tag="Stable" />
+                                            <ComboBoxItem Content="Preview" Tag="Preview" IsSelected="True" />
+                                        </ComboBox>
+                                    </Grid>
+                                    <Border Height="1" Margin="0,14" Background="#222D3E" />
+                                    <CheckBox x:Name="UpdateRollbackCheck" IsChecked="True" Foreground="{StaticResource TextBrush}" Checked="UpdateRollback_Changed" Unchecked="UpdateRollback_Changed">
+                                        <StackPanel Margin="9,0,0,0">
+                                            <TextBlock FontSize="11.5" FontWeight="SemiBold" Text="Restore the last working version automatically" />
+                                            <TextBlock Margin="0,4,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" LineHeight="15" Text="If a new build cannot open successfully, StreamVue rolls back without touching playlists or settings." TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                </StackPanel>
+                            </Border>
+
                             <Border Margin="0,14,0,2" Padding="15,12" CornerRadius="12" Background="#101C24" BorderBrush="#24414A" BorderThickness="1">
-                                <TextBlock Foreground="#90A8AF" FontSize="10.5" LineHeight="16" Text="When an update is available, StreamVue downloads it securely, closes, installs it in place, and opens again automatically." TextWrapping="Wrap" />
+                                <TextBlock Foreground="#90A8AF" FontSize="10.5" LineHeight="16" Text="Every update is verified before installation. Rollback protection keeps one local last-known-good package until the new version proves it can run." TextWrapping="Wrap" />
                             </Border>
                         </StackPanel>
                     </ScrollViewer>
@@ -2112,7 +2204,7 @@
                         <StackPanel>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Smart signal routing" />
-                                <Border Margin="10,3,0,0" Padding="8,4" CornerRadius="6" Background="#17312F" VerticalAlignment="Top"><TextBlock Foreground="{StaticResource AccentBrush}" FontSize="8" FontWeight="Bold" Text="3.9 SIGNAL ENGINE" /></Border>
+                                <Border Margin="10,3,0,0" Padding="8,4" CornerRadius="6" Background="#17312F" VerticalAlignment="Top"><TextBlock Foreground="{StaticResource AccentBrush}" FontSize="8" FontWeight="Bold" Text="4.0 ROUTE EDITOR" /></Border>
                             </StackPanel>
                             <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="One channel, every available provider feed, ranked from real playback history." />
                         </StackPanel>
@@ -2137,13 +2229,22 @@
 
                             <Border Grid.Row="1" Margin="0,12,0,12" Padding="16,12" CornerRadius="12" Background="#10201F" BorderBrush="#28504C" BorderThickness="1">
                                 <Grid>
-                                    <StackPanel>
-                                        <TextBlock x:Name="SignalRouteHeadingText" Foreground="#E8F0F8" FontSize="13" FontWeight="SemiBold" Text="Select a channel route" />
-                                        <TextBlock x:Name="SignalRouteSummaryText" Margin="0,5,0,0" Foreground="#85A8A5" FontSize="9.5" Text="Feed scores improve as StreamVue observes real playback." />
-                                    </StackPanel>
-                                    <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="9,5" CornerRadius="7" Background="#17312F">
-                                        <TextBlock x:Name="SignalRouteStatusText" Foreground="{StaticResource AccentBrush}" FontSize="8.5" FontWeight="Bold" Text="READY" />
-                                    </Border>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                    <Grid>
+                                        <StackPanel>
+                                            <TextBlock x:Name="SignalRouteHeadingText" Foreground="#E8F0F8" FontSize="13" FontWeight="SemiBold" Text="Select a channel route" />
+                                            <TextBlock x:Name="SignalRouteSummaryText" Margin="0,5,0,0" Foreground="#85A8A5" FontSize="9.5" Text="Feed scores improve as StreamVue observes real playback." />
+                                        </StackPanel>
+                                        <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="9,5" CornerRadius="7" Background="#17312F">
+                                            <TextBlock x:Name="SignalRouteStatusText" Foreground="{StaticResource AccentBrush}" FontSize="8.5" FontWeight="Bold" Text="READY" />
+                                        </Border>
+                                    </Grid>
+                                    <Grid Grid.Row="1" Margin="0,12,0,0">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <TextBlock Margin="0,0,12,0" VerticalAlignment="Center" Foreground="#79A39F" FontSize="8.5" FontWeight="Bold" Text="MANUAL ROUTE EDITOR" />
+                                        <ComboBox x:Name="SignalRouteCandidateBox" Grid.Column="1" Height="34" IsEditable="True" IsTextSearchEnabled="True" TextSearch.TextPath="DisplayText" DisplayMemberPath="DisplayText" ToolTip="Search any playlist feed by channel or source name" />
+                                        <Button Grid.Column="2" Margin="10,0,0,0" Padding="12,7" Style="{StaticResource SecondaryButton}" Click="LinkSignalFeed_Click" Content="Link feed" />
+                                    </Grid>
                                 </Grid>
                             </Border>
 
@@ -2182,6 +2283,7 @@
                                                         <Button Grid.Column="1" Margin="4,0,0,0" Padding="9,6" Style="{StaticResource SecondaryButton}" Foreground="#FF9AA8" Click="BlockSignalFeed_Click" Content="{Binding BlockActionLabel}" />
                                                     </Grid>
                                                     <TextBlock Margin="0,7,0,0" HorizontalAlignment="Center" Foreground="#5F6E82" FontSize="7.8" Text="{Binding ScoreExplanation}" TextTrimming="CharacterEllipsis" />
+                                                    <Button Margin="0,7,0,0" Padding="9,5" Style="{StaticResource SecondaryButton}" Click="EditSignalRouteFeed_Click" IsEnabled="{Binding CanEditRoute}" Content="{Binding RouteEditActionLabel}" />
                                                 </StackPanel>
                                             </Grid>
                                         </Border>

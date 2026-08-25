@@ -47,6 +47,10 @@ public sealed class PlaylistCacheStore
                 TvgName = channel.TvgName,
                 UserAgent = channel.UserAgent,
                 Referrer = channel.Referrer,
+                CatchupMode = channel.CatchupMode,
+                CatchupSource = channel.CatchupSource,
+                CatchupDays = channel.CatchupDays,
+                CatchupCorrectionMinutes = channel.CatchupCorrectionMinutes,
                 Kind = channel.Kind
             }).ToList()
         };
@@ -155,6 +159,10 @@ public sealed class PlaylistCacheStore
                     TvgName = channel.TvgName,
                     UserAgent = channel.UserAgent,
                     Referrer = channel.Referrer,
+                    CatchupMode = channel.CatchupMode,
+                    CatchupSource = channel.CatchupSource,
+                    CatchupDays = channel.CatchupDays,
+                    CatchupCorrectionMinutes = channel.CatchupCorrectionMinutes,
                     Kind = channel.Kind
                 }).ToList();
                 return new CachedPlaylist(
@@ -221,6 +229,10 @@ public sealed class PlaylistCacheStore
         public string? TvgName { get; set; }
         public string? UserAgent { get; set; }
         public string? Referrer { get; set; }
+        public string? CatchupMode { get; set; }
+        public string? CatchupSource { get; set; }
+        public int CatchupDays { get; set; }
+        public int CatchupCorrectionMinutes { get; set; }
         public ChannelKind Kind { get; set; }
     }
 }

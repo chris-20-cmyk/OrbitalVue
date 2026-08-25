@@ -110,6 +110,12 @@ try
         LastPlaylistRefreshUtc = DateTimeOffset.UtcNow,
         ResumeLastChannelOnStartup = true,
         MiniPlayerAlwaysOnTop = true,
+        RestoreUnexpectedSession = true,
+        Updates = new AppUpdatePreferences
+        {
+            Channel = AppUpdateChannel.Stable,
+            AutomaticRollback = true
+        },
         FavoriteChannelKeys = [first.StableKey],
         RecentChannelKeys = [distinct.StableKey, first.StableKey],
         ChannelProfiles = new Dictionary<string, ChannelPlaybackProfile>(StringComparer.OrdinalIgnoreCase)
@@ -151,7 +157,12 @@ try
                     LastInputBitrateMbps = 7.4,
                     LastSuccessUtc = DateTimeOffset.UtcNow
                 }
-            }
+            },
+            ManualRoutes =
+            [
+                new ManualSignalRoute { Name = "News route", FeedKeys = [first.StableKey, distinct.StableKey] }
+            ],
+            SeparatedFeedKeys = ["SEPARATED-PROBE"]
         },
         PlaylistHealth = new PlaylistHealthPreferences
         {
@@ -269,7 +280,8 @@ try
     if (actual.PlaylistSources.Count != 1 || actual.PlaylistSources[0].Id != playlistSourceId ||
         actual.PlaylistSources[0].Name != "Primary lineup" || actual.PlaylistSources[0].ChannelCount != 2)
         throw new InvalidOperationException("Playlist source catalog did not persist.");
-    if (actual.LastChannelKey != first.StableKey || !actual.ResumeLastChannelOnStartup || !actual.MiniPlayerAlwaysOnTop)
+    if (actual.LastChannelKey != first.StableKey || !actual.ResumeLastChannelOnStartup || !actual.MiniPlayerAlwaysOnTop ||
+        !actual.RestoreUnexpectedSession || actual.Updates.Channel != AppUpdateChannel.Stable || !actual.Updates.AutomaticRollback)
         throw new InvalidOperationException("Startup resume or Mini Player preferences did not persist.");
     if (actual.RecentChannelKeys.Count != 2 || actual.RecentChannelKeys[0] != distinct.StableKey ||
         !actual.ChannelProfiles.TryGetValue(first.StableKey, out var channelProfile) ||
@@ -285,7 +297,8 @@ try
         !actual.SignalRouting.FeedHealth.TryGetValue(first.StableKey, out var persistedSignalHealth) ||
         persistedSignalHealth.Preference != SignalFeedPreference.Preferred || persistedSignalHealth.SuccessfulStarts != 9 ||
         persistedSignalHealth.FailedStarts != 1 || persistedSignalHealth.LastResolutionHeight != 1080 ||
-        persistedSignalHealth.LastInputBitrateMbps != 7.4)
+        persistedSignalHealth.LastInputBitrateMbps != 7.4 || actual.SignalRouting.ManualRoutes.Count != 1 ||
+        actual.SignalRouting.ManualRoutes[0].FeedKeys.Count != 2 || actual.SignalRouting.SeparatedFeedKeys.Count != 1)
         throw new InvalidOperationException("Smart signal preferences or private feed history did not persist.");
     if (actual.PlaylistHealth.ChannelCount != 2 || actual.PlaylistHealth.AddedChannels != 1 ||
         actual.PlaylistHealth.LastSuccessUtc is null)
@@ -475,6 +488,59 @@ try
     if (SmartSignalRoutingPolicy.ParseResolutionHeight("3840×2160") != 2160 ||
         SmartSignalRoutingPolicy.ParseResolutionHeight("1080p") != 1080)
         throw new InvalidOperationException("Signal quality resolution parsing failed.");
+
+    var manualRouting = new SignalRoutingPreferences();
+    SmartSignalRoutingPolicy.LinkFeedToRoute(manualRouting, worldNewsRoute, unrelatedFeed);
+    var manuallyLinkedRoutes = SmartSignalRoutingPolicy.BuildRoutes([first, alternateFeed, unrelatedFeed], manualRouting);
+    if (manuallyLinkedRoutes.Count != 1 || manuallyLinkedRoutes[0].FeedCount != 3)
+        throw new InvalidOperationException("The manual Signal Route editor did not combine selected feeds.");
+    if (!SmartSignalRoutingPolicy.ToggleFeedSeparation(manualRouting, unrelatedFeed))
+        throw new InvalidOperationException("The manual Signal Route editor did not mark a feed as separate.");
+    var manuallySeparatedRoutes = SmartSignalRoutingPolicy.BuildRoutes([first, alternateFeed, unrelatedFeed], manualRouting);
+    if (manuallySeparatedRoutes.Count != 2 || manuallySeparatedRoutes.Single(route => route.Feeds.Contains(unrelatedFeed)).FeedCount != 1)
+        throw new InvalidOperationException("A manually separated feed was regrouped automatically.");
+
+    var catchupM3u = """
+        #EXTM3U url-tvg="https://guide.invalid/guide.xml"
+        #EXTINF:-1 tvg-id="archive.news" tvg-name="Archive News" group-title="News" catchup="default" catchup-days="7" catchup-correction="1" catchup-source="https://archive.invalid/replay?start={utc}&stop={utcend}&duration={duration}",Archive News
+        https://live.invalid/archive-news.ts
+        """;
+    await using var catchupStream = new MemoryStream(Encoding.UTF8.GetBytes(catchupM3u));
+    var catchupPlaylist = await new M3uPlaylistParser().ParseAsync(catchupStream, "Catch-up probe", "memory");
+    var catchupChannel = catchupPlaylist.Channels.Single();
+    var replayStart = DateTimeOffset.UtcNow.AddHours(-2);
+    var replayProgramme = new EpgProgram(
+        "archive.news", "Archived Bulletin", null, "News", replayStart, replayStart.AddMinutes(30));
+    var replayChannel = CatchupReplayPolicy.CreateReplayChannel(catchupChannel, replayProgramme);
+    if (!catchupChannel.HasCatchup || catchupChannel.CatchupDays != 7 || catchupChannel.CatchupCorrectionMinutes != 60 ||
+        replayChannel.Kind != ChannelKind.Replay || !replayChannel.Url.Contains("duration=1800", StringComparison.Ordinal) ||
+        replayChannel.Url.Contains("{utc}", StringComparison.OrdinalIgnoreCase))
+        throw new InvalidOperationException("M3U catch-up metadata or replay URL expansion failed.");
+
+    var catchupHealth = ChannelHealthPolicy.Analyze(
+        SmartSignalRoutingPolicy.BuildRoutes([catchupChannel]),
+        new SignalRoutingPreferences(),
+        _ => true);
+    if (catchupHealth.ReplayReady != 1 || catchupHealth.Rows.Single().HasReplay == false || catchupHealth.MissingLogo != 1)
+        throw new InvalidOperationException("Channel Health Center replay or metadata analysis failed.");
+
+    var sessionJournalPath = Path.Combine(testRoot, "session-journal.json");
+    var interruptedService = new SessionRecoveryService(sessionJournalPath);
+    var sessionStart = new SessionRecoverySnapshot(
+        true, Guid.Empty, DateTimeOffset.UtcNow, first.StableKey, "Watch", string.Empty, string.Empty,
+        "All", DateTimeOffset.UtcNow, true, false);
+    if (await interruptedService.BeginAsync(sessionStart) is not null)
+        throw new InvalidOperationException("A new session was incorrectly reported as interrupted.");
+    await interruptedService.HeartbeatAsync(sessionStart with { Workspace = "Guide", GuideSearch = "evening" });
+    var recoveringService = new SessionRecoveryService(sessionJournalPath);
+    var recoveredSession = await recoveringService.BeginAsync(sessionStart);
+    if (recoveredSession?.Workspace != "Guide" || recoveredSession.GuideSearch != "evening" || recoveredSession.ChannelKey != first.StableKey)
+        throw new InvalidOperationException("Interrupted session state was not recovered from the journal.");
+    await recoveringService.CompleteAsync(sessionStart);
+    var cleanRestartService = new SessionRecoveryService(sessionJournalPath);
+    if (await cleanRestartService.BeginAsync(sessionStart) is not null)
+        throw new InvalidOperationException("A cleanly closed session was incorrectly recovered.");
+    await cleanRestartService.CompleteAsync(sessionStart);
 
     var signalGuideNow = DateTimeOffset.UtcNow;
     var primaryProgramme = new EpgProgram("world.news", "World Report", null, "News", signalGuideNow.AddMinutes(-20), signalGuideNow.AddMinutes(10));
@@ -1219,8 +1285,12 @@ try
     Console.WriteLine("3.6-to-3.7 playlist source migration: PASS");
     Console.WriteLine("Multi-source normalization, ordering, provenance, and exact deduplication: PASS");
     Console.WriteLine("Equivalent-feed logical channel matching: PASS");
+    Console.WriteLine("Manual Signal Route linking and separation: PASS");
     Console.WriteLine("Signal quality scoring, preference, exclusion, and failover selection: PASS");
     Console.WriteLine("Unified duplicate-feed guide schedule: PASS");
+    Console.WriteLine("M3U and Xtream catch-up replay URL expansion: PASS");
+    Console.WriteLine("Channel Health Center metadata and route analysis: PASS");
+    Console.WriteLine("Interrupted session journal and clean-close recovery: PASS");
     Console.WriteLine("Per-source startup refresh, offline fallback isolation, and unified recovery: PASS");
     Console.WriteLine("Reconnect preferences: PASS");
     Console.WriteLine("Playlist refresh status: PASS");
@@ -1270,6 +1340,7 @@ try
     Console.WriteLine("Privacy-filtered diagnostics bundle: PASS");
     Console.WriteLine("Nearby unpaired wireless-display casting: PASS");
     Console.WriteLine("Public update channel configuration: PASS");
+    Console.WriteLine("Stable/Preview update and automatic rollback preferences: PASS");
     return 0;
 }
 catch (Exception exception)

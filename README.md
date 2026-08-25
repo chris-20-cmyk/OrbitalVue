@@ -2,6 +2,15 @@
 
 StreamVue is a Windows-native IPTV player built with .NET, WPF, LibVLCSharp, the VideoLAN playback engine, and Velopack packaging.
 
+## 4.0 production resilience
+
+- Stable and Preview release channels with one-package last-known-good rollback if a newly installed build cannot open successfully
+- A manual Signal Route editor that links missed duplicate feeds or permanently keeps an incorrect match separate across playlist refreshes
+- M3U `catchup`, `catchup-source`, `catchup-days`, `timeshift`, and correction parsing plus Xtream TV Archive replay from past Guide programmes
+- A searchable Channel Health Center for guide gaps, missing artwork, observed weak feeds, duplicate routes, and replay-ready channels
+- Interrupted-session recovery for the active channel, Watch/Guide/Favorites/Multiview workspace, searches, guide window, layout, and fullscreen state
+- Thread-safe single-instance coordination so the background recorder remains authoritative across app activation and async shutdown paths
+
 ## 3.9 smart signal routing
 
 - Equivalent live feeds from different providers appear as one logical channel while every underlying stream remains available privately
@@ -72,7 +81,8 @@ StreamVue is a Windows-native IPTV player built with .NET, WPF, LibVLCSharp, the
 - Remote-style Up/Down channel surfing, Page Up/Down group surfing, and Backspace previous-channel recall
 - Per-channel playback profiles that remember buffer, decoder, aspect, deinterlace, track, and A/V sync choices
 - Channel-aware recovery panel with immediate retry and a one-click stable-buffer override
-- Playlist health center with refresh history, channel additions/removals, fallback status, and manual refresh
+- Playlist source health with refresh history, channel additions/removals, fallback status, and manual refresh
+- Full Channel Health Center with metadata gaps, observed reliability, duplicate routes, and replay coverage
 - Programme reminders from the guide with tune, snooze, and dismiss actions
 - Multiview 2.0 with drag/drop assignment, tile swapping, and named reusable layouts
 - Large M3U/M3U8 file and URL indexing
@@ -121,7 +131,7 @@ StreamVue is a Windows-native IPTV player built with .NET, WPF, LibVLCSharp, the
 - One-click stream stabilization that switches to the 8-second cache and retunes
 - Buffer overlays automatically dismiss at completed buffering and Playing states
 - Ctrl+Up/Down channel zapping and Ctrl+D favorite shortcut
-- Prominent in-app UPDATE button with release checks, download progress, verified in-place installation, and automatic restart
+- Prominent in-app UPDATE button with Stable/Preview channels, release checks, download progress, verified in-place installation, automatic restart, and failed-launch rollback
 - Silent startup release check with an UPDATE READY title-bar indicator
 - Modal-safe player layering so Settings, Update, and playlist dialogs always cover native video controls
 - Installer-aware Velopack startup and GitHub Releases update channel
@@ -138,7 +148,7 @@ The application targets Windows x64 and the current .NET 10 LTS release.
 ## Verification tools
 
 - `StreamVue.PlaylistProbe` validates large-list parsing and favorite-key uniqueness.
-- `StreamVue.FeatureProbe` checks background wake timers, episode-aware series rules, duplicate prevention, recovery timing, retention, timeshift policy, padding, priorities, storage guards, transport-stream capture and native playback, resume persistence, safe deletion, privacy-safe favorite identity, settings persistence, encrypted backup/restore, diagnostic redaction, nearby-display casting entry points, and Multiview policies.
+- `StreamVue.FeatureProbe` checks update preferences, manual routes, catch-up URL expansion, channel health, interrupted sessions, background wake timers, episode-aware series rules, duplicate prevention, recovery timing, retention, timeshift policy, storage guards, transport-stream capture and playback, encrypted backup/restore, diagnostics, casting, and Multiview policies.
 - `StreamVue.PlaybackProbe` checks native live playback and bounded reconnect behavior.
 
 ## Privacy

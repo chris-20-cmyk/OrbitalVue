@@ -11,7 +11,8 @@ public enum ChannelKind
     Live,
     Movie,
     Series,
-    Recording
+    Recording,
+    Replay
 }
 
 public sealed class ChannelItem : INotifyPropertyChanged
@@ -35,6 +36,11 @@ public sealed class ChannelItem : INotifyPropertyChanged
     public ChannelKind Kind { get; init; }
     public Guid? SourceId { get; init; }
     public string? SourceName { get; init; }
+    public string? CatchupMode { get; init; }
+    public string? CatchupSource { get; init; }
+    public int CatchupDays { get; init; }
+    public int CatchupCorrectionMinutes { get; init; }
+    public bool HasCatchup => Kind == ChannelKind.Live && !string.IsNullOrWhiteSpace(CatchupSource);
 
     public string? SignalRouteKey
     {
@@ -169,6 +175,7 @@ public sealed class ChannelItem : INotifyPropertyChanged
         ChannelKind.Movie => "MOVIE",
         ChannelKind.Series => "SERIES",
         ChannelKind.Recording => "RECORDING",
+        ChannelKind.Replay => "REPLAY",
         _ => "LIVE"
     };
 

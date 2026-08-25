@@ -53,6 +53,7 @@ public partial class MainWindow : Window
     private readonly PlaylistSourceRefreshService _playlistSourceRefresh;
     private readonly XtreamCredentialStore _xtreamCredentialStore = new();
     private readonly AppUpdateService _appUpdateService = new();
+    private readonly SessionRecoveryService _sessionRecoveryService = new();
     private readonly EpgSourceService _epgSourceService = new();
     private readonly EpgCacheStore _epgCache = new();
     private readonly GuideSourceStore _guideSourceStore = new();
@@ -78,6 +79,9 @@ public partial class MainWindow : Window
     private IReadOnlyDictionary<string, SignalRoute> _signalRoutesByKey = new Dictionary<string, SignalRoute>(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyDictionary<string, SignalRoute> _signalRoutesByFeedKey = new Dictionary<string, SignalRoute>(StringComparer.OrdinalIgnoreCase);
     private ICollectionView? _channelView;
+    private ICollectionView? _channelHealthView;
+    private IReadOnlyList<ChannelHealthRow> _channelHealthRows = [];
+    private ChannelHealthFilter _channelHealthFilter = ChannelHealthFilter.All;
     private CancellationTokenSource? _loadCancellation;
     private CancellationTokenSource? _updateCancellation;
     private CancellationTokenSource? _guideCancellation;
@@ -117,10 +121,13 @@ public partial class MainWindow : Window
     private bool _multiviewMode;
     private bool _isMiniPlayer;
     private bool _resumeLastChannelPending;
+    private SessionRecoverySnapshot? _pendingSessionRecovery;
+    private DateTimeOffset _lastSessionHeartbeatUtc = DateTimeOffset.MinValue;
     private bool _synchronizingGuideScroll;
     private string _trackControlSignature = string.Empty;
     private string _learnedProfileSignature = string.Empty;
     private string? _selectedSignalRouteKey;
+    private IReadOnlyList<SignalRouteCandidate> _signalRouteCandidates = [];
     private readonly HashSet<string> _attemptedSignalFeedKeys = new(StringComparer.OrdinalIgnoreCase);
     private int _automaticSignalSwitches;
     private bool _signalSessionSuccessRecorded;
@@ -219,10 +226,12 @@ public partial class MainWindow : Window
             ? new Dictionary<string, ChannelPlaybackProfile>(StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, ChannelPlaybackProfile>(_settings.ChannelProfiles, StringComparer.OrdinalIgnoreCase);
         _settings.SignalRouting ??= new SignalRoutingPreferences();
+        _settings.Updates ??= new AppUpdatePreferences();
         _settings.SignalRouting.MaximumAutomaticSwitches = Math.Clamp(_settings.SignalRouting.MaximumAutomaticSwitches, 1, 8);
         _settings.SignalRouting.FeedHealth = _settings.SignalRouting.FeedHealth is null
             ? new Dictionary<string, SignalFeedHealth>(StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, SignalFeedHealth>(_settings.SignalRouting.FeedHealth, StringComparer.OrdinalIgnoreCase);
+        SmartSignalRoutingPolicy.NormalizeManualRoutes(_settings.SignalRouting);
         _settings.PlaylistHealth ??= new PlaylistHealthPreferences();
         _settings.ProgramReminders ??= [];
         _settings.SmartDvr ??= new SmartDvrPreferences();
@@ -254,10 +263,16 @@ public partial class MainWindow : Window
         _displayRefreshRate = new DisplayRefreshRateController(new WindowInteropHelper(this).Handle);
         _telemetryTimer.Start();
         _windowReady = true;
+        if (!_automationRun)
+        {
+            _pendingSessionRecovery = await _sessionRecoveryService.BeginAsync(CreateSessionSnapshot());
+            if (!_settings.RestoreUnexpectedSession) _pendingSessionRecovery = null;
+        }
         if (playlistSourcesMigrated) await _settingsStore.SaveAsync(_settings);
         if (_backgroundLaunch) _ = Dispatcher.BeginInvoke(() => HideToBackground(showNotice: false), DispatcherPriority.Background);
 
         var commandLineArguments = Environment.GetCommandLineArgs().Skip(1).ToArray();
+        await HandleUpdateRecoveryLaunchAsync(commandLineArguments);
         var fullscreenWindowSmokeArgumentIndex = Array.FindIndex(commandLineArguments, argument => argument == "--smoke-fullscreen-window");
         if (fullscreenWindowSmokeArgumentIndex >= 0 && fullscreenWindowSmokeArgumentIndex + 1 < commandLineArguments.Length)
         {
@@ -588,6 +603,22 @@ public partial class MainWindow : Window
             return;
         }
 
+        var channelHealthCaptureArgumentIndex = Array.FindIndex(commandLineArguments, argument => argument == "--capture-channel-health-ui");
+        if (channelHealthCaptureArgumentIndex >= 0 && channelHealthCaptureArgumentIndex + 1 < commandLineArguments.Length)
+        {
+            PrepareSignalRoutingPreview();
+            ApplyGuideSchedule(CreatePreviewGuideSchedule(_channels.Take(1).ToList()));
+            if (commandLineArguments.Contains("--maximized", StringComparer.OrdinalIgnoreCase))
+                WindowState = WindowState.Maximized;
+            OpenChannelHealth_Click(this, new RoutedEventArgs());
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
+            await Task.Delay(500);
+            CaptureWindow(commandLineArguments[channelHealthCaptureArgumentIndex + 1]);
+            Close();
+            Application.Current.Shutdown(0);
+            return;
+        }
+
         var dvrCaptureArgumentIndex = Array.FindIndex(commandLineArguments, argument => argument == "--capture-dvr-ui");
         if (dvrCaptureArgumentIndex >= 0 && dvrCaptureArgumentIndex + 1 < commandLineArguments.Length)
         {
@@ -718,7 +749,8 @@ public partial class MainWindow : Window
             : null;
         var commandLineFile = commandLineArguments.FirstOrDefault(argument =>
             File.Exists(argument) && IsPlaylistFileExtension(Path.GetExtension(argument)));
-        _resumeLastChannelPending = _settings.ResumeLastChannelOnStartup && string.IsNullOrWhiteSpace(commandLineFile);
+        if (!string.IsNullOrWhiteSpace(commandLineFile)) _pendingSessionRecovery = null;
+        _resumeLastChannelPending = (_settings.ResumeLastChannelOnStartup || _pendingSessionRecovery is not null) && string.IsNullOrWhiteSpace(commandLineFile);
 
         if (!string.IsNullOrWhiteSpace(commandLineFile))
         {
@@ -1186,6 +1218,89 @@ public partial class MainWindow : Window
 
     private void ClosePlaylistHealth_Click(object sender, RoutedEventArgs e) => HideModal(PlaylistHealthOverlay);
 
+    private void OpenChannelHealth_Click(object sender, RoutedEventArgs e)
+    {
+        if (_signalRoutes.Count == 0)
+        {
+            FooterStatusDot.Fill = WarningBrush;
+            FooterStatusText.Text = "Connect a playlist before opening channel health";
+            return;
+        }
+
+        var summary = ChannelHealthPolicy.Analyze(
+            _signalRoutes,
+            _settings.SignalRouting,
+            channel => GetGuideProgrammes(channel).Count > 0);
+        _channelHealthRows = summary.Rows;
+        _channelHealthView = CollectionViewSource.GetDefaultView(_channelHealthRows);
+        _channelHealthView.Filter = FilterChannelHealth;
+        ChannelHealthList.ItemsSource = _channelHealthView;
+        HealthAttentionCount.Text = summary.NeedsAttention.ToString("N0");
+        HealthGuideCount.Text = summary.MissingGuide.ToString("N0");
+        HealthDuplicateCount.Text = summary.Duplicates.ToString("N0");
+        HealthReplayCount.Text = summary.ReplayReady.ToString("N0");
+        HealthChannelSearchBox.Clear();
+        HealthChannelFilterBox.SelectedIndex = 0;
+        _channelHealthFilter = ChannelHealthFilter.All;
+        RefreshChannelHealthView();
+        ShowModal(ChannelHealthOverlay);
+    }
+
+    private void CloseChannelHealth_Click(object sender, RoutedEventArgs e) => HideModal(ChannelHealthOverlay);
+
+    private void HealthChannelSearchBox_TextChanged(object sender, TextChangedEventArgs e) => RefreshChannelHealthView();
+
+    private void HealthChannelFilterBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (HealthChannelFilterBox.SelectedItem is ComboBoxItem { Tag: string tag } &&
+            Enum.TryParse<ChannelHealthFilter>(tag, true, out var filter))
+            _channelHealthFilter = filter;
+        RefreshChannelHealthView();
+    }
+
+    private bool FilterChannelHealth(object item)
+    {
+        if (item is not ChannelHealthRow row || !ChannelHealthPolicy.Matches(row, _channelHealthFilter)) return false;
+        var query = HealthChannelSearchBox.Text.Trim();
+        return query.Length == 0 || row.SearchText.Contains(query.ToUpperInvariant(), StringComparison.Ordinal);
+    }
+
+    private void RefreshChannelHealthView()
+    {
+        if (ChannelHealthList is null) return;
+        _channelHealthView?.Refresh();
+        var visible = ChannelHealthList.Items.Count;
+        HealthVisibleCount.Text = $"{visible:N0} OF {_channelHealthRows.Count:N0} LIVE CHANNELS";
+    }
+
+    private void TuneChannelHealth_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not ChannelHealthRow row) return;
+        HideModal(ChannelHealthOverlay);
+        WatchFromGuide(row.Channel);
+    }
+
+    private async void ReviewChannelHealth_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not ChannelHealthRow row) return;
+        if (row.MissingGuide)
+        {
+            HideModal(ChannelHealthOverlay);
+            await OpenMappingEditorAsync(row.Channel);
+            return;
+        }
+        if (row.HasDuplicates || row.Unreliable)
+        {
+            OpenSignalRoutingPanel(row.RouteKey);
+            return;
+        }
+        HideModal(ChannelHealthOverlay);
+        FooterStatusDot.Fill = row.MissingLogo ? WarningBrush : LiveBrush;
+        FooterStatusText.Text = row.MissingLogo
+            ? $"{row.ChannelName} has no logo in the connected playlist"
+            : $"{row.ChannelName} has no route issue that needs action";
+    }
+
     private async void RefreshPlaylistNow_Click(object sender, RoutedEventArgs e)
     {
         if (_isLoading) return;
@@ -1246,7 +1361,8 @@ public partial class MainWindow : Window
         _multiviewSession?.Dispose();
         _multiviewSession = null;
         _allChannels = result.Channels;
-        _signalRoutes = SmartSignalRoutingPolicy.BuildRoutes(_allChannels);
+        _signalRouteCandidates = [];
+        _signalRoutes = SmartSignalRoutingPolicy.BuildRoutes(_allChannels, _settings.SignalRouting);
         _signalRoutesByKey = _signalRoutes.ToDictionary(route => route.Key, StringComparer.OrdinalIgnoreCase);
         _signalRoutesByFeedKey = _signalRoutes
             .SelectMany(route => route.Feeds.Select(feed => new KeyValuePair<string, SignalRoute>(feed.StableKey, route)))
@@ -1335,19 +1451,75 @@ public partial class MainWindow : Window
     {
         if (!_resumeLastChannelPending) return;
         _resumeLastChannelPending = false;
-        if (string.IsNullOrWhiteSpace(_settings.LastChannelKey)) return;
+        var recovery = _pendingSessionRecovery;
+        var storedKey = recovery?.ChannelKey ?? _settings.LastChannelKey;
 
-        var channel = _channels.FirstOrDefault(item =>
-            string.Equals(item.StableKey, _settings.LastChannelKey, StringComparison.OrdinalIgnoreCase));
-        if (channel is null && _signalRoutesByFeedKey.TryGetValue(_settings.LastChannelKey, out var legacyRoute))
+        var channel = string.IsNullOrWhiteSpace(storedKey) ? null : _channels.FirstOrDefault(item =>
+            string.Equals(item.StableKey, storedKey, StringComparison.OrdinalIgnoreCase));
+        if (channel is null && !string.IsNullOrWhiteSpace(storedKey) && _signalRoutesByFeedKey.TryGetValue(storedKey, out var legacyRoute))
             channel = legacyRoute.Representative;
-        if (channel is null) return;
+        if (channel is not null)
+        {
+            ChannelList.SelectedItem = channel;
+            ChannelList.ScrollIntoView(channel);
+            if (!ReferenceEquals(_currentChannel, channel)) TuneChannel(channel);
+        }
 
-        ChannelList.SelectedItem = channel;
-        ChannelList.ScrollIntoView(channel);
-        if (!ReferenceEquals(_currentChannel, channel)) TuneChannel(channel);
-        FooterStatusDot.Fill = LiveBrush;
-        FooterStatusText.Text = $"Reopened your last channel • {channel.Name}";
+        if (recovery is not null)
+        {
+            RestoreInterruptedWorkspace(recovery);
+            _pendingSessionRecovery = null;
+            FooterStatusDot.Fill = WarningBrush;
+            FooterStatusText.Text = channel is null
+                ? "Recovered the workspace from the interrupted session"
+                : $"Recovered interrupted session • {channel.Name}";
+        }
+        else if (channel is not null)
+        {
+            FooterStatusDot.Fill = LiveBrush;
+            FooterStatusText.Text = $"Reopened your last channel • {channel.Name}";
+        }
+    }
+
+    private void RestoreInterruptedWorkspace(SessionRecoverySnapshot recovery)
+    {
+        SearchBox.Text = recovery.ChannelSearch;
+        GuideSearchBox.Text = recovery.GuideSearch;
+        SelectComboByTag(GuideFilterBox, recovery.GuideFilter);
+        _guideWindowStart = recovery.GuideWindowStart < DateTimeOffset.UtcNow.AddDays(-14) ||
+                            recovery.GuideWindowStart > DateTimeOffset.UtcNow.AddDays(14)
+            ? AlignTimelineStart(DateTimeOffset.UtcNow)
+            : recovery.GuideWindowStart;
+        SetGuideViewMode(recovery.GuideTimelineMode);
+        switch (recovery.Workspace)
+        {
+            case "Guide": GuideNavigation.IsChecked = true; break;
+            case "Multiview": MultiviewNavigation.IsChecked = true; break;
+            case "Favorites": FavoritesNavigation.IsChecked = true; break;
+            default: WatchNavigation.IsChecked = true; break;
+        }
+        if (recovery.WasFullscreen && !_backgroundLaunch) EnterFullscreen();
+    }
+
+    private SessionRecoverySnapshot CreateSessionSnapshot()
+    {
+        var workspace = _multiviewMode ? "Multiview"
+            : GuideWorkspace.Visibility == Visibility.Visible ? "Guide"
+            : _favoritesOnly ? "Favorites"
+            : "Watch";
+        var guideFilter = (GuideFilterBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "All";
+        return new SessionRecoverySnapshot(
+            true,
+            Guid.Empty,
+            DateTimeOffset.UtcNow,
+            GetLogicalChannelKey(_currentChannel) ?? _settings.LastChannelKey,
+            workspace,
+            SearchBox.Text,
+            GuideSearchBox.Text,
+            guideFilter,
+            _guideWindowStart,
+            _guideTimelineMode,
+            _isFullscreen);
     }
 
     private async Task ConfigureGuideForPlaylistAsync(PlaylistResult playlist, string sourceType, string sourceValue)
@@ -1815,7 +1987,7 @@ public partial class MainWindow : Window
         var regionalSource = Guid.NewGuid();
         var previewChannels = new List<ChannelItem>
         {
-            new() { Number = 1, Name = "World News HD", Group = "Newsroom", Url = "https://primary.invalid/live/world-news.ts", TvgId = "world.news", Kind = ChannelKind.Live, SourceId = primarySource, SourceName = "Primary lineup" },
+            new() { Number = 1, Name = "World News HD", Group = "Newsroom", Url = "https://primary.invalid/live/world-news.ts", TvgId = "world.news", LogoUrl = "https://assets.invalid/world-news.png", Kind = ChannelKind.Live, SourceId = primarySource, SourceName = "Primary lineup", CatchupMode = "default", CatchupSource = "https://primary.invalid/replay?start={utc}&duration={duration}", CatchupDays = 7 },
             new() { Number = 2, Name = "US: World News FHD (D)", Group = "US News", Url = "https://backup.invalid/live/world-news.m3u8", TvgId = "world.news", Kind = ChannelKind.Live, SourceId = backupSource, SourceName = "Fiber backup" },
             new() { Number = 3, Name = "World News SD", Group = "Regional News", Url = "https://regional.invalid/live/world-news.ts", TvgId = "world.news", Kind = ChannelKind.Live, SourceId = regionalSource, SourceName = "Regional fallback" },
             new() { Number = 4, Name = "Stadium Sports HD", Group = "Live Sports", Url = "https://primary.invalid/live/stadium.ts", TvgId = "stadium.sports", Kind = ChannelKind.Live, SourceId = primarySource, SourceName = "Primary lineup" },
@@ -2359,7 +2531,11 @@ public partial class MainWindow : Window
         TuneChannel(channel);
     }
 
-    private void TuneChannel(ChannelItem channel, string? recordingPath = null, ChannelItem? requestedSignalFeed = null)
+    private void TuneChannel(
+        ChannelItem channel,
+        string? recordingPath = null,
+        ChannelItem? requestedSignalFeed = null,
+        bool rememberChannel = true)
     {
         var route = string.IsNullOrWhiteSpace(recordingPath) ? GetSignalRoute(channel) : null;
         var logicalChannel = route?.Representative ?? channel;
@@ -2374,7 +2550,7 @@ public partial class MainWindow : Window
         _currentRecordingPath = string.IsNullOrWhiteSpace(recordingPath) ? null : Path.GetFullPath(recordingPath);
         _recordingResumeApplied = _currentRecordingPath is null;
         _currentChannel = logicalChannel;
-        if (_currentRecordingPath is null) _settings.LastChannelKey = logicalChannel.StableKey;
+        if (_currentRecordingPath is null && rememberChannel) _settings.LastChannelKey = logicalChannel.StableKey;
         _learnedProfileSignature = string.Empty;
         NowPlayingHeading.Text = logicalChannel.Name;
         NowPlayingSubheading.Text = logicalChannel.Group;
@@ -2405,7 +2581,7 @@ public partial class MainWindow : Window
             ResetSignalSessionCounters();
             _playback?.Play(logicalChannel, profile);
         }
-        if (_currentRecordingPath is null) TouchRecentChannel(logicalChannel);
+        if (_currentRecordingPath is null && rememberChannel) TouchRecentChannel(logicalChannel);
         UpdateSignalRouteAvailability();
         UpdateFullscreenHud();
     }
@@ -2659,6 +2835,12 @@ public partial class MainWindow : Window
 
     private void UpdateTelemetry(object? sender, EventArgs e)
     {
+        var now = DateTimeOffset.UtcNow;
+        if (!_automationRun && now - _lastSessionHeartbeatUtc >= TimeSpan.FromSeconds(20))
+        {
+            _lastSessionHeartbeatUtc = now;
+            _ = _sessionRecoveryService.HeartbeatAsync(CreateSessionSnapshot());
+        }
         if (_guideSchedule is not null && DateTimeOffset.UtcNow - _lastGuidePresentationUpdate > TimeSpan.FromMinutes(1))
             ApplyGuideSchedule(_guideSchedule);
         if (_playback is null) return;
@@ -2936,7 +3118,7 @@ public partial class MainWindow : Window
         CatalogPanel.Visibility = showGuide ? Visibility.Collapsed : Visibility.Visible;
         PlayerPanel.Visibility = showGuide ? Visibility.Collapsed : Visibility.Visible;
         InspectorPanel.Visibility = showGuide ? Visibility.Collapsed : Visibility.Visible;
-        _playerChromeSuppressed = showGuide || ImportOverlay.Visibility == Visibility.Visible || PlaylistHealthOverlay.Visibility == Visibility.Visible ||
+        _playerChromeSuppressed = showGuide || ImportOverlay.Visibility == Visibility.Visible || PlaylistHealthOverlay.Visibility == Visibility.Visible || ChannelHealthOverlay.Visibility == Visibility.Visible ||
                                   SettingsOverlay.Visibility == Visibility.Visible || UpdateOverlay.Visibility == Visibility.Visible ||
                                   CastOverlay.Visibility == Visibility.Visible || DvrOverlay.Visibility == Visibility.Visible ||
                                   SignalRoutingOverlay.Visibility == Visibility.Visible || MappingOverlay.Visibility == Visibility.Visible;
@@ -3334,13 +3516,45 @@ public partial class MainWindow : Window
             _ = OpenMappingEditorAsync(block.Channel);
             return;
         }
+        if (block.CanReplay)
+        {
+            PlayCatchupProgramme(block);
+            return;
+        }
         WatchFromGuide(block.Channel);
     }
 
     private void GuideContextWatch_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is GuideProgrammeBlock block)
-            GuideProgramme_Click(new Button { DataContext = block }, e);
+            WatchFromGuide(block.Channel);
+    }
+
+    private void GuideContextReplay_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is GuideProgrammeBlock { CanReplay: true } block)
+            PlayCatchupProgramme(block);
+    }
+
+    private void PlayCatchupProgramme(GuideProgrammeBlock block)
+    {
+        if (block.Programme is null) return;
+        try
+        {
+            if (_multiviewMode) SetMultiviewMode(false);
+            var replay = CatchupReplayPolicy.CreateReplayChannel(block.Channel, block.Programme);
+            WatchNavigation.IsChecked = true;
+            ChannelList.SelectedItem = null;
+            TuneChannel(replay, rememberChannel: false);
+            _previousChannel = block.Channel;
+            FooterStatusDot.Fill = LiveBrush;
+            FooterStatusText.Text = $"Replay • {block.Programme.Title} • Backspace returns to live TV";
+        }
+        catch (InvalidOperationException exception)
+        {
+            FooterStatusDot.Fill = WarningBrush;
+            FooterStatusText.Text = exception.Message;
+        }
     }
 
     private async void GuideContextReminder_Click(object sender, RoutedEventArgs e)
@@ -3479,10 +3693,10 @@ public partial class MainWindow : Window
 
     private void UpdateCurrentFavoriteButton(ChannelItem? channel)
     {
-        CurrentFavoriteButton.Visibility = channel is null || channel.Kind == ChannelKind.Recording
+        CurrentFavoriteButton.Visibility = channel is null || channel.Kind is ChannelKind.Recording or ChannelKind.Replay
             ? Visibility.Collapsed
             : Visibility.Visible;
-        if (channel is null || channel.Kind == ChannelKind.Recording) return;
+        if (channel is null || channel.Kind is ChannelKind.Recording or ChannelKind.Replay) return;
         CurrentFavoriteButton.Content = channel.IsFavorite ? "★ Favorited" : "☆ Add favorite";
     }
 
@@ -3500,11 +3714,14 @@ public partial class MainWindow : Window
 
     private void OpenSignalRouting_Click(object sender, RoutedEventArgs e) => OpenSignalRoutingPanel();
 
-    private void OpenSignalRoutingPanel()
+    private void OpenSignalRoutingPanel(string? preferredRouteKey = null)
     {
         var currentRoute = GetSignalRoute(_currentChannel);
         var routes = _signalRoutes
-            .Where(route => route.HasAlternates || ReferenceEquals(route, currentRoute) || route.Feeds.Any(feed =>
+            .Where(route => route.HasAlternates || ReferenceEquals(route, currentRoute) ||
+                route.Key.Equals(preferredRouteKey, StringComparison.OrdinalIgnoreCase) ||
+                route.Feeds.Any(feed => _settings.SignalRouting.SeparatedFeedKeys.Contains(feed.StableKey, StringComparer.OrdinalIgnoreCase)) ||
+                route.Feeds.Any(feed =>
                 _settings.SignalRouting.FeedHealth.TryGetValue(feed.StableKey, out var health) && health.CompletedStarts > 0))
             .OrderBy(route => route.Representative.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(route => route.Representative.Group, StringComparer.OrdinalIgnoreCase)
@@ -3520,7 +3737,19 @@ public partial class MainWindow : Window
         SignalRouteChannelBox.ItemsSource = null;
         SignalRouteChannelBox.ItemsSource = routes;
         SignalRoutingAutoCheck.IsChecked = _settings.SignalRouting.AutomaticFailover;
-        var selectedKey = currentRoute?.Key ?? _selectedSignalRouteKey ?? routes[0].RouteKey;
+        if (_signalRouteCandidates.Count == 0)
+            _signalRouteCandidates = _allChannels
+                .Where(channel => channel.Kind == ChannelKind.Live)
+                .OrderBy(channel => channel.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(channel => SmartSignalRoutingPolicy.SourceLabel(channel), StringComparer.OrdinalIgnoreCase)
+                .Select(channel => new SignalRouteCandidate(
+                    channel,
+                    $"{channel.Name}  •  {channel.Group}  •  {SmartSignalRoutingPolicy.SourceLabel(channel)}"))
+                .ToList();
+        SignalRouteCandidateBox.ItemsSource = _signalRouteCandidates;
+        SignalRouteCandidateBox.SelectedItem = null;
+        SignalRouteCandidateBox.Text = string.Empty;
+        var selectedKey = preferredRouteKey ?? currentRoute?.Key ?? _selectedSignalRouteKey ?? routes[0].RouteKey;
         SignalRouteChannelBox.SelectedItem = routes.FirstOrDefault(route => route.RouteKey.Equals(selectedKey, StringComparison.OrdinalIgnoreCase)) ?? routes[0];
         ShowModal(SignalRoutingOverlay);
         RefreshSignalRoutingPanel(selectedKey);
@@ -3659,6 +3888,55 @@ public partial class MainWindow : Window
         await _settingsStore.SaveAsync(_settings);
         RefreshSignalRoutingPanel(route.Key);
         FooterStatusText.Text = $"Signal history reset • {route.Representative.Name}";
+    }
+
+    private async void LinkSignalFeed_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_selectedSignalRouteKey) ||
+            !_signalRoutesByKey.TryGetValue(_selectedSignalRouteKey, out var route)) return;
+        var candidate = SignalRouteCandidateBox.SelectedItem as SignalRouteCandidate ??
+                        _signalRouteCandidates.FirstOrDefault(item =>
+                            item.DisplayText.Equals(SignalRouteCandidateBox.Text.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (candidate is null)
+        {
+            FooterStatusDot.Fill = WarningBrush;
+            FooterStatusText.Text = "Choose a feed from the route-editor search results first";
+            return;
+        }
+        if (route.Feeds.Any(feed => feed.StableKey.Equals(candidate.Feed.StableKey, StringComparison.OrdinalIgnoreCase)))
+        {
+            FooterStatusDot.Fill = WarningBrush;
+            FooterStatusText.Text = "That feed is already part of the selected channel route";
+            return;
+        }
+
+        SmartSignalRoutingPolicy.LinkFeedToRoute(_settings.SignalRouting, route, candidate.Feed);
+        await _settingsStore.SaveAsync(_settings);
+        RebuildManualSignalRoutes(candidate.Feed.StableKey);
+        FooterStatusDot.Fill = LiveBrush;
+        FooterStatusText.Text = $"Linked {candidate.Feed.Name} to {route.Representative.Name}";
+    }
+
+    private async void EditSignalRouteFeed_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not SignalFeedRow row) return;
+        var isSeparated = SmartSignalRoutingPolicy.ToggleFeedSeparation(_settings.SignalRouting, row.Feed);
+        await _settingsStore.SaveAsync(_settings);
+        RebuildManualSignalRoutes(row.Feed.StableKey);
+        FooterStatusDot.Fill = isSeparated ? WarningBrush : LiveBrush;
+        FooterStatusText.Text = isSeparated
+            ? $"{row.Feed.Name} will remain its own channel"
+            : $"Automatic channel matching restored for {row.Feed.Name}";
+    }
+
+    private void RebuildManualSignalRoutes(string focusFeedKey)
+    {
+        var channels = _allChannels;
+        var displayName = SourceNameText.Text;
+        var source = _activePlaylistSourceValue ?? "manual-signal-route";
+        ApplyPlaylist(new PlaylistResult(channels, displayName, source, DateTimeOffset.Now));
+        var focusRoute = _signalRoutesByFeedKey.GetValueOrDefault(focusFeedKey);
+        OpenSignalRoutingPanel(focusRoute?.Key);
     }
 
     private void CloseSignalRouting_Click(object sender, RoutedEventArgs e) => HideModal(SignalRoutingOverlay);
@@ -4363,6 +4641,7 @@ public partial class MainWindow : Window
         _settings.Playback.DeinterlaceMode = (DeinterlaceBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Auto";
         _settings.Playback.AudioDelayMilliseconds = (int)AudioDelaySlider.Value;
         _settings.ResumeLastChannelOnStartup = ResumeLastChannelCheck.IsChecked == true;
+        _settings.RestoreUnexpectedSession = UnexpectedSessionRecoveryCheck.IsChecked == true;
         _settings.MiniPlayerAlwaysOnTop = MiniPlayerTopmostCheck.IsChecked == true;
         await _settingsStore.SaveAsync(_settings);
         CacheValue.Text = $"{_settings.Playback.CacheMilliseconds / 1000d:0.0} seconds";
@@ -4393,6 +4672,7 @@ public partial class MainWindow : Window
         AudioDelaySlider.Value = _settings.Playback.AudioDelayMilliseconds;
         AudioDelayValue.Text = $"{_settings.Playback.AudioDelayMilliseconds:+0;-0;0} ms";
         ResumeLastChannelCheck.IsChecked = _settings.ResumeLastChannelOnStartup;
+        UnexpectedSessionRecoveryCheck.IsChecked = _settings.RestoreUnexpectedSession;
         MiniPlayerTopmostCheck.IsChecked = _settings.MiniPlayerAlwaysOnTop;
         UpdateSleepTimerStatus();
     }
@@ -4718,7 +4998,7 @@ public partial class MainWindow : Window
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(3));
-            var result = await _appUpdateService.CheckAsync();
+            var result = await _appUpdateService.CheckAsync(_settings.Updates.Channel);
             if (result.State == AppUpdateState.Available)
             {
                 UpdateNavigationText.Text = "UPDATE READY";
@@ -4743,12 +5023,14 @@ public partial class MainWindow : Window
 
     private void OpenUpdateModal()
     {
+        SelectComboByTag(UpdateChannelBox, _settings.Updates.Channel.ToString());
+        UpdateRollbackCheck.IsChecked = _settings.Updates.AutomaticRollback;
         CurrentVersionText.Text = _appUpdateService.CurrentVersion;
         UpdateStateBadge.Background = new SolidColorBrush(Color.FromRgb(23, 54, 47));
         UpdateStateBadgeText.Foreground = LiveBrush;
         UpdateStateBadgeText.Text = "READY";
         UpdateStatusText.Text = "Ready to check for a new version";
-        UpdateDetailText.Text = "StreamVue checks the official public release feed. Your playlists and settings stay on this PC.";
+        UpdateDetailText.Text = $"Checking the {UpdateChannelLabel} channel. Your playlists and settings stay on this PC.";
         UpdateProgress.Visibility = Visibility.Collapsed;
         UpdateProgress.IsIndeterminate = false;
         UpdateProgress.Value = 0;
@@ -4776,13 +5058,13 @@ public partial class MainWindow : Window
         SetUpdateBusy(true);
         UpdateStateBadgeText.Text = "CHECKING";
         UpdateStatusText.Text = "Checking for updates…";
-        UpdateDetailText.Text = "Contacting the StreamVue release service.";
+        UpdateDetailText.Text = $"Contacting the StreamVue {UpdateChannelLabel} release service.";
         UpdateProgress.Visibility = Visibility.Visible;
         UpdateProgress.IsIndeterminate = true;
 
         try
         {
-            var result = await _appUpdateService.CheckAsync();
+            var result = await _appUpdateService.CheckAsync(_settings.Updates.Channel);
             switch (result.State)
             {
                 case AppUpdateState.Available:
@@ -4802,7 +5084,7 @@ public partial class MainWindow : Window
                     UpdateStateBadgeText.Foreground = new SolidColorBrush(Color.FromRgb(170, 182, 200));
                     UpdateStateBadgeText.Text = "CURRENT";
                     UpdateStatusText.Text = "You’re up to date";
-                    UpdateDetailText.Text = $"StreamVue {result.CurrentVersion} is the newest published version.";
+                    UpdateDetailText.Text = $"StreamVue {result.CurrentVersion} is the newest published {UpdateChannelLabel} version.";
                     UpdateActionButton.Content = "Check again";
                     break;
                 case AppUpdateState.DeveloperBuild:
@@ -4864,6 +5146,7 @@ public partial class MainWindow : Window
                     UpdateProgress.Value = progress;
                     UpdateDetailText.Text = $"Downloading and verifying the update • {progress}%";
                 }),
+                _settings.Updates.AutomaticRollback,
                 _updateCancellation.Token);
         }
         catch (OperationCanceledException)
@@ -4893,6 +5176,71 @@ public partial class MainWindow : Window
         UpdateActionButton.IsEnabled = !busy;
         UpdateCloseButton.IsEnabled = !busy;
         UpdateNavigationButton.IsEnabled = !busy;
+    }
+
+    private string UpdateChannelLabel => _settings.Updates.Channel == AppUpdateChannel.Stable ? "Stable" : "Preview";
+
+    private async void UpdateChannel_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_windowReady || UpdateChannelBox.SelectedItem is not ComboBoxItem { Tag: string tag } ||
+            !Enum.TryParse<AppUpdateChannel>(tag, true, out var channel) || _settings.Updates.Channel == channel) return;
+        _settings.Updates.Channel = channel;
+        await _settingsStore.SaveAsync(_settings);
+        _appUpdateService.ClearAvailableUpdate();
+        SetUpdateNavigationCurrent();
+        UpdateStatusText.Text = $"{UpdateChannelLabel} channel selected";
+        UpdateDetailText.Text = channel == AppUpdateChannel.Stable
+            ? "Stable installs only finished public releases. Choose Check for updates when you’re ready."
+            : "Preview includes the early builds used to review new StreamVue features. Choose Check for updates when you’re ready.";
+        UpdateActionButton.Content = "Check for updates";
+    }
+
+    private async void UpdateRollback_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_windowReady) return;
+        _settings.Updates.AutomaticRollback = UpdateRollbackCheck.IsChecked == true;
+        await _settingsStore.SaveAsync(_settings);
+    }
+
+    private async Task HandleUpdateRecoveryLaunchAsync(IReadOnlyList<string> arguments)
+    {
+        if (arguments.Contains("--update-rollback", StringComparer.OrdinalIgnoreCase))
+        {
+            var restored = await _appUpdateService.CompleteRollbackAsync();
+            if (restored is not null)
+            {
+                await _appUpdateService.ReadAndClearRecoveryNoticeAsync();
+                _settings.Updates.LastRollbackUtc = restored.RestoredUtc;
+                _settings.Updates.LastRollbackVersion = restored.RestoredVersion;
+                await _settingsStore.SaveAsync(_settings);
+                FooterStatusDot.Fill = WarningBrush;
+                FooterStatusText.Text = $"Update recovery restored StreamVue {restored.RestoredVersion}";
+            }
+            return;
+        }
+
+        var tokenIndex = arguments.ToList().FindIndex(argument => argument.Equals("--update-health-token", StringComparison.OrdinalIgnoreCase));
+        if (tokenIndex >= 0 && tokenIndex + 1 < arguments.Count)
+        {
+            var token = arguments[tokenIndex + 1];
+            _ = ConfirmUpdateHealthAfterStartupAsync(token);
+            return;
+        }
+
+        var priorNotice = await _appUpdateService.ReadAndClearRecoveryNoticeAsync();
+        if (priorNotice is not null)
+        {
+            FooterStatusDot.Fill = WarningBrush;
+            FooterStatusText.Text = $"Update recovery restored StreamVue {priorNotice.RestoredVersion}";
+        }
+    }
+
+    private async Task ConfirmUpdateHealthAfterStartupAsync(string healthToken)
+    {
+        await Task.Delay(TimeSpan.FromSeconds(12));
+        if (!_windowReady || Application.Current.Dispatcher.HasShutdownStarted) return;
+        await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+        await _appUpdateService.ConfirmHealthyLaunchAsync(healthToken);
     }
 
     private void OpenCast_Click(object sender, RoutedEventArgs e) => OpenCastPanel();
@@ -6441,6 +6789,7 @@ public partial class MainWindow : Window
             else if (MappingOverlay.Visibility == Visibility.Visible) HideModal(MappingOverlay);
             else if (ImportOverlay.Visibility == Visibility.Visible && !_isLoading) HideModal(ImportOverlay);
             else if (PlaylistHealthOverlay.Visibility == Visibility.Visible && !_isLoading) HideModal(PlaylistHealthOverlay);
+            else if (ChannelHealthOverlay.Visibility == Visibility.Visible) HideModal(ChannelHealthOverlay);
             else if (SettingsOverlay.Visibility == Visibility.Visible) HideModal(SettingsOverlay);
             else if (UpdateOverlay.Visibility == Visibility.Visible && !_updateBusy) HideModal(UpdateOverlay);
             else if (CastOverlay.Visibility == Visibility.Visible) HideModal(CastOverlay);
@@ -6580,6 +6929,7 @@ public partial class MainWindow : Window
         if (_isMiniPlayer) ExitMiniPlayer();
         if (!ReferenceEquals(overlay, ImportOverlay)) ImportOverlay.Visibility = Visibility.Collapsed;
         if (!ReferenceEquals(overlay, PlaylistHealthOverlay)) PlaylistHealthOverlay.Visibility = Visibility.Collapsed;
+        if (!ReferenceEquals(overlay, ChannelHealthOverlay)) ChannelHealthOverlay.Visibility = Visibility.Collapsed;
         if (!ReferenceEquals(overlay, SettingsOverlay)) SettingsOverlay.Visibility = Visibility.Collapsed;
         if (!ReferenceEquals(overlay, UpdateOverlay)) UpdateOverlay.Visibility = Visibility.Collapsed;
         if (!ReferenceEquals(overlay, CastOverlay)) CastOverlay.Visibility = Visibility.Collapsed;
@@ -6595,7 +6945,7 @@ public partial class MainWindow : Window
     private void HideModal(Grid overlay)
     {
         overlay.Visibility = Visibility.Collapsed;
-        if (ImportOverlay.Visibility != Visibility.Visible && PlaylistHealthOverlay.Visibility != Visibility.Visible && SettingsOverlay.Visibility != Visibility.Visible && UpdateOverlay.Visibility != Visibility.Visible && CastOverlay.Visibility != Visibility.Visible && DvrOverlay.Visibility != Visibility.Visible && SignalRoutingOverlay.Visibility != Visibility.Visible && MappingOverlay.Visibility != Visibility.Visible)
+        if (ImportOverlay.Visibility != Visibility.Visible && PlaylistHealthOverlay.Visibility != Visibility.Visible && ChannelHealthOverlay.Visibility != Visibility.Visible && SettingsOverlay.Visibility != Visibility.Visible && UpdateOverlay.Visibility != Visibility.Visible && CastOverlay.Visibility != Visibility.Visible && DvrOverlay.Visibility != Visibility.Visible && SignalRoutingOverlay.Visibility != Visibility.Visible && MappingOverlay.Visibility != Visibility.Visible)
         {
             _playerChromeSuppressed = GuideWorkspace.Visibility == Visibility.Visible || _multiviewMode;
             RefreshPlayerSurfaceVisibility();
@@ -6603,7 +6953,7 @@ public partial class MainWindow : Window
     }
 
     private bool IsAnyModalVisible() =>
-        ImportOverlay.Visibility == Visibility.Visible || PlaylistHealthOverlay.Visibility == Visibility.Visible || SettingsOverlay.Visibility == Visibility.Visible ||
+        ImportOverlay.Visibility == Visibility.Visible || PlaylistHealthOverlay.Visibility == Visibility.Visible || ChannelHealthOverlay.Visibility == Visibility.Visible || SettingsOverlay.Visibility == Visibility.Visible ||
         UpdateOverlay.Visibility == Visibility.Visible || CastOverlay.Visibility == Visibility.Visible || DvrOverlay.Visibility == Visibility.Visible || SignalRoutingOverlay.Visibility == Visibility.Visible || MappingOverlay.Visibility == Visibility.Visible;
 
     private void RefreshPlayerSurfaceVisibility()
@@ -6880,6 +7230,8 @@ public partial class MainWindow : Window
         }
 
         if (_isFullscreen) ExitFullscreen();
+        if (!_automationRun)
+            _sessionRecoveryService.CompleteAsync(CreateSessionSnapshot()).GetAwaiter().GetResult();
         _telemetryTimer.Stop();
         _fullscreenChromeTimer.Stop();
         _sleepTimer.Stop();

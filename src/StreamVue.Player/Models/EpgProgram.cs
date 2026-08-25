@@ -257,7 +257,11 @@ public sealed record GuideProgrammeBlock(
 {
     public string Title => Programme?.Title ?? "No guide listing";
     public string Time => Programme?.LocalTimeRange ?? "Assign an XMLTV channel";
-    public string Category => Programme?.Category ?? string.Empty;
+    public bool CanReplay => Programme is not null && Channel.HasCatchup && IsPast &&
+                             (Channel.CatchupDays <= 0 || Programme.Stop >= DateTimeOffset.UtcNow.AddDays(-Channel.CatchupDays));
+    public string Category => CanReplay
+        ? $"↶ REPLAY{(string.IsNullOrWhiteSpace(Programme?.Category) ? string.Empty : $"  •  {Programme.Category}")}"
+        : Programme?.Category ?? string.Empty;
 }
 
 public sealed record GuideTimelineRow(
