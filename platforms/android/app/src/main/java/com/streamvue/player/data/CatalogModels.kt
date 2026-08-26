@@ -46,7 +46,7 @@ data class Channel(
 
 data class ParsedPlaylist(
     val channels: List<Channel>,
-    val guideSource: String?
+    val guideSources: List<String>
 )
 
 enum class SourceType(val storedValue: String) {

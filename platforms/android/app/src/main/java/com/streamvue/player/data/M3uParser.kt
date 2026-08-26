@@ -5,6 +5,7 @@ import java.security.MessageDigest
 import java.util.Locale
 
 object M3uParser {
+    private const val DEFAULT_MAX_CHANNELS = 250_000
     private val attributePattern = Regex(
         """([A-Za-z0-9_-]+)=(?:\"([^\"]*)\"|'([^']*)'|([^\s,]+))"""
     )
@@ -14,10 +15,17 @@ object M3uParser {
     )
     private val playableSchemes = setOf("http", "https", "rtsp", "rtmp", "udp", "file")
 
-    fun parse(text: String, sourceId: String, sourceName: String): ParsedPlaylist {
-        val channels = ArrayList<Channel>(16_384)
+    fun parse(
+        text: String,
+        sourceId: String,
+        sourceName: String,
+        maximumChannels: Int = DEFAULT_MAX_CHANNELS
+    ): ParsedPlaylist {
+        require(sourceId.isNotBlank() && sourceName.isNotBlank()) { "A source ID and source name are required." }
+        require(maximumChannels > 0) { "The channel safety limit must be positive." }
+        val channels = ArrayList<Channel>(minOf(16_384, maximumChannels))
         var pending: PendingChannel? = null
-        var guideSource: String? = null
+        var guideSources = emptyList<String>()
 
         text.lineSequence().forEach { rawLine ->
             val line = rawLine.trim().trimStart('\uFEFF')
@@ -25,7 +33,7 @@ object M3uParser {
 
             when {
                 line.startsWith("#EXTM3U", ignoreCase = true) -> {
-                    guideSource = guideSource ?: parseGuideSource(line)
+                    if (guideSources.isEmpty()) guideSources = parseGuideSources(line)
                 }
 
                 line.startsWith("#EXTINF", ignoreCase = true) -> {
@@ -45,6 +53,9 @@ object M3uParser {
 
                 line.startsWith('#') -> Unit
                 looksPlayable(line) -> {
+                    require(channels.size < maximumChannels) {
+                        "The playlist exceeds the ${"%,d".format(maximumChannels)} channel safety limit."
+                    }
                     val metadata = pending ?: PendingChannel(name = "Channel ${channels.size + 1}")
                     val name = metadata.name.trim().ifEmpty { "Channel ${channels.size + 1}" }
                     val group = metadata.group?.trim().orEmpty().ifEmpty { "Uncategorized" }
@@ -56,8 +67,8 @@ object M3uParser {
                         CatchupMetadata(
                             mode = metadata.catchupMode.clean() ?: "default",
                             source = source,
-                            days = metadata.catchupDays.coerceAtLeast(0),
-                            correctionMinutes = metadata.catchupCorrectionMinutes
+                            days = metadata.catchupDays.coerceIn(0, 365),
+                            correctionMinutes = metadata.catchupCorrectionMinutes.coerceIn(-1_440, 1_440)
                         )
                     }
 
@@ -85,7 +96,7 @@ object M3uParser {
             "No playable entries were found. Choose an M3U or M3U8 playlist that contains stream URLs."
         }
 
-        return ParsedPlaylist(channels = channels, guideSource = guideSource)
+        return ParsedPlaylist(channels = channels, guideSources = guideSources)
     }
 
     fun stableChannelId(tvgId: String?, name: String, group: String, streamUri: String): String {
@@ -102,13 +113,17 @@ object M3uParser {
             .joinToString("") { "%02X".format(it) }
     }
 
-    private fun parseGuideSource(line: String): String? {
+    private fun parseGuideSources(line: String): List<String> {
         val attributes = parseAttributes(line)
-        return sequenceOf("url-tvg", "x-tvg-url", "tvg-url")
-            .mapNotNull(attributes::get)
-            .flatMap { it.split(',').asSequence() }
-            .map(String::trim)
-            .firstOrNull(::isGuideUri)
+        sequenceOf("url-tvg", "x-tvg-url", "tvg-url").forEach { key ->
+            val sources = attributes[key]
+                ?.split(',')
+                ?.map(String::trim)
+                ?.filter(::isGuideUri)
+                .orEmpty()
+            if (sources.isNotEmpty()) return sources
+        }
+        return emptyList()
     }
 
     private fun parseMetadata(line: String): PendingChannel {
@@ -119,12 +134,13 @@ object M3uParser {
         val tvgName = attributes["tvg-name"]
         val catchupDays = (attributes["catchup-days"] ?: attributes["timeshift"])
             ?.toIntOrNull()
-            ?.coerceAtLeast(0)
+            ?.coerceIn(0, 365)
             ?: 0
         val correctionMinutes = attributes["catchup-correction"]
             ?.toDoubleOrNull()
             ?.times(60.0)
             ?.toInt()
+            ?.coerceIn(-1_440, 1_440)
             ?: 0
 
         return PendingChannel(
@@ -176,7 +192,9 @@ object M3uParser {
     }
 
     private fun looksPlayable(value: String): Boolean = runCatching {
-        URI(value).scheme?.lowercase(Locale.ROOT) in playableSchemes
+        val uri = URI(value)
+        val scheme = uri.scheme?.lowercase(Locale.ROOT)
+        scheme in playableSchemes && (scheme !in setOf("http", "https") || !uri.host.isNullOrBlank())
     }.getOrDefault(false)
 
     private fun isGuideUri(value: String): Boolean = runCatching {

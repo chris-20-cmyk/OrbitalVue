@@ -125,7 +125,7 @@ class PlaylistRepository(private val context: Context) {
                 displayName = sourceName,
                 loadedAt = Instant.now().toString(),
                 source = source,
-                guideSources = listOfNotNull(playlist.guideSource),
+                guideSources = playlist.guideSources,
                 channels = playlist.channels
             ),
             notice = notice

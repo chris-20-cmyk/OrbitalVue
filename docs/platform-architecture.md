@@ -13,7 +13,7 @@ StreamVue is a player and personal source manager. It does not bundle, sell, dis
 | Android TV / Google TV | Kotlin / Compose, 10-foot surface | AndroidX Media3 | Same Android package and data layer |
 | Samsung TV | Tizen packaged web app | AVPlay | Catalog contract and JavaScript conformance parser |
 | LG TV | webOS packaged web app | webOS media APIs | Catalog contract and JavaScript conformance parser |
-| iPhone, iPad, Apple TV | SwiftUI | AVPlayer | Catalog contract and native Swift parser |
+| iPhone, iPad, Apple TV | SwiftUI | AVFoundation / AVPlayerViewController | Catalog contract and native Swift parser |
 
 The UI and playback engine remain native to each device family. Only the catalog semantics and synthetic fixtures are portable. This avoids forcing desktop assumptions onto televisions and avoids shipping a browser-based video engine where a native decoder is available.
 
@@ -36,7 +36,19 @@ RTMP is preserved in the portable catalog for Windows compatibility but is not c
 
 ## Store readiness gates
 
-Before public store submission, each client must pass its native remote/touch accessibility checks, use store-specific artwork, publish a privacy policy, explain that playlists are user supplied, and test with licensed streams owned by the tester. Release signing and developer-account enrollment are distribution gates, not blockers for local development or unsigned personal testing.
+Before public store submission, each client must pass its native remote/touch accessibility checks, use store-specific artwork, publish a privacy policy, explain that playlists are user supplied, and test with licensed streams owned by the tester. Signing and paid enrollment do not block source development, simulator/emulator verification, or platform-provided free personal-device workflows; physical-device requirements remain platform-specific.
+
+## Apple 5.1 foundation
+
+`platforms/apple` contains dependency-free `StreamVueCore` and `StreamVueUI` Swift package modules. XcodeGen creates separate `StreamVue` iPhone/iPad and `StreamVueTV` Apple TV application targets from the committed `project.yml`, keeping generated Xcode project state out of source control.
+
+The touch client adapts through `NavigationSplitView`; compact devices move selected playback into a true fullscreen cover. Apple TV uses a remote-first, focus-aware three-column group/channel/player workspace. Both clients consume the same source-ordered catalog, exact `group-title` sections, search, favorites, playback settings, and privacy-safe repository.
+
+The Swift parser enforces the shared 64 MiB input and 250,000-channel ceilings. URL credentials are separated from the non-secret source manifest and stored in Keychain. The last working playlist is written to protected Application Support storage and excluded from backup, then used only when launch refresh fails.
+
+Playback uses AVURLAsset, AVPlayerItem, AVPlayer, and AVPlayerViewController directly. The supported boundary is standards-compatible HLS and progressive HTTP media that AVFoundation can decode. Unsupported schemes and channels requiring arbitrary Referer or Authorization headers are rejected with an explicit capability message rather than sent through a hidden proxy.
+
+Current CI gates are Swift package contract/privacy tests, privacy-manifest validation, Xcode analysis of both simulator targets, and unsigned simulator packages with SHA-256 checksums. Store readiness additionally requires real-device HLS tests, Picture in Picture and AirPlay validation, iPad layout checks, Apple TV remote-focus/display-matching tests, final App Store artwork and privacy metadata, signed Release archives, and TestFlight acceptance.
 
 ## Television foundation
 

@@ -86,7 +86,7 @@ public final class URLSessionPlaylistHTTPClient: NSObject, PlaylistHTTPClient, U
         task: URLSessionTask,
         willPerformHTTPRedirection response: HTTPURLResponse,
         newRequest request: URLRequest,
-        completionHandler: @escaping (URLRequest?) -> Void
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
     ) {
         guard let next = request.url,
               let nextScheme = next.scheme?.lowercased(),

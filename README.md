@@ -1,6 +1,6 @@
 # StreamVue Native
 
-StreamVue is a native IPTV player. The Windows 4.0 preview uses .NET, WPF, LibVLCSharp, the VideoLAN playback engine, and Velopack packaging. The Android 5.0 line uses Kotlin, Compose, and AndroidX Media3 for phones, tablets, Android TV, and Google TV. Samsung Tizen and LG webOS share a lightweight remote-first TypeScript surface while retaining each vendor's native television playback path.
+StreamVue is a native IPTV player. The Windows 4.0 preview uses .NET, WPF, LibVLCSharp, the VideoLAN playback engine, and Velopack packaging. The Android 5.0 line uses Kotlin, Compose, and AndroidX Media3 for phones, tablets, Android TV, and Google TV. Samsung Tizen and LG webOS share a lightweight remote-first TypeScript surface while retaining each vendor's native television playback path. Apple 5.1 uses SwiftUI, AVFoundation, and AVKit for iPhone, iPad, and Apple TV.
 
 ## Android 5.0 foundation
 
@@ -8,7 +8,7 @@ StreamVue is a native IPTV player. The Windows 4.0 preview uses .NET, WPF, LibVL
 - Exact playlist grouping, categorized All Channels browsing, fast search, and remote-friendly 10-foot navigation
 - Native Media3 HLS, progressive MPEG-TS/MP4, and RTSP playback with per-channel request headers
 - Hardware-backed MediaCodec decoding, decoder fallback, seamless frame-rate hints, six aspect modes, and immersive full screen
-- A versioned portable catalog contract and synthetic conformance fixtures for future Samsung Tizen, LG webOS, and Apple clients
+- A versioned portable catalog contract and synthetic conformance fixtures shared with Samsung Tizen, LG webOS, and Apple clients
 - Repeatable cloud builds that produce a personal-test APK and an unsigned Google Play AAB without requiring a paid certificate
 
 The Android Studio project lives in `platforms/android`; the shared contract lives in `contracts`. StreamVue does not ship or discover channels. Users connect sources they are authorized to use.
@@ -25,6 +25,18 @@ See [Android build instructions](platforms/android/README.md), the [cross-platfo
 - Separate Tizen and webOS package directories, store metadata, icons, and LG splash artwork
 
 See [TV build and sideload instructions](platforms/tv-web/README.md) and the [television design system](docs/design/tv-shell-design-system.md).
+
+## Apple 5.1 foundation
+
+- Native SwiftUI clients for iOS, iPadOS, and tvOS 17 or later, with an adaptive `NavigationSplitView` on touch devices and a focus-aware three-column Apple TV workspace
+- Playlist URL onboarding everywhere plus security-scoped M3U/M3U8 file import on iPhone and iPad
+- Exact playlist groups, categorized All Channels sections, search, favorites, 14 aspect modes, and true fullscreen playback
+- Direct AVFoundation/AVKit playback with system-managed hardware decoding, alternate tracks, compatible spatial audio/Atmos paths, Picture in Picture, AirPlay, and Apple TV display matching
+- Honest capability gating for sources that require Referer, Authorization, RTSP, RTMP, or UDP instead of silently proxying private credentials
+- Keychain-protected URL secrets, complete file protection for the cached playlist, launch refresh, and last-working-copy recovery
+- Xcode 26.6 CI that tests the shared Swift catalog, analyzes both app targets, and packages unsigned simulator verification builds
+
+The current Apple milestone is a source and simulator foundation, not an App Store package. Physical-device installation requires Xcode signing; App Store and TestFlight distribution require Apple Developer Program enrollment, final artwork, privacy answers, and signed archives. See [Apple build instructions](platforms/apple/README.md).
 
 ## 4.0 production resilience
 
@@ -190,6 +202,20 @@ pnpm tv:build
 
 This produces unsigned Tizen and webOS project directories. Vendor SDK signing is required only when sideloading or submitting the final `.wgt` or `.ipk` package.
 
+### iPhone, iPad, and Apple TV
+
+On a Mac with Xcode 26.6 and XcodeGen 2.46.0:
+
+```bash
+cd platforms/apple
+xcodegen generate --spec project.yml
+swift test
+xcodebuild -project StreamVueApple.xcodeproj -scheme StreamVue -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project StreamVueApple.xcodeproj -scheme StreamVueTV -destination 'generic/platform=tvOS Simulator' CODE_SIGNING_ALLOWED=NO build
+```
+
+CI produces unsigned iOS and tvOS simulator ZIPs for verification. They are not IPA files and cannot be installed on physical devices.
+
 ## Verification tools
 
 - `StreamVue.PlaylistProbe` validates large-list parsing and favorite-key uniqueness.
@@ -198,4 +224,4 @@ This produces unsigned Tizen and webOS project directories. Vendor SDK signing i
 
 ## Privacy
 
-StreamVue connects directly to playlist and guide providers and does not upload playlist contents or credentials. Miracast casting mirrors the rendered picture and compatible system audio rather than sending playlist addresses to the display. The last-known-good playlist cache, XMLTV cache, saved guide configuration, Xtream credentials, and StreamVue backup settings payload are protected with Windows per-user encryption. Diagnostic exports omit provider addresses, credentials, channel names, and guide titles.
+StreamVue connects directly to playlist and guide providers and does not upload playlist contents or credentials. Miracast casting mirrors the rendered picture and compatible system audio rather than sending playlist addresses to the display. The last-known-good playlist cache, XMLTV cache, saved guide configuration, Xtream credentials, and StreamVue backup settings payload are protected with Windows per-user encryption. On Apple devices, URL secrets live in Keychain and cached playlists use complete file protection and are excluded from device backup. Diagnostic exports omit provider addresses, credentials, channel names, and guide titles.

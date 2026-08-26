@@ -15,7 +15,7 @@ class M3uParserTest {
         val result = M3uParser.parse(fixture, "fixture-source", "IPTV feature fixture")
 
         assertEquals(3, result.channels.size)
-        assertEquals("https://guide.example.invalid/us.xml", result.guideSource)
+        assertEquals(listOf("https://guide.example.invalid/us.xml"), result.guideSources)
         assertEquals(listOf("News", "Sports | Football", "Cinema"), result.channels.map(Channel::group))
         assertEquals(listOf(ChannelKind.Live, ChannelKind.Live, ChannelKind.Movie), result.channels.map(Channel::kind))
     }
@@ -67,6 +67,39 @@ class M3uParserTest {
     fun rejectsAFileWithNoPlayableEntries() {
         assertThrows(IllegalArgumentException::class.java) {
             M3uParser.parse("#EXTM3U\n# no streams", "empty-source", "Empty")
+        }
+    }
+
+    @Test
+    fun preservesMultipleGuideSourcesAndClampsCatchupBounds() {
+        val playlist = """
+            #EXTM3U url-tvg="https://one.example.invalid/guide.xml, https://two.example.invalid/guide.xml"
+            #EXTINF:-1 catchup="append" catchup-source="?utc={utc}" catchup-days="999" catchup-correction="-99",One
+            https://stream.example.invalid/live/one.m3u8
+        """.trimIndent()
+
+        val result = M3uParser.parse(playlist, "source", "Source")
+
+        assertEquals(
+            listOf("https://one.example.invalid/guide.xml", "https://two.example.invalid/guide.xml"),
+            result.guideSources
+        )
+        assertEquals(365, result.channels.single().catchup?.days)
+        assertEquals(-1_440, result.channels.single().catchup?.correctionMinutes)
+    }
+
+    @Test
+    fun enforcesThePortableChannelSafetyLimit() {
+        val playlist = """
+            #EXTM3U
+            #EXTINF:-1,One
+            https://one.example.invalid/live
+            #EXTINF:-1,Two
+            https://two.example.invalid/live
+        """.trimIndent()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            M3uParser.parse(playlist, "source", "Too many", maximumChannels = 1)
         }
     }
 }
