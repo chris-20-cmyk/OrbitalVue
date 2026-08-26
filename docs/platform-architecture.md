@@ -38,23 +38,23 @@ RTMP is preserved in the portable catalog for Windows compatibility but is not c
 
 Before public store submission, each client must pass its native remote/touch accessibility checks, use store-specific artwork, publish a privacy policy, explain that playlists are user supplied, and test with licensed streams owned by the tester. Release signing and developer-account enrollment are distribution gates, not blockers for local development or unsigned personal testing.
 
-## Television sequence
+## Television foundation
 
-Samsung Tizen and LG webOS follow after the Android player proves the catalog and playback-state model. They will share a TypeScript contract package and the same fixture suite, but each will use the television vendor's playback API, lifecycle rules, remote keys, packaging tools, and store submission process.
+Samsung Tizen and LG webOS now share a TypeScript contract package and one remote-first interface, while each keeps the television vendor's playback API, lifecycle rules, remote keys, packaging tools, and store submission process.
 
 ### Shared television layer
 
-The next client milestone is `packages/catalog-js`, a dependency-light TypeScript implementation of the 1.0 catalog contract. It must parse the committed fixtures to byte-for-byte compatible stable IDs and preserve source order, exact `group-title`, guide URLs, catch-up attributes, `User-Agent`, and `Referer`. The television shells consume normalized catalog objects and never interpret raw M3U lines inside UI components.
+`packages/catalog-js` is a dependency-free TypeScript implementation of the 1.0 catalog contract. It parses the committed fixtures to byte-for-byte compatible stable IDs and preserves source order, exact `group-title`, guide URLs, catch-up attributes, `User-Agent`, and `Referer`. The television shell consumes normalized catalog objects and never interprets raw M3U lines inside UI components.
 
 Both TV shells use the same remote-first state machine:
 
-1. Source onboarding and private last-working-copy cache.
-2. Group rail, categorized All Channels view, search, and favorites.
-3. Player surface with live status, aspect menu, retry, and stream capability message.
-4. Deterministic focus restoration after dialogs, playback, app suspension, and Back.
-5. A no-mouse acceptance pass from cold launch through source connection and playback.
+1. Source onboarding and private IndexedDB last-working-copy cache.
+2. Group rail, categorized All Channels view, search, favorites, and bounded rendering for very large lists.
+3. Player surface with live status, seven aspect modes, native buffering state, and stream capability messages.
+4. Deterministic focus restoration after dialogs, playback, and Back.
+5. Automated parser, navigation, platform-selection, and privacy checks plus browser acceptance at 1920×1080 and 1280×720.
 
-TV file onboarding cannot assume a desktop file picker. URL entry is the first guaranteed path. Local-file parity will use a privacy-preserving same-network transfer flow or removable-storage capability only after it is verified on each vendor's supported models; StreamVue will not upload playlist contents to a hosted conversion service.
+TV file onboarding cannot assume that every model exposes a usable file picker, so URL entry is the guaranteed path. The shared shell also provides file selection where the platform supports it. StreamVue does not upload playlist contents to a hosted conversion service.
 
 ### Samsung Tizen adapter
 

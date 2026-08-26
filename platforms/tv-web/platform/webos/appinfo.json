@@ -1,0 +1,15 @@
+{
+  "id": "com.streamvue.player.tv",
+  "version": "5.0.0",
+  "vendor": "StreamVue",
+  "type": "web",
+  "main": "index.html",
+  "title": "StreamVue",
+  "appDescription": "Private television playback for your channel sources",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "resolution": "1920x1080",
+  "splashBackground": "splash.png",
+  "transparent": false,
+  "disableBackHistoryAPI": false
+}

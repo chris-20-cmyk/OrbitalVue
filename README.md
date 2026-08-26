@@ -1,6 +1,6 @@
 # StreamVue Native
 
-StreamVue is a native IPTV player. The Windows 4.0 preview uses .NET, WPF, LibVLCSharp, the VideoLAN playback engine, and Velopack packaging. The Android 5.0 line uses Kotlin, Compose, and AndroidX Media3 for phones, tablets, Android TV, and Google TV.
+StreamVue is a native IPTV player. The Windows 4.0 preview uses .NET, WPF, LibVLCSharp, the VideoLAN playback engine, and Velopack packaging. The Android 5.0 line uses Kotlin, Compose, and AndroidX Media3 for phones, tablets, Android TV, and Google TV. Samsung Tizen and LG webOS share a lightweight remote-first TypeScript surface while retaining each vendor's native television playback path.
 
 ## Android 5.0 foundation
 
@@ -14,6 +14,17 @@ StreamVue is a native IPTV player. The Windows 4.0 preview uses .NET, WPF, LibVL
 The Android Studio project lives in `platforms/android`; the shared contract lives in `contracts`. StreamVue does not ship or discover channels. Users connect sources they are authorized to use.
 
 See [Android build instructions](platforms/android/README.md), the [cross-platform architecture](docs/platform-architecture.md), and the [distribution and signing choices](docs/distribution-and-signing.md).
+
+## Samsung and LG TV foundation
+
+- Shared contract-compatible TypeScript M3U parser with exact Windows/Android stable IDs
+- Premium 10-foot browsing with exact playlist groups, categorized All Channels sections, search, and private favorites
+- Directional-pad, OK, Back, channel-key, media-key, and Magic Remote behavior
+- Samsung AVPlay and LG/native HTML5 player adapters with honest per-platform request-header capability messages
+- Private IndexedDB last-working catalog with automatic URL refresh at launch
+- Separate Tizen and webOS package directories, store metadata, icons, and LG splash artwork
+
+See [TV build and sideload instructions](platforms/tv-web/README.md) and the [television design system](docs/design/tv-shell-design-system.md).
 
 ## 4.0 production resilience
 
@@ -167,6 +178,17 @@ The application targets Windows x64 and the current .NET 10 LTS release.
 ```
 
 This produces a personal-test APK and a Google Play AAB. No paid certificate is required for the development build.
+
+### Samsung Tizen and LG webOS
+
+```powershell
+pnpm install
+pnpm tv:check
+pnpm tv:test
+pnpm tv:build
+```
+
+This produces unsigned Tizen and webOS project directories. Vendor SDK signing is required only when sideloading or submitting the final `.wgt` or `.ipk` package.
 
 ## Verification tools
 

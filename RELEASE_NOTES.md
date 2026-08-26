@@ -1,51 +1,37 @@
-# StreamVue 4.0.0 Production Resilience
+# StreamVue 5.0.0 Cross-platform Foundation
 
-StreamVue 4.0 protects the viewing session from bad application updates, playlist-matching mistakes, missing channel metadata, and unexpected Windows interruptions while adding provider-backed catch-up TV.
+StreamVue 5.0 begins the move from a Windows-only player to one shared product family. This preview adds native Android/Google TV foundations plus dedicated Samsung Tizen and LG webOS television clients while preserving the proven Windows 4.0 application.
 
-## Safer in-place updates
+## Android and Google TV
 
-- Choose Stable releases or opt into Preview feature builds from the Update screen
-- Preserve one local last-known-good package before installing a new version
-- Require the newly installed app to complete a responsive launch check
-- Automatically reinstall the preserved version if that launch check never succeeds
-- Keep playlists, guide data, recordings, accounts, and settings outside the application package throughout update and rollback
+- Native Kotlin and Jetpack Compose application for touch, D-pad, and ten-foot television use
+- Media3 playback with hardware decode when the device and stream support it
+- M3U URL and file import, exact source groups, search, favorites, and auto-refresh at launch
+- Last-known-good catalog recovery if a provider refresh fails
+- Safe handling for playlist headers and credentials without displaying private source URLs
+- Personal-test APK plus an unsigned Play-ready AAB; no paid certificate is required for development
 
-## Manual Signal Route editor
+## Samsung and LG televisions
 
-- Search every connected live feed from the existing Smart signal routing workspace
-- Link a feed that automatic matching missed into the selected logical channel
-- Mark an incorrectly grouped feed Keep separate and restore automatic matching later
-- Reapply manual route decisions whenever one or more playlist sources refresh
-- Continue using private per-feed scores, preferences, failover, and unified Guide data
+- Remote-first shared television shell with native Samsung AVPlay and LG/browser video adapters
+- Exact playlist groups, categorized All Channels sections, search, favorites, and five-row Full HD/four-row HD browsing
+- Auto-refresh for URL sources, IndexedDB last-good recovery, and clear first-run URL/file setup
+- Full-screen playback with real buffering state and Auto, Fit, Fill, Zoom, 16:9, 4:3, and 21:9 aspect modes
+- Samsung and LG package directories, store metadata, icons, splash artwork, and repeatable build scripts
+- Unsigned platform project archives ready for vendor SDK signing when certificates are available
 
-## Catch-up and replay TV
+## Shared catalog contract
 
-- Parse M3U catch-up mode, source template, replay window, timeshift, and time-correction attributes
-- Detect Xtream TV Archive availability and construct native timeshift playback requests
-- Mark replay-ready past programmes directly in the six-hour Guide timeline
-- Start a past programme with its advertised headers, referrer, artwork, and source identity
-- Return to live television with the existing previous-channel control
-
-## Channel Health Center
-
-- Search and filter the full logical live-channel library without probing tens of thousands of provider URLs
-- Find missing guide listings and open manual XMLTV mapping directly
-- Find missing logos, unreliable observed playback, duplicate routes, and replay-ready channels
-- Tune a result immediately or open its Signal Route for feed-level action
-- Keep analysis local and exclude provider addresses and credentials from the display
-
-## Interrupted-session recovery
-
-- Distinguish a clean close from a crash, power loss, or forced restart with an atomic local session journal
-- Restore the active logical channel and previous workspace after the playlist becomes available
-- Restore Watch, Favorites, Guide, or Multiview mode plus searches, Guide filters, timeline position, layout assignments, and fullscreen presentation
-- Keep normal startup behavior unchanged after a clean shutdown
-- Use thread-safe single-instance coordination for the background DVR window
+- Matching M3U behavior across native Android and JavaScript television clients
+- Stable channel identities, source-order grouping, stream kind detection, guide metadata, catch-up attributes, and request headers
+- Limits for oversized or malformed playlists and private, host-only source labels
+- Portable fixture validation to keep later iOS and tvOS implementations compatible
 
 ## Verification
 
-- Zero-warning .NET 10 solution build
-- Full feature-probe coverage for manual route linking/separation, M3U replay expansion, Channel Health analysis, session interruption/clean-close behavior, and update preferences
-- Existing playback, DVR, timeshift, Guide, fullscreen, Multiview, Cast, backup, diagnostics, multi-source, and signal-routing regressions remain covered
+- Android unit tests, lint, debug APK, release AAB, Leanback metadata, and 16 KB package-alignment checks
+- Shared catalog and television unit tests, TypeScript checks, production builds, and dependency audit
+- Full HD and HD browser QA for D-pad navigation, first-run setup, search, favorites, playback errors, and every aspect mode
+- No real playlist, provider credential, token, or private source address is included in the repository or packages
 
-This prerelease installs in place through StreamVue's UPDATE button. Existing settings, source catalog, encrypted playlists, Xtream logins, favorites, guide data, mappings, reminders, Playback IQ profiles, schedules, series rules, recordings, backups, Cast behavior, and Multiview assignments are preserved.
+This is a prerelease foundation. The Android APK can be installed for personal testing. Samsung and LG archives still need their free vendor development certificates before sideloading to physical televisions. The existing Windows 4.0 release remains the current Windows installer and continues updating in place.

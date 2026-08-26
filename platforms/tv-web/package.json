@@ -1,0 +1,15 @@
+{
+  "name": "@streamvue/tv-web",
+  "version": "5.0.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --config vitest.config.ts",
+    "build": "vite build && node scripts/package-platforms.mjs"
+  },
+  "dependencies": {
+    "@streamvue/catalog": "workspace:*"
+  }
+}

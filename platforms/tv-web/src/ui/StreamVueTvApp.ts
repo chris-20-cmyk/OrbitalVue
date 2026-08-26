@@ -1,0 +1,760 @@
+import type { CatalogChannel, StreamVueCatalog } from "@streamvue/catalog";
+import { CatalogRepository, type CatalogLoadResult } from "../catalog/CatalogRepository.js";
+import { SpatialNavigator } from "../navigation/SpatialNavigator.js";
+import { exitTelevisionApp, registerPlatformRemoteKeys } from "../platform/platform.js";
+import { createPlayerAdapter } from "../playback/createPlayer.js";
+import {
+  ASPECT_MODES,
+  type PlaybackSignal,
+  type PlayerAdapter
+} from "../playback/PlayerAdapter.js";
+import { icon, type IconName } from "./icons.js";
+
+type Screen = "loading" | "onboarding" | "browse" | "player";
+type Modal = "source" | "search" | "confirm-clear" | null;
+
+const FAVORITES_KEY = "streamvue-tv-favorites-v1";
+const ALL_GROUPS = "All Channels";
+const FAVORITES_GROUP = "Favorites";
+const GROUP_WINDOW_SIZE = 8;
+
+export class StreamVueTvApp {
+  private readonly repository = new CatalogRepository();
+  private readonly navigator: SpatialNavigator;
+  private catalog: StreamVueCatalog | null = null;
+  private screen: Screen = "loading";
+  private modal: Modal = null;
+  private selectedGroup = ALL_GROUPS;
+  private selectedChannelId: string | null = null;
+  private favorites = loadFavorites();
+  private notice: string | null = null;
+  private error: string | null = null;
+  private searchQuery = "";
+  private player: PlayerAdapter | null = null;
+  private playbackSignal: PlaybackSignal = { state: "idle", message: null, warning: null };
+  private aspectIndex = 0;
+  private hideChromeTimer: number | null = null;
+  private noticeTimer: number | null = null;
+
+  constructor(private readonly root: HTMLElement) {
+    window.addEventListener("keydown", this.onAppKeyDown, { capture: true });
+    this.navigator = new SpatialNavigator(root, this.handleBack);
+    this.root.addEventListener("click", this.onClick);
+    this.root.addEventListener("focusin", this.onFocusIn);
+    this.root.addEventListener("input", this.onInput);
+    this.root.addEventListener("change", this.onChange);
+  }
+
+  async start(): Promise<void> {
+    registerPlatformRemoteKeys();
+    this.render();
+    try {
+      const useDemo = new URLSearchParams(window.location.search).get("demo") === "1";
+      const loaded = useDemo ? await this.repository.useDemo() : await this.repository.loadSaved();
+      if (loaded) this.applyCatalog(loaded);
+      else this.screen = "onboarding";
+    } catch (error) {
+      this.screen = "onboarding";
+      this.error = readableError(error, "The saved channel catalog could not be opened.");
+    }
+    this.render();
+    this.focusAfterRender();
+  }
+
+  destroy(): void {
+    this.player?.destroy();
+    this.clearNoticeTimer();
+    this.navigator.destroy();
+    this.root.removeEventListener("click", this.onClick);
+    this.root.removeEventListener("focusin", this.onFocusIn);
+    this.root.removeEventListener("input", this.onInput);
+    this.root.removeEventListener("change", this.onChange);
+    window.removeEventListener("keydown", this.onAppKeyDown, { capture: true });
+  }
+
+  private render(): void {
+    this.root.innerHTML = this.screen === "loading"
+      ? this.loadingTemplate()
+      : this.screen === "onboarding"
+        ? this.onboardingTemplate()
+        : this.screen === "player"
+          ? this.playerTemplate()
+          : this.browseTemplate();
+    this.navigator.setScope(this.modalElement() ?? this.root);
+  }
+
+  private loadingTemplate(): string {
+    return `<main class="startup-screen" aria-busy="true">
+      ${brandMark()}
+      <div class="startup-loader" aria-hidden="true"></div>
+      <p>Preparing your channels</p>
+    </main>`;
+  }
+
+  private onboardingTemplate(): string {
+    return `<main class="onboarding-screen">
+      <header class="onboarding-header">${brandMark()}<span>Television edition</span></header>
+      <section class="onboarding-copy">
+        <h1>Connect your channels</h1>
+        <p>Enter an M3U playlist address or choose a playlist file. StreamVue keeps the source private on this television.</p>
+        ${this.error ? `<div class="message message-error" role="alert">${escapeHtml(this.error)}</div>` : ""}
+        <label class="field-label" for="playlist-url">M3U playlist URL</label>
+        <input id="playlist-url" class="tv-input" data-focusable="true" data-autofocus="true" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://provider.example/playlist.m3u" />
+        <div class="onboarding-actions">
+          <button class="button button-primary" data-action="connect-url" data-focusable="true">Connect playlist</button>
+          <button class="button button-secondary" data-action="choose-file" data-focusable="true">Choose M3U file</button>
+          <button class="button button-quiet" data-action="use-demo" data-focusable="true">Explore the interface</button>
+        </div>
+        <input id="playlist-file" class="visually-hidden" type="file" accept=".m3u,.m3u8,text/plain,audio/x-mpegurl,application/vnd.apple.mpegurl" />
+      </section>
+      <footer class="privacy-note">StreamVue includes no channels. Connect only sources you are authorized to use.</footer>
+    </main>`;
+  }
+
+  private browseTemplate(): string {
+    const catalog = this.requireCatalog();
+    const groups = this.groups();
+    const channels = this.channelsForSelectedGroup();
+    const selected = this.ensureSelectedChannel(channels);
+    const groupWindow = windowAround(groups, groups.indexOf(this.selectedGroup), GROUP_WINDOW_SIZE);
+    const channelIndex = selected ? channels.findIndex((channel) => channel.id === selected.id) : 0;
+    const channelWindow = windowAround(channels, channelIndex, channelWindowSize());
+
+    return `<main class="tv-shell">
+      <header class="topbar">
+        <div class="topbar-title">${brandMark()}<span class="topbar-divider"></span><h1>Live TV</h1></div>
+        <div class="topbar-actions">
+          <span class="source-status">${escapeHtml(sourceStatus(catalog))}</span>
+          <button class="icon-button" aria-label="Search channels" data-action="open-search" data-focusable="true">${icon("search")}</button>
+          <button class="icon-button" aria-label="Source settings" data-action="open-source" data-focusable="true">${icon("settings")}</button>
+        </div>
+      </header>
+      <section class="browser-grid">
+        <nav class="group-rail" aria-label="Channel groups">
+          ${groupWindow.items.map((group) => groupButton(group, group === this.selectedGroup, this.groupCount(group))).join("")}
+        </nav>
+        <section class="channel-pane" aria-label="${escapeAttribute(this.selectedGroup)}">
+          <div class="pane-heading"><h2>${escapeHtml(this.selectedGroup)}</h2><span>${channels.length.toLocaleString()}</span></div>
+          <div class="channel-list" role="list">
+            ${channelWindow.items.length > 0
+              ? this.channelRows(channelWindow.items, channelWindow.start, selected?.id ?? null)
+              : `<div class="empty-list"><strong>No channels here yet</strong><span>Add a favorite or choose another group.</span></div>`}
+          </div>
+        </section>
+        <section class="detail-pane" data-role="details" aria-live="polite">
+          ${selected ? this.detailTemplate(selected) : this.emptyDetailTemplate()}
+        </section>
+      </section>
+      ${this.notice ? `<div class="notice" role="status">${escapeHtml(this.notice)}</div>` : ""}
+      <footer class="remote-hints">
+        <span><kbd>OK</kbd> Play</span><span><kbd>↑ ↓</kbd> Browse</span><span><kbd>←</kbd> Groups</span><span><kbd>Back</kbd> Exit</span>
+      </footer>
+      ${this.modalTemplate()}
+    </main>`;
+  }
+
+  private channelRows(channels: CatalogChannel[], startIndex: number, selectedId: string | null): string {
+    let previousGroup: string | null = startIndex > 0 ? this.channelsForSelectedGroup()[startIndex - 1]?.group ?? null : null;
+    return channels.map((channel) => {
+      const showSection = this.selectedGroup === ALL_GROUPS && channel.group !== previousGroup;
+      previousGroup = channel.group;
+      return `${showSection ? `<div class="group-section-label">${escapeHtml(channel.group)}</div>` : ""}${channelButton(channel, channel.id === selectedId, this.favorites.has(channel.id))}`;
+    }).join("");
+  }
+
+  private detailTemplate(channel: CatalogChannel): string {
+    const isFavorite = this.favorites.has(channel.id);
+    const demoProgram = channel.name === "Northstar News" ? "Evening Report" : "Live channel";
+    return `<div class="preview-frame">
+        <img src="./assets/broadcast-preview.png" alt="" />
+        <span class="preview-live"><i></i> LIVE</span>
+      </div>
+      <div class="channel-detail-copy">
+        <h2>${escapeHtml(channel.name.toUpperCase())}</h2>
+        <p class="detail-group">${escapeHtml(channel.group)}</p>
+        <p class="now-line"><i></i><span>Now:</span> ${escapeHtml(demoProgram)}</p>
+      </div>
+      <div class="detail-actions">
+        <button class="button button-watch" data-action="watch" data-focusable="true">${icon("play")}<span>Watch now</span></button>
+        <button class="button button-favorite${isFavorite ? " is-active" : ""}" data-action="favorite" data-focusable="true">${icon("favorite")}<span>${isFavorite ? "Favorited" : "Favorite"}</span></button>
+      </div>`;
+  }
+
+  private emptyDetailTemplate(): string {
+    return `<div class="preview-frame"><img src="./assets/broadcast-preview.png" alt="" /></div>
+      <div class="channel-detail-copy"><h2>NO CHANNEL SELECTED</h2><p class="detail-group">Choose a group to continue.</p></div>`;
+  }
+
+  private modalTemplate(): string {
+    if (this.modal === "source") return this.sourceModalTemplate();
+    if (this.modal === "search") return this.searchModalTemplate();
+    if (this.modal === "confirm-clear") return this.confirmClearTemplate();
+    return "";
+  }
+
+  private sourceModalTemplate(): string {
+    const source = this.requireCatalog().sources[0];
+    return `<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="source-title">
+      <div class="modal-header"><div><h2 id="source-title">Channel source</h2><p>${escapeHtml(source?.displayLocation ?? "Private source")}</p></div><button class="icon-button" aria-label="Close" data-action="close-modal" data-focusable="true">×</button></div>
+      ${this.error ? `<div class="message message-error" role="alert">${escapeHtml(this.error)}</div>` : ""}
+      <label class="field-label" for="source-url">Connect a new M3U URL</label>
+      <input id="source-url" class="tv-input" data-focusable="true" data-autofocus="true" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://provider.example/playlist.m3u" />
+      <div class="modal-actions">
+        <button class="button button-primary" data-action="connect-source-url" data-focusable="true">Connect & replace</button>
+        <button class="button button-secondary" data-action="choose-file" data-focusable="true">Choose M3U file</button>
+        <button class="button button-danger" data-action="request-clear" data-focusable="true">Remove saved source</button>
+        <button class="button button-quiet" data-action="close-modal" data-focusable="true">Close</button>
+      </div>
+      <input id="playlist-file" class="visually-hidden" type="file" accept=".m3u,.m3u8,text/plain,audio/x-mpegurl,application/vnd.apple.mpegurl" />
+    </section></div>`;
+  }
+
+  private searchModalTemplate(): string {
+    return `<div class="modal-backdrop"><section class="modal modal-search" role="dialog" aria-modal="true" aria-labelledby="search-title">
+      <div class="modal-header"><div><h2 id="search-title">Find a channel</h2><p>Search names and exact playlist groups.</p></div><button class="icon-button" aria-label="Close" data-action="close-modal" data-focusable="true">×</button></div>
+      <input id="channel-search" class="tv-input" data-focusable="true" data-autofocus="true" autocomplete="off" value="${escapeAttribute(this.searchQuery)}" placeholder="Type a channel or group" />
+      <div class="search-results" data-role="search-results">${this.searchResultsTemplate()}</div>
+    </section></div>`;
+  }
+
+  private searchResultsTemplate(): string {
+    const query = this.searchQuery.trim().toLowerCase();
+    if (!query) return `<p class="search-empty">Start typing to search your channel library.</p>`;
+    const results = this.requireCatalog().channels
+      .filter((channel) => channel.name.toLowerCase().includes(query) || channel.group.toLowerCase().includes(query))
+      .slice(0, 8);
+    if (results.length === 0) return `<p class="search-empty">No channels match “${escapeHtml(this.searchQuery)}”.</p>`;
+    return results.map((channel) => `<button class="search-result" data-action="search-result" data-channel-id="${escapeAttribute(channel.id)}" data-focusable="true"><strong>${escapeHtml(channel.name)}</strong><span>${escapeHtml(channel.group)}</span></button>`).join("");
+  }
+
+  private confirmClearTemplate(): string {
+    return `<div class="modal-backdrop"><section class="modal modal-confirm" role="alertdialog" aria-modal="true" aria-labelledby="clear-title">
+      <h2 id="clear-title">Remove this channel source?</h2>
+      <p>The private cached catalog will be removed from this television. Your provider account is not changed.</p>
+      <div class="modal-actions horizontal">
+        <button class="button button-secondary" data-action="cancel-clear" data-focusable="true" data-autofocus="true">Keep source</button>
+        <button class="button button-danger" data-action="confirm-clear" data-focusable="true">Remove source</button>
+      </div>
+    </section></div>`;
+  }
+
+  private playerTemplate(): string {
+    const channel = this.selectedChannel();
+    if (!channel) return this.loadingTemplate();
+    const aspect = ASPECT_MODES[this.aspectIndex] ?? "Auto";
+    return `<main class="player-screen" data-player-state="${this.playbackSignal.state}">
+      <section id="player-surface" class="player-surface" aria-label="Playing ${escapeAttribute(channel.name)}">
+        <video id="html-player" playsinline></video>
+        <object id="samsung-player" type="application/avplayer" hidden></object>
+      </section>
+      <div class="player-shade"></div>
+      <header class="player-header player-chrome">
+        <div><h1>${escapeHtml(channel.name)}</h1><p><i></i>${escapeHtml(channel.group)}</p></div>
+        <span class="engine-label" data-role="engine">Native television player</span>
+      </header>
+      <div class="buffering-indicator" data-role="buffering" hidden><span></span><strong>Buffering</strong></div>
+      <div class="player-message" data-role="player-message" hidden></div>
+      <footer class="player-controls player-chrome">
+        <button class="button player-control" data-action="toggle-playback" data-focusable="true">${icon("play")}<span>Play / pause</span></button>
+        <button class="button player-control" data-action="cycle-aspect" data-focusable="true"><span>Aspect: <b data-role="aspect">${aspect}</b></span></button>
+        <button class="button player-control" data-action="close-player" data-focusable="true">${icon("back")}<span>Back to channels</span></button>
+      </footer>
+    </main>`;
+  }
+
+  private async openPlayer(): Promise<void> {
+    const channel = this.selectedChannel();
+    if (!channel) return;
+    this.screen = "player";
+    this.modal = null;
+    this.playbackSignal = { state: "opening", message: null, warning: null };
+    this.render();
+    const video = this.root.querySelector<HTMLVideoElement>("#html-player");
+    const objectElement = this.root.querySelector<HTMLObjectElement>("#samsung-player");
+    const surface = this.root.querySelector<HTMLElement>("#player-surface");
+    if (!video || !objectElement || !surface) throw new Error("The native player surface could not be created.");
+    this.player = createPlayerAdapter(video, objectElement, surface, this.updatePlaybackSignal);
+    this.player.setAspect(ASPECT_MODES[this.aspectIndex] ?? "Auto");
+    this.updateEngineLabel();
+    this.navigator.setScope(this.root);
+    this.focusAfterRender("[data-action='close-player']");
+    await this.player.play(channel);
+  }
+
+  private closePlayer(): void {
+    this.clearChromeTimer();
+    this.player?.destroy();
+    this.player = null;
+    this.screen = "browse";
+    this.playbackSignal = { state: "idle", message: null, warning: null };
+    this.render();
+    this.focusAfterRender(`[data-channel-id='${cssEscape(this.selectedChannelId ?? "")}']`);
+  }
+
+  private readonly updatePlaybackSignal = (signal: PlaybackSignal): void => {
+    this.playbackSignal = signal;
+    const screen = this.root.querySelector<HTMLElement>(".player-screen");
+    const buffering = this.root.querySelector<HTMLElement>("[data-role='buffering']");
+    const message = this.root.querySelector<HTMLElement>("[data-role='player-message']");
+    if (!screen || !buffering || !message) return;
+    screen.dataset.playerState = signal.state;
+    buffering.hidden = signal.state !== "buffering";
+    const copy = signal.message ?? signal.warning;
+    message.hidden = !copy;
+    message.textContent = copy ?? "";
+    message.classList.toggle("is-error", Boolean(signal.message));
+    if (signal.state === "playing") this.scheduleChromeHide();
+    else this.showPlayerChrome();
+  };
+
+  private applyCatalog(loaded: CatalogLoadResult): void {
+    this.catalog = loaded.catalog;
+    this.notice = loaded.notice;
+    this.error = null;
+    this.screen = "browse";
+    this.modal = null;
+    const first = loaded.catalog.channels[0];
+    this.selectedChannelId = first?.id ?? null;
+    this.selectedGroup = ALL_GROUPS;
+    this.scheduleNoticeDismiss();
+  }
+
+  private async connectUrl(inputId: string): Promise<void> {
+    const input = this.root.querySelector<HTMLInputElement>(`#${inputId}`);
+    if (!input) return;
+    this.setBusy(true);
+    this.error = null;
+    try {
+      const loaded = await this.repository.connectUrl(input.value);
+      this.applyCatalog(loaded);
+      this.render();
+      this.focusAfterRender();
+    } catch (error) {
+      this.error = readableError(error, "The playlist could not be connected.");
+      this.setBusy(false);
+      this.render();
+      this.focusAfterRender(`#${inputId}`);
+    }
+  }
+
+  private async importFile(file: File): Promise<void> {
+    this.setBusy(true);
+    this.error = null;
+    try {
+      const loaded = await this.repository.importFile(file);
+      this.applyCatalog(loaded);
+      this.render();
+      this.focusAfterRender();
+    } catch (error) {
+      this.error = readableError(error, "The playlist file could not be imported.");
+      this.setBusy(false);
+      this.render();
+      this.focusAfterRender();
+    }
+  }
+
+  private setBusy(busy: boolean): void {
+    this.root.toggleAttribute("aria-busy", busy);
+    this.root.querySelectorAll<HTMLButtonElement>("button").forEach((button) => { button.disabled = busy; });
+  }
+
+  private async clearSource(): Promise<void> {
+    await this.repository.clear();
+    this.catalog = null;
+    this.notice = null;
+    this.modal = null;
+    this.screen = "onboarding";
+    this.render();
+    this.focusAfterRender();
+  }
+
+  private selectGroup(group: string): void {
+    this.selectedGroup = group;
+    const channels = this.channelsForSelectedGroup();
+    this.selectedChannelId = channels[0]?.id ?? null;
+    this.render();
+    this.focusAfterRender(`[data-group='${cssEscape(group)}']`);
+  }
+
+  private moveGroup(offset: number): void {
+    const groups = this.groups();
+    const current = Math.max(0, groups.indexOf(this.selectedGroup));
+    const next = clamp(current + offset, 0, groups.length - 1);
+    this.selectGroup(groups[next] ?? this.selectedGroup);
+  }
+
+  private moveChannel(offset: number, playImmediately = false): void {
+    const channels = this.channelsForSelectedGroup();
+    if (channels.length === 0) return;
+    const current = Math.max(0, channels.findIndex((channel) => channel.id === this.selectedChannelId));
+    const next = clamp(current + offset, 0, channels.length - 1);
+    const channel = channels[next];
+    if (!channel || channel.id === this.selectedChannelId) return;
+    this.selectedChannelId = channel.id;
+    if (playImmediately && this.screen === "player" && this.player) {
+      this.playbackSignal = { state: "opening", message: null, warning: null };
+      this.updatePlayerIdentity(channel);
+      void this.player.play(channel);
+      return;
+    }
+    this.render();
+    this.focusAfterRender(`[data-channel-id='${cssEscape(channel.id)}']`);
+  }
+
+  private toggleFavorite(): void {
+    const channel = this.selectedChannel();
+    if (!channel) return;
+    if (this.favorites.has(channel.id)) this.favorites.delete(channel.id);
+    else this.favorites.add(channel.id);
+    saveFavorites(this.favorites);
+    if (this.selectedGroup === FAVORITES_GROUP && !this.favorites.has(channel.id)) {
+      this.selectedChannelId = this.channelsForSelectedGroup()[0]?.id ?? null;
+    }
+    this.render();
+    this.focusAfterRender("[data-action='favorite']");
+  }
+
+  private openModal(modal: Exclude<Modal, null>): void {
+    this.modal = modal;
+    this.error = null;
+    this.render();
+    const scope = this.modalElement();
+    if (scope) this.navigator.setScope(scope);
+    this.focusAfterRender();
+  }
+
+  private closeModal(): void {
+    this.modal = null;
+    this.error = null;
+    this.render();
+    this.navigator.setScope(this.root);
+    this.focusAfterRender();
+  }
+
+  private cycleAspect(): void {
+    this.aspectIndex = (this.aspectIndex + 1) % ASPECT_MODES.length;
+    const aspect = ASPECT_MODES[this.aspectIndex] ?? "Auto";
+    this.player?.setAspect(aspect);
+    const label = this.root.querySelector<HTMLElement>("[data-role='aspect']");
+    if (label) label.textContent = aspect;
+    this.showPlayerChrome();
+  }
+
+  private readonly onClick = (event: MouseEvent): void => {
+    const action = (event.target as Element | null)?.closest<HTMLElement>("[data-action]")?.dataset.action;
+    const target = (event.target as Element | null)?.closest<HTMLElement>("[data-action]");
+    if (!action || !target) return;
+    if (action === "connect-url") void this.connectUrl("playlist-url");
+    else if (action === "connect-source-url") void this.connectUrl("source-url");
+    else if (action === "choose-file") this.root.querySelector<HTMLInputElement>("#playlist-file")?.click();
+    else if (action === "use-demo") void this.repository.useDemo().then((loaded) => { this.applyCatalog(loaded); this.render(); this.focusAfterRender(); });
+    else if (action === "open-search") this.openModal("search");
+    else if (action === "open-source") this.openModal("source");
+    else if (action === "close-modal") this.closeModal();
+    else if (action === "request-clear") this.openModal("confirm-clear");
+    else if (action === "cancel-clear") this.openModal("source");
+    else if (action === "confirm-clear") void this.clearSource();
+    else if (action === "select-group") this.selectGroup(target.dataset.group ?? ALL_GROUPS);
+    else if (action === "select-channel") {
+      this.selectedChannelId = target.dataset.channelId ?? this.selectedChannelId;
+      void this.openPlayer();
+    } else if (action === "watch") void this.openPlayer();
+    else if (action === "favorite") this.toggleFavorite();
+    else if (action === "search-result") {
+      const channel = this.requireCatalog().channels.find((item) => item.id === target.dataset.channelId);
+      if (channel) {
+        this.selectedGroup = ALL_GROUPS;
+        this.selectedChannelId = channel.id;
+        this.closeModal();
+      }
+    } else if (action === "toggle-playback") this.player?.toggle();
+    else if (action === "cycle-aspect") this.cycleAspect();
+    else if (action === "close-player") this.closePlayer();
+  };
+
+  private readonly onFocusIn = (event: FocusEvent): void => {
+    const target = (event.target as Element | null)?.closest<HTMLElement>("[data-channel-id]");
+    const channelId = target?.dataset.channelId;
+    if (!channelId || this.screen !== "browse" || this.modal) return;
+    this.selectedChannelId = channelId;
+    this.updateBrowseSelection();
+  };
+
+  private readonly onInput = (event: Event): void => {
+    const input = event.target as HTMLInputElement | null;
+    if (input?.id !== "channel-search") return;
+    this.searchQuery = input.value;
+    const results = this.root.querySelector<HTMLElement>("[data-role='search-results']");
+    if (results) results.innerHTML = this.searchResultsTemplate();
+  };
+
+  private readonly onChange = (event: Event): void => {
+    const input = event.target as HTMLInputElement | null;
+    if (input?.id !== "playlist-file") return;
+    const file = input.files?.[0];
+    if (file) void this.importFile(file);
+  };
+
+  private readonly onAppKeyDown = (event: KeyboardEvent): void => {
+    if (this.screen === "player") {
+      this.showPlayerChrome();
+      if (event.key === "ArrowUp" || event.keyCode === 427) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        this.moveChannel(-1, true);
+      } else if (event.key === "ArrowDown" || event.keyCode === 428) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        this.moveChannel(1, true);
+      } else if ([19, 415, 10252].includes(event.keyCode) || event.key === "MediaPlayPause") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        this.player?.toggle();
+      } else if (event.keyCode === 413 || event.key === "MediaStop") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        this.closePlayer();
+      }
+      return;
+    }
+    if (this.screen !== "browse" || this.modal || isTextEntry(document.activeElement)) return;
+    const active = document.activeElement as HTMLElement | null;
+    if (active?.dataset.channelId && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      this.moveChannel(event.key === "ArrowUp" ? -1 : 1);
+    } else if (active?.dataset.channelId && event.key === "ArrowLeft") {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      this.navigator.focusElement(this.root.querySelector(`[data-group='${cssEscape(this.selectedGroup)}']`));
+    } else if (active?.dataset.group && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      this.moveGroup(event.key === "ArrowUp" ? -1 : 1);
+    } else if (active?.dataset.group && event.key === "ArrowRight") {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      this.navigator.focusElement(this.root.querySelector(`[data-channel-id='${cssEscape(this.selectedChannelId ?? "")}']`));
+    }
+  };
+
+  private readonly handleBack = (): boolean => {
+    if (this.screen === "player") {
+      this.closePlayer();
+      return true;
+    }
+    if (this.modal) {
+      this.closeModal();
+      return true;
+    }
+    if (this.screen === "browse") return exitTelevisionApp();
+    return false;
+  };
+
+  private updateBrowseSelection(): void {
+    const channel = this.selectedChannel();
+    if (!channel) return;
+    this.root.querySelectorAll<HTMLElement>(".channel-row").forEach((row) => {
+      row.classList.toggle("is-selected", row.dataset.channelId === channel.id);
+    });
+    const detail = this.root.querySelector<HTMLElement>("[data-role='details']");
+    if (detail) detail.innerHTML = this.detailTemplate(channel);
+  }
+
+  private updatePlayerIdentity(channel: CatalogChannel): void {
+    const header = this.root.querySelector<HTMLElement>(".player-header > div");
+    if (header) header.innerHTML = `<h1>${escapeHtml(channel.name)}</h1><p><i></i>${escapeHtml(channel.group)}</p>`;
+  }
+
+  private updateEngineLabel(): void {
+    const label = this.root.querySelector<HTMLElement>("[data-role='engine']");
+    if (label && this.player) label.textContent = this.player.kind === "samsung-avplay" ? "Samsung AVPlay" : "Native television video";
+  }
+
+  private showPlayerChrome(): void {
+    const screen = this.root.querySelector<HTMLElement>(".player-screen");
+    screen?.classList.remove("controls-hidden");
+    this.scheduleChromeHide();
+  }
+
+  private scheduleChromeHide(): void {
+    this.clearChromeTimer();
+    if (this.playbackSignal.state !== "playing") return;
+    this.hideChromeTimer = window.setTimeout(() => {
+      this.root.querySelector<HTMLElement>(".player-screen")?.classList.add("controls-hidden");
+    }, 4_000);
+  }
+
+  private clearChromeTimer(): void {
+    if (this.hideChromeTimer !== null) window.clearTimeout(this.hideChromeTimer);
+    this.hideChromeTimer = null;
+  }
+
+  private scheduleNoticeDismiss(): void {
+    this.clearNoticeTimer();
+    if (!this.notice) return;
+    this.noticeTimer = window.setTimeout(() => {
+      this.notice = null;
+      this.root.querySelector<HTMLElement>(".notice")?.remove();
+      this.noticeTimer = null;
+    }, 4_500);
+  }
+
+  private clearNoticeTimer(): void {
+    if (this.noticeTimer !== null) window.clearTimeout(this.noticeTimer);
+    this.noticeTimer = null;
+  }
+
+  private groups(): string[] {
+    const groups = [...new Set(this.requireCatalog().channels.map((channel) => channel.group))];
+    return [ALL_GROUPS, FAVORITES_GROUP, ...groups];
+  }
+
+  private groupCount(group: string): number {
+    if (group === ALL_GROUPS) return this.requireCatalog().channels.length;
+    if (group === FAVORITES_GROUP) return this.requireCatalog().channels.filter((channel) => this.favorites.has(channel.id)).length;
+    return this.requireCatalog().channels.filter((channel) => channel.group === group).length;
+  }
+
+  private channelsForSelectedGroup(): CatalogChannel[] {
+    const channels = this.requireCatalog().channels;
+    if (this.selectedGroup === ALL_GROUPS) return channels;
+    if (this.selectedGroup === FAVORITES_GROUP) return channels.filter((channel) => this.favorites.has(channel.id));
+    return channels.filter((channel) => channel.group === this.selectedGroup);
+  }
+
+  private selectedChannel(): CatalogChannel | null {
+    if (!this.catalog || !this.selectedChannelId) return null;
+    return this.catalog.channels.find((channel) => channel.id === this.selectedChannelId) ?? null;
+  }
+
+  private ensureSelectedChannel(channels: CatalogChannel[]): CatalogChannel | null {
+    const selected = channels.find((channel) => channel.id === this.selectedChannelId) ?? channels[0] ?? null;
+    this.selectedChannelId = selected?.id ?? null;
+    return selected;
+  }
+
+  private requireCatalog(): StreamVueCatalog {
+    if (!this.catalog) throw new Error("No channel catalog is connected.");
+    return this.catalog;
+  }
+
+  private modalElement(): HTMLElement | null {
+    return this.root.querySelector<HTMLElement>(".modal");
+  }
+
+  private focusAfterRender(selector?: string): void {
+    window.setTimeout(() => {
+      if (selector) this.navigator.focusElement(this.root.querySelector<HTMLElement>(selector));
+      else this.navigator.focus();
+    }, 0);
+  }
+}
+
+function groupButton(group: string, active: boolean, count: number): string {
+  const iconName: IconName = group === ALL_GROUPS ? "grid"
+    : group === FAVORITES_GROUP ? "favorite"
+      : /movie|cinema/i.test(group) ? "film"
+        : /news/i.test(group) ? "news"
+          : /sport/i.test(group) ? "sports"
+            : "folder";
+  return `<button class="group-button${active ? " is-active" : ""}" data-action="select-group" data-group="${escapeAttribute(group)}" data-focusable="true">${icon(iconName)}<span>${escapeHtml(group)}</span><small>${count.toLocaleString()}</small></button>`;
+}
+
+function channelButton(channel: CatalogChannel, selected: boolean, favorite: boolean): string {
+  const initials = channelInitials(channel.name);
+  const logo = safeImageUrl(channel.guide?.logoUri);
+  return `<button class="channel-row${selected ? " is-selected" : ""}" data-action="select-channel" data-channel-id="${escapeAttribute(channel.id)}" data-focusable="true"${selected ? " data-autofocus='true'" : ""} role="listitem">
+    <span class="channel-mark" data-tone="${channel.number % 5}">${logo ? `<img src="${escapeAttribute(logo)}" alt="" onerror="this.hidden=true" />` : ""}<b>${escapeHtml(initials)}</b></span>
+    <span class="channel-name">${escapeHtml(channel.name)}</span>
+    ${favorite ? `<span class="favorite-mark">${icon("favorite")}</span>` : ""}
+    <span class="live-mark"><i></i>${channel.kind === "live" ? "LIVE" : channel.kind.toUpperCase()}</span>
+  </button>`;
+}
+
+function brandMark(): string {
+  return `<div class="brand" aria-label="StreamVue"><span>STREAM</span><b>VUE</b></div>`;
+}
+
+function sourceStatus(catalog: StreamVueCatalog): string {
+  if (catalog.catalogId === "streamvue-demo") return "Source refreshed 2m ago";
+  const loaded = Date.parse(catalog.loadedAt);
+  const ageMinutes = Math.max(0, Math.round((Date.now() - loaded) / 60_000));
+  if (ageMinutes < 1) return "Source refreshed just now";
+  if (ageMinutes < 60) return `Source refreshed ${ageMinutes}m ago`;
+  const hours = Math.round(ageMinutes / 60);
+  return `Source refreshed ${hours}h ago`;
+}
+
+function channelInitials(name: string): string {
+  const words = name.replace(/[^A-Za-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
+  return (words.length > 1 ? `${words[0]?.[0] ?? ""}${words[1]?.[0] ?? ""}` : words[0]?.slice(0, 2) ?? "TV").toUpperCase();
+}
+
+function safeImageUrl(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function windowAround<T>(items: T[], selectedIndex: number, size: number): { items: T[]; start: number } {
+  if (items.length <= size) return { items, start: 0 };
+  const safeIndex = clamp(selectedIndex, 0, items.length - 1);
+  const start = clamp(safeIndex - Math.floor(size / 2), 0, items.length - size);
+  return { items: items.slice(start, start + size), start };
+}
+
+function channelWindowSize(): number {
+  return window.innerHeight < 900 ? 4 : 5;
+}
+
+function loadFavorites(): Set<string> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(FAVORITES_KEY) ?? "[]") as unknown;
+    return new Set(Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveFavorites(favorites: Set<string>): void {
+  try {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites]));
+  } catch {
+    // Favorites remain active for the session if television storage is unavailable.
+  }
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[character] ?? character);
+}
+
+function escapeAttribute(value: string): string {
+  return escapeHtml(value).replace(/`/g, "&#96;");
+}
+
+function cssEscape(value: string): string {
+  return typeof CSS !== "undefined" && CSS.escape ? CSS.escape(value) : value.replace(/['"\\]/g, "\\$&");
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function readableError(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function isTextEntry(element: Element | null): boolean {
+  return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
+}

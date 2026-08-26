@@ -12,4 +12,10 @@ Run the dependency-free validation from the repository root:
 node contracts/validate-contract.mjs
 ```
 
+The Samsung/LG implementation lives in `packages/catalog-js` and runs the same fixture through its TypeScript parser:
+
+```text
+pnpm catalog:test
+```
+
 Breaking changes require a new major contract version. New optional fields can be added in a minor revision after all shipping clients ignore unknown fields safely.

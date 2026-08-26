@@ -1,0 +1,19 @@
+{
+  "name": "streamvue",
+  "private": true,
+  "version": "5.0.0-alpha.1",
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "catalog:build": "pnpm --filter @streamvue/catalog build",
+    "catalog:test": "pnpm --filter @streamvue/catalog test",
+    "tv:dev": "pnpm --filter @streamvue/tv-web dev",
+    "tv:check": "pnpm --filter @streamvue/catalog build && pnpm --filter @streamvue/tv-web check",
+    "tv:test": "pnpm --filter @streamvue/catalog test && pnpm --filter @streamvue/tv-web test",
+    "tv:build": "pnpm --filter @streamvue/catalog build && pnpm --filter @streamvue/tv-web build"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vite": "8.2.2",
+    "vitest": "4.1.11"
+  }
+}

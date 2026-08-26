@@ -1,0 +1,107 @@
+name: Publish Cross-platform Foundation
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Prerelease tag to create or update
+        required: true
+        default: v5.0.0-alpha.1
+      release_title:
+        description: Public release title
+        required: true
+        default: StreamVue 5.0 Cross-platform Foundation
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      RELEASE_TITLE: ${{ inputs.release_title }}
+
+    steps:
+      - name: Check out StreamVue
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Install Android API 37
+        run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0" "platform-tools"
+
+      - name: Build and verify Android and Google TV
+        run: >-
+          bash platforms/android/gradlew -p platforms/android
+          testDebugUnitTest
+          lintDebug
+          assembleDebug
+          bundleRelease
+          --stacktrace
+
+      - name: Verify Android TV metadata and 16 KB alignment
+        run: |
+          APK="platforms/android/app/build/outputs/apk/debug/app-debug.apk"
+          "$ANDROID_SDK_ROOT/build-tools/37.0.0/aapt2" dump badging "$APK" | grep "leanback-launchable-activity"
+          "$ANDROID_SDK_ROOT/build-tools/37.0.0/zipalign" -c -P 16 -v 4 "$APK"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install locked television dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify and build Samsung and LG television clients
+        run: |
+          node contracts/validate-contract.mjs
+          pnpm tv:check
+          pnpm tv:test
+          pnpm tv:build
+
+      - name: Assemble public foundation assets
+        shell: bash
+        run: |
+          PACKAGE_VERSION="${RELEASE_TAG#v}"
+          mkdir -p artifacts/platform-foundation
+          cp platforms/android/app/build/outputs/apk/debug/app-debug.apk "artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-android-personal-test.apk"
+          cp platforms/android/app/build/outputs/bundle/release/app-release.aab "artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-google-play-unsigned.aab"
+          (cd platforms/tv-web/dist/samsung && zip -q -r "../../../../artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-samsung-tizen-unsigned.zip" .)
+          (cd platforms/tv-web/dist/webos && zip -q -r "../../../../artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-lg-webos-unsigned.zip" .)
+          (cd artifacts/platform-foundation && sha256sum * > SHA256SUMS.txt)
+
+      - name: Create or update the prerelease
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --title "$RELEASE_TITLE" --notes-file RELEASE_NOTES.md --prerelease
+          else
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$RELEASE_TITLE" --notes-file RELEASE_NOTES.md --prerelease
+          fi
+          gh release upload "$RELEASE_TAG" artifacts/platform-foundation/* --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Upload the reproducible workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: streamvue-5.0-cross-platform-foundation
+          if-no-files-found: error
+          retention-days: 14
+          path: artifacts/platform-foundation/

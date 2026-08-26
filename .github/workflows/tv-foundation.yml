@@ -1,0 +1,74 @@
+name: Samsung and LG TV foundation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "feature/**"
+    paths:
+      - "packages/catalog-js/**"
+      - "platforms/tv-web/**"
+      - "contracts/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
+      - ".github/workflows/tv-foundation.yml"
+  pull_request:
+    paths:
+      - "packages/catalog-js/**"
+      - "platforms/tv-web/**"
+      - "contracts/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
+      - ".github/workflows/tv-foundation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  television:
+    name: Shared catalog and television packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out StreamVue
+        uses: actions/checkout@v7
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+          run_install: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate portable catalog contract
+        run: node contracts/validate-contract.mjs
+      - name: Check, test, and build television clients
+        run: |
+          pnpm tv:check
+          pnpm tv:test
+          pnpm tv:build
+      - name: Verify platform package contents
+        run: |
+          test -f platforms/tv-web/dist/samsung/config.xml
+          test -f platforms/tv-web/dist/samsung/index.html
+          test -f platforms/tv-web/dist/webos/appinfo.json
+          test -f platforms/tv-web/dist/webos/splash.png
+          grep -q '\$WEBAPIS/webapis/webapis.js' platforms/tv-web/dist/samsung/index.html
+          if find platforms/tv-web/dist/samsung platforms/tv-web/dist/webos -name '*.map' -print -quit | grep -q .; then exit 1; fi
+      - name: Upload unsigned television projects
+        uses: actions/upload-artifact@v7
+        with:
+          name: streamvue-tv-5.0-foundation
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            platforms/tv-web/dist/samsung/
+            platforms/tv-web/dist/webos/
