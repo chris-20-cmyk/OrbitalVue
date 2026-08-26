@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out StreamVue
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Validate contract fixtures
         run: node contracts/validate-contract.mjs
 
@@ -36,7 +36,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Check out StreamVue
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Select the App Store toolchain
         run: |
@@ -63,6 +63,14 @@ jobs:
 
       - name: Validate the privacy manifest
         run: plutil -lint platforms/apple/Resources/PrivacyInfo.xcprivacy
+
+      - name: Validate the iOS app icon master
+        shell: bash
+        run: |
+          ICON="platforms/apple/Apps/iOS/Assets.xcassets/AppIcon.appiconset/StreamVue-AppIcon-1024.png"
+          test "$(sips -g pixelWidth "$ICON" | awk '/pixelWidth/ {print $2}')" = "1024"
+          test "$(sips -g pixelHeight "$ICON" | awk '/pixelHeight/ {print $2}')" = "1024"
+          test "$(sips -g hasAlpha "$ICON" | awk '/hasAlpha/ {print $2}')" = "no"
 
       - name: Build and analyze iPhone and iPad
         shell: bash

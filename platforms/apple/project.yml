@@ -40,6 +40,7 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO
         CODE_SIGN_ENTITLEMENTS: Apps/iOS/StreamVue.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: Generated/StreamVue-Info.plist
       properties:
