@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path android:fillColor="#07101B" android:pathData="M0,0h320v180h-320z" />
+    <path android:fillColor="#12283A" android:pathData="M20,51h70a18,18 0,0 1,18 18v42a18,18 0,0 1,-18 18h-70a18,18 0,0 1,-18 -18v-42a18,18 0,0 1,18 -18z" />
+    <path android:fillColor="#35E7D3" android:pathData="M44,68 L82,90 L44,112 Z" />
+    <!-- STREAMVUE rendered as simple vector letterforms so the TV banner is localization-safe artwork. -->
+    <path android:fillColor="#EAF7F6" android:pathData="M120,70h18v5h-13v7h13v15h-18v-5h13v-5h-13z M142,70h20v5h-7v22h-6v-22h-7z M166,70h18v17h-5l7,10h-7l-7,-10v10h-6z M172,75v7h6v-7z M190,70h18v5h-12v6h10v5h-10v6h12v5h-18z M212,70h18v5h-12v6h10v5h-10v6h12v5h-18z M234,70h6l5,17l5,-17h6l-8,27h-6z M260,70h6v21h8v-21h6v27h-20z M284,70h18v5h-12v6h10v5h-10v6h12v5h-18z" />
+    <path android:fillColor="#35E7D3" android:fillAlpha="0.8" android:pathData="M120,110h182v3h-182z" />
+</vector>

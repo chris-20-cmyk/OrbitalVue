@@ -1,0 +1,71 @@
+name: Android foundation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "feature/**"
+    paths:
+      - "platforms/android/**"
+      - "contracts/**"
+      - ".github/workflows/android-foundation.yml"
+  pull_request:
+    paths:
+      - "platforms/android/**"
+      - "contracts/**"
+      - ".github/workflows/android-foundation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Portable catalog contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out StreamVue
+        uses: actions/checkout@v7
+      - name: Validate contract fixtures
+        run: node contracts/validate-contract.mjs
+
+  android:
+    name: Android and Google TV
+    needs: contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out StreamVue
+        uses: actions/checkout@v7
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Install Android API 37
+        run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0" "platform-tools"
+      - name: Test, lint, and package Android
+        run: >-
+          bash platforms/android/gradlew -p platforms/android
+          testDebugUnitTest
+          lintDebug
+          assembleDebug
+          bundleRelease
+          --stacktrace
+      - name: Verify Android TV metadata and 16 KB alignment
+        run: |
+          APK="platforms/android/app/build/outputs/apk/debug/app-debug.apk"
+          "$ANDROID_SDK_ROOT/build-tools/37.0.0/aapt2" dump badging "$APK" | grep "leanback-launchable-activity"
+          "$ANDROID_SDK_ROOT/build-tools/37.0.0/zipalign" -c -P 16 -v 4 "$APK"
+      - name: Upload install and store packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: streamvue-android-5.0-foundation
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            platforms/android/app/build/outputs/apk/debug/app-debug.apk
+            platforms/android/app/build/outputs/bundle/release/app-release.aab
+            platforms/android/app/build/reports/tests/testDebugUnitTest/
+            platforms/android/app/build/reports/lint-results-debug.html

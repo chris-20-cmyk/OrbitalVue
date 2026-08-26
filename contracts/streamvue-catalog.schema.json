@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamvue.app/contracts/catalog/v1/schema.json",
+  "title": "StreamVue Portable Catalog",
+  "description": "The platform-neutral playlist catalog exchanged by StreamVue clients and conformance tests.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "catalogId",
+    "displayName",
+    "loadedAt",
+    "sources",
+    "guideSources",
+    "channels"
+  ],
+  "properties": {
+    "contractVersion": {
+      "const": "1.0"
+    },
+    "catalogId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "loadedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "guideSources": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      },
+      "uniqueItems": true
+    },
+    "channels": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/channel"
+      }
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "type", "displayLocation", "refreshOnLaunch"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "type": {
+          "enum": ["m3u-file", "m3u-url", "xtream", "generated"]
+        },
+        "displayLocation": {
+          "description": "A safe display label. It must not contain credentials or tokens.",
+          "type": "string",
+          "maxLength": 512
+        },
+        "refreshOnLaunch": {
+          "type": "boolean"
+        }
+      }
+    },
+    "channel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "number", "name", "group", "kind", "sourceId", "stream"],
+      "properties": {
+        "id": {
+          "description": "Uppercase SHA-256 stable identity, compatible with the Windows catalog.",
+          "type": "string",
+          "pattern": "^[A-F0-9]{64}$"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "group": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "kind": {
+          "enum": ["live", "movie", "series", "recording", "replay"]
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "stream": {
+          "$ref": "#/$defs/stream"
+        },
+        "guide": {
+          "$ref": "#/$defs/guide"
+        },
+        "catchup": {
+          "$ref": "#/$defs/catchup"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "stream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uri", "requestHeaders"],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "format": "uri"
+        },
+        "requestHeaders": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "guide": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tvgId": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "tvgName": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "logoUri": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "catchup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "source", "days", "correctionMinutes"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "days": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 365
+        },
+        "correctionMinutes": {
+          "type": "integer",
+          "minimum": -1440,
+          "maximum": 1440
+        }
+      }
+    }
+  }
+}

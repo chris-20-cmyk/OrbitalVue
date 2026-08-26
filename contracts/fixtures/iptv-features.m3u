@@ -1,0 +1,9 @@
+#EXTM3U url-tvg="https://guide.example.invalid/us.xml"
+#EXTINF:-1 tvg-id="news.one" tvg-name="News One" tvg-logo="https://images.example.invalid/news-one.png" group-title="News" catchup="append" catchup-source="?utc={utc}" catchup-days="7" catchup-correction="1.5",News One
+#EXTVLCOPT:http-user-agent=FixturePlayer/1.0
+#EXTVLCOPT:http-referrer=https://portal.example.invalid/
+https://stream.example.invalid/live/news-one.m3u8?token=fixture
+#EXTINF:-1 tvg-id='sports.one' tvg-name='Sports One' group-title='Sports | Football' http-user-agent='FixtureSports/2.0',Sports One
+http://stream.example.invalid/live/sports-one.ts
+#EXTINF:7200 tvg-logo="https://images.example.invalid/cinema-night.png" group-title="Cinema",Cinema Night
+https://stream.example.invalid/movie/cinema-night.mp4

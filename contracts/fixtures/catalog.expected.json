@@ -1,0 +1,79 @@
+{
+  "contractVersion": "1.0",
+  "catalogId": "fixture-catalog",
+  "displayName": "IPTV feature fixture",
+  "loadedAt": "2026-08-25T12:00:00Z",
+  "sources": [
+    {
+      "id": "fixture-source",
+      "name": "IPTV feature fixture",
+      "type": "m3u-file",
+      "displayLocation": "iptv-features.m3u",
+      "refreshOnLaunch": false
+    }
+  ],
+  "guideSources": [
+    "https://guide.example.invalid/us.xml"
+  ],
+  "channels": [
+    {
+      "id": "E7D6336BB7664A5E3A6156542C52F350E2EDF5323F207676CE39AAFEA3F44CC1",
+      "number": 1,
+      "name": "News One",
+      "group": "News",
+      "kind": "live",
+      "sourceId": "fixture-source",
+      "stream": {
+        "uri": "https://stream.example.invalid/live/news-one.m3u8?token=fixture",
+        "requestHeaders": {
+          "User-Agent": "FixturePlayer/1.0",
+          "Referer": "https://portal.example.invalid/"
+        }
+      },
+      "guide": {
+        "tvgId": "news.one",
+        "tvgName": "News One",
+        "logoUri": "https://images.example.invalid/news-one.png"
+      },
+      "catchup": {
+        "mode": "append",
+        "source": "?utc={utc}",
+        "days": 7,
+        "correctionMinutes": 90
+      }
+    },
+    {
+      "id": "7617D47CBA0D76A3562D704627314962032367602167F66C273AE06BC3B1AD07",
+      "number": 2,
+      "name": "Sports One",
+      "group": "Sports | Football",
+      "kind": "live",
+      "sourceId": "fixture-source",
+      "stream": {
+        "uri": "http://stream.example.invalid/live/sports-one.ts",
+        "requestHeaders": {
+          "User-Agent": "FixtureSports/2.0"
+        }
+      },
+      "guide": {
+        "tvgId": "sports.one",
+        "tvgName": "Sports One"
+      }
+    },
+    {
+      "id": "25B453162D2C91E47ECE63690AEE810CAA87EE5DA2AC1E6C27A80DE3D4354568",
+      "number": 3,
+      "name": "Cinema Night",
+      "group": "Cinema",
+      "kind": "movie",
+      "sourceId": "fixture-source",
+      "stream": {
+        "uri": "https://stream.example.invalid/movie/cinema-night.mp4",
+        "requestHeaders": {}
+      },
+      "guide": {
+        "logoUri": "https://images.example.invalid/cinema-night.png"
+      }
+    }
+  ]
+}

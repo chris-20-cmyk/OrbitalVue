@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- StreamVue deliberately uses Media3's supported tuning APIs for decoder
+         fallback, buffering, frame-rate hints, and PlayerView behavior. -->
+    <issue id="UnsafeOptInUsageError">
+        <option
+            name="opt-in"
+            value="androidx.media3.common.util.UnstableApi" />
+    </issue>
+</lint>

@@ -1,6 +1,19 @@
 # StreamVue Native
 
-StreamVue is a Windows-native IPTV player built with .NET, WPF, LibVLCSharp, the VideoLAN playback engine, and Velopack packaging.
+StreamVue is a native IPTV player. The Windows 4.0 preview uses .NET, WPF, LibVLCSharp, the VideoLAN playback engine, and Velopack packaging. The Android 5.0 line uses Kotlin, Compose, and AndroidX Media3 for phones, tablets, Android TV, and Google TV.
+
+## Android 5.0 foundation
+
+- M3U/M3U8 file and URL import with a private last-working-copy cache and automatic URL refresh at launch
+- Exact playlist grouping, categorized All Channels browsing, fast search, and remote-friendly 10-foot navigation
+- Native Media3 HLS, progressive MPEG-TS/MP4, and RTSP playback with per-channel request headers
+- Hardware-backed MediaCodec decoding, decoder fallback, seamless frame-rate hints, six aspect modes, and immersive full screen
+- A versioned portable catalog contract and synthetic conformance fixtures for future Samsung Tizen, LG webOS, and Apple clients
+- Repeatable cloud builds that produce a personal-test APK and an unsigned Google Play AAB without requiring a paid certificate
+
+The Android Studio project lives in `platforms/android`; the shared contract lives in `contracts`. StreamVue does not ship or discover channels. Users connect sources they are authorized to use.
+
+See [Android build instructions](platforms/android/README.md), the [cross-platform architecture](docs/platform-architecture.md), and the [distribution and signing choices](docs/distribution-and-signing.md).
 
 ## 4.0 production resilience
 
@@ -138,12 +151,22 @@ StreamVue is a Windows-native IPTV player built with .NET, WPF, LibVLCSharp, the
 
 ## Build
 
+### Windows
+
 ```powershell
 dotnet restore StreamVue.Native.slnx --configfile NuGet.Config
 dotnet build StreamVue.Native.slnx -c Release --no-restore
 ```
 
 The application targets Windows x64 and the current .NET 10 LTS release.
+
+### Android and Google TV
+
+```powershell
+.\platforms\android\gradlew.bat -p platforms\android testDebugUnitTest lintDebug assembleDebug bundleRelease
+```
+
+This produces a personal-test APK and a Google Play AAB. No paid certificate is required for the development build.
 
 ## Verification tools
 

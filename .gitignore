@@ -8,3 +8,7 @@ artifacts/
 *.user
 *.suo
 *.log
+**/.gradle/
+**/.kotlin/
+**/build/
+**/local.properties
