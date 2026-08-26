@@ -16,3 +16,6 @@ node_modules/
 **/node_modules/
 **/dist/
 **/coverage/
+**/.build/
+platforms/apple/Generated/
+platforms/apple/StreamVueApple.xcodeproj/

@@ -1,0 +1,110 @@
+name: Apple foundation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "feature/**"
+    paths:
+      - "platforms/apple/**"
+      - "contracts/**"
+      - ".github/workflows/apple-foundation.yml"
+  pull_request:
+    paths:
+      - "platforms/apple/**"
+      - "contracts/**"
+      - ".github/workflows/apple-foundation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Portable catalog contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out StreamVue
+        uses: actions/checkout@v6
+      - name: Validate contract fixtures
+        run: node contracts/validate-contract.mjs
+
+  apple:
+    name: iPhone, iPad, and Apple TV
+    needs: contract
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Check out StreamVue
+        uses: actions/checkout@v6
+
+      - name: Select the App Store toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+          xcodebuild -version
+          swift --version
+
+      - name: Install pinned XcodeGen
+        run: |
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/xcodegen.zip" \
+            https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip
+          echo "4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 --check
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+          sudo "$RUNNER_TEMP/xcodegen/install.sh"
+          xcodegen --version | grep -F "Version: 2.46.0"
+
+      - name: Generate the Xcode project
+        working-directory: platforms/apple
+        run: xcodegen generate --spec project.yml
+
+      - name: Test the shared Swift catalog and source layer
+        run: swift test --package-path platforms/apple --parallel
+
+      - name: Validate the privacy manifest
+        run: plutil -lint platforms/apple/Resources/PrivacyInfo.xcprivacy
+
+      - name: Build and analyze iPhone and iPad
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project platforms/apple/StreamVueApple.xcodeproj \
+            -scheme StreamVue \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath artifacts/apple-derived-data/ios \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            build analyze | xcbeautify
+
+      - name: Build and analyze Apple TV
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project platforms/apple/StreamVueApple.xcodeproj \
+            -scheme StreamVueTV \
+            -destination "generic/platform=tvOS Simulator" \
+            -derivedDataPath artifacts/apple-derived-data/tvos \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            build analyze | xcbeautify
+
+      - name: Package unsigned simulator builds
+        run: |
+          mkdir -p artifacts/apple-foundation
+          ditto -c -k --sequesterRsrc --keepParent \
+            artifacts/apple-derived-data/ios/Build/Products/Debug-iphonesimulator/StreamVue.app \
+            artifacts/apple-foundation/StreamVue-5.1.0-alpha.1-ios-simulator-unsigned.zip
+          ditto -c -k --sequesterRsrc --keepParent \
+            artifacts/apple-derived-data/tvos/Build/Products/Debug-appletvsimulator/StreamVueTV.app \
+            artifacts/apple-foundation/StreamVue-5.1.0-alpha.1-tvos-simulator-unsigned.zip
+          (cd artifacts/apple-foundation && shasum -a 256 * > SHA256SUMS.txt)
+
+      - name: Upload reproducible Apple foundation packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: streamvue-5.1-apple-foundation
+          if-no-files-found: error
+          retention-days: 14
+          path: artifacts/apple-foundation/
