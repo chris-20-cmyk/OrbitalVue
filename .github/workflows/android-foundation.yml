@@ -45,8 +45,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-      - name: Install Android API 37
-        run: sdkmanager "platforms;android-37" "build-tools;37.0.0" "platform-tools"
+      - name: Install Android API 36
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
       - name: Test, lint, and package Android
         run: >-
           bash platforms/android/gradlew -p platforms/android
@@ -58,8 +58,8 @@ jobs:
       - name: Verify Android TV metadata and 16 KB alignment
         run: |
           APK="platforms/android/app/build/outputs/apk/debug/app-debug.apk"
-          "$ANDROID_SDK_ROOT/build-tools/37.0.0/aapt2" dump badging "$APK" | grep "leanback-launchable-activity"
-          "$ANDROID_SDK_ROOT/build-tools/37.0.0/zipalign" -c -P 16 -v 4 "$APK"
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt2" dump badging "$APK" | grep "leanback-launchable-activity"
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$APK"
       - name: Upload install and store packages
         uses: actions/upload-artifact@v7
         with:

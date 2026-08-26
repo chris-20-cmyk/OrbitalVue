@@ -19,7 +19,7 @@ The UI and playback engine remain native to each device family. Only the catalog
 
 ## Android 5.0 foundation
 
-The first Android milestone is one adaptive application package for touch devices and Android TV. It targets API 36, compiles with API 37, uses Media3 1.11, and declares both normal launcher and Leanback launcher entry points. TV navigation uses remote-focusable controls and a room-scale layout rather than stretching the phone screen.
+The first Android milestone is one adaptive application package for touch devices and Android TV. It targets and compiles with stable API 36, uses Media3 1.11, and declares both normal launcher and Leanback launcher entry points. TV navigation uses remote-focusable controls and a room-scale layout rather than stretching the phone screen.
 
 The initial source pipeline supports:
 

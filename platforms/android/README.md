@@ -8,7 +8,7 @@ Requirements:
 
 - JDK 17
 - Android SDK platform 37.0
-- Android SDK Build Tools 37.0.0
+- Android SDK Platform 36 and Build Tools 36.0.0
 
 From the repository root on Windows:
 
