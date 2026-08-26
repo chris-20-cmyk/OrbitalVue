@@ -40,6 +40,15 @@ struct SourceImportView: View {
                                     .stroke(theme.border, lineWidth: 1)
                             }
                             .onSubmit(connectURL)
+                        if usesCleartextHTTP {
+                            Label(
+                                "This provider uses unencrypted HTTP. Playlist credentials and channel requests may be visible on the network.",
+                                systemImage: "exclamationmark.shield.fill"
+                            )
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(theme.warning)
+                            .padding(.horizontal, 4)
+                        }
                         Button(action: connectURL) {
                             Label(store.isLoading ? "Connecting…" : "Connect playlist", systemImage: "link")
                                 .frame(maxWidth: .infinity)
@@ -113,6 +122,12 @@ struct SourceImportView: View {
             await store.importURL(value)
             if store.catalog?.catalogId != previousID { dismiss() }
         }
+    }
+
+    private var usesCleartextHTTP: Bool {
+        playlistURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .hasPrefix("http://")
     }
 }
 

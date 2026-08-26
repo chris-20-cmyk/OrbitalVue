@@ -48,6 +48,8 @@ The Swift parser enforces the shared 64 MiB input and 250,000-channel ceilings. 
 
 Playback uses AVURLAsset, AVPlayerItem, AVPlayer, and AVPlayerViewController directly. The supported boundary is standards-compatible HLS and progressive HTTP media that AVFoundation can decode. Unsupported schemes and channels requiring arbitrary Referer or Authorization headers are rejected with an explicit capability message rather than sent through a hidden proxy.
 
+User-entered source domains cannot be enumerated ahead of time, and some providers expose only HTTP endpoints. The Apple targets therefore carry a deliberate global ATS exception: missing schemes default to HTTPS, explicit HTTP sources display a cleartext warning, HTTPS-to-HTTP redirects are refused, and App Store review notes must justify the exception as compatibility with arbitrary user-specified third-party servers.
+
 Current CI gates are Swift package contract/privacy tests, privacy-manifest validation, Xcode analysis of both simulator targets, and unsigned simulator packages with SHA-256 checksums. Store readiness additionally requires real-device HLS tests, Picture in Picture and AirPlay validation, iPad layout checks, Apple TV remote-focus/display-matching tests, final App Store artwork and privacy metadata, signed Release archives, and TestFlight acceptance.
 
 ## Television foundation

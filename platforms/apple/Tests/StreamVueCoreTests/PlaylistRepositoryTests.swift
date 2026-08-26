@@ -11,6 +11,9 @@ struct PlaylistRepositoryTests {
         )
         #expect(url.scheme == "https")
         #expect(PlaylistSourcePolicy.safeDisplayLocation(for: url) == "provider.example.invalid:8443")
+        let cleartext = try PlaylistSourcePolicy.normalizeURL("http://legacy.example.invalid/list.m3u")
+        #expect(cleartext.scheme == "http")
+        #expect(PlaylistSourcePolicy.safeDisplayLocation(for: cleartext) == "legacy.example.invalid")
     }
 
     @Test("Rejects unsupported schemes and embedded user info")

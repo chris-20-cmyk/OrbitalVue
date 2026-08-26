@@ -31,6 +31,8 @@ StreamVue uses `AVURLAsset`, `AVPlayerItem`, `AVPlayer`, and `AVPlayerViewContro
 
 Apple does not support arbitrary AVURLAsset header injection. StreamVue supports a source-provided User-Agent and appropriately scoped cookies. Channels requiring Referer, Authorization, RTSP, RTMP, or UDP are capability-gated with a clear message rather than routed through a hidden proxy.
 
+Because IPTV providers are user-selected and some still expose only HTTP endpoints, both app targets include the global ATS exception intended for apps that connect to arbitrary user-specified servers. StreamVue defaults an address without a scheme to HTTPS, warns before connecting to explicit HTTP sources, keeps normal server-trust evaluation for HTTPS, and refuses HTTPS-to-HTTP redirects. Public App Store submissions must include this provider-compatibility justification in review notes.
+
 ## Playlist and privacy behavior
 
 - M3U/M3U8 URL onboarding on every Apple platform
