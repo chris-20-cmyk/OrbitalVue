@@ -7,8 +7,9 @@ This is the native Kotlin/Compose StreamVue 5.0 foundation for Android phones, t
 Requirements:
 
 - JDK 17
-- Android SDK platform 37.0
-- Android SDK Platform 36 and Build Tools 36.0.0
+- Android SDK Platform 37.1 and Build Tools 37.0.0
+
+StreamVue compiles against the 37.1 API surface required by its AndroidX dependencies while keeping `targetSdk = 36` for the current stable platform behavior.
 
 From the repository root on Windows:
 

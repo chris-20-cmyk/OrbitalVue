@@ -5,8 +5,12 @@ plugins {
 
 android {
     namespace = "com.streamvue.player"
-    compileSdk = 36
-    buildToolsVersion = "36.0.0"
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 1
+        }
+    }
+    buildToolsVersion = "37.0.0"
 
     defaultConfig {
         applicationId = "com.streamvue.player"

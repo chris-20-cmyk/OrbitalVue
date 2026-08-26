@@ -40,8 +40,8 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android API 36
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+      - name: Install Android API 37.1
+        run: sdkmanager "platforms;android-37.1" "build-tools;37.0.0" "platform-tools"
 
       - name: Build and verify Android and Google TV
         run: >-
@@ -55,8 +55,8 @@ jobs:
       - name: Verify Android TV metadata and 16 KB alignment
         run: |
           APK="platforms/android/app/build/outputs/apk/debug/app-debug.apk"
-          "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt2" dump badging "$APK" | grep "leanback-launchable-activity"
-          "$ANDROID_SDK_ROOT/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$APK"
+          "$ANDROID_SDK_ROOT/build-tools/37.0.0/aapt2" dump badging "$APK" | grep "leanback-launchable-activity"
+          "$ANDROID_SDK_ROOT/build-tools/37.0.0/zipalign" -c -P 16 -v 4 "$APK"
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
