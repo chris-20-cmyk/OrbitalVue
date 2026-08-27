@@ -4,6 +4,50 @@ import Testing
 
 @Suite("Media-center security and mapping")
 struct MediaCenterTests {
+    @Test("Persists a cache-safe media source and resolves playback after restart")
+    func persistsMediaCenterSource() async throws {
+        let token = "plex-repository-token-never-cache"
+        let http = StubMediaCenterHTTPClient { request in
+            switch request.url.path {
+            case "/identity":
+                return jsonResponse(#"{"MediaContainer":{"machineIdentifier":"plex-repository-server","friendlyName":"Home Plex"}}"#)
+            case "/library/sections":
+                return jsonResponse(#"{"MediaContainer":{"Directory":[{"key":"1","title":"Movies","type":"movie","totalSize":1}]}}"#)
+            case "/library/sections/1/all":
+                return jsonResponse(#"{"MediaContainer":{"offset":0,"totalSize":1,"Metadata":[{"ratingKey":"movie-1","title":"Repository Movie","type":"movie","Media":[{"id":"media-1","Part":[{"id":"part-1","key":"/library/parts/1/movie.mkv"}]}]}]}}"#)
+            default:
+                return MediaCenterHTTPResponse(statusCode: 404, body: Data())
+            }
+        }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("StreamVueMediaCenterTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let service = MediaCenterService(
+            httpClient: http,
+            secretStore: MediaCenterMemorySecretStore(),
+            plexClientIdentifier: "streamvue-repository-test"
+        )
+        let repository = MediaCenterRepository(directory: directory, service: service)
+
+        let connected = try await repository.connectPlex(
+            serverAddress: "https://plex.home:32400",
+            token: token
+        )
+        let channel = try #require(connected.catalog.channels.first)
+        let plan = try await repository.playbackPlan(for: channel.stream.uri)
+        #expect(plan.requestHeaders["X-Plex-Token"] == token)
+
+        let snapshotURL = directory.appendingPathComponent("media-center-source.json")
+        let serialized = String(data: try Data(contentsOf: snapshotURL), encoding: .utf8) ?? ""
+        #expect(!serialized.contains(token))
+        #expect(!serialized.contains("X-Plex-Token"))
+
+        let restarted = MediaCenterRepository(directory: directory, service: service)
+        let restored = try await restarted.loadSaved()
+        #expect(restored?.catalog.channels.map(\.name) == ["Repository Movie"])
+        #expect(try await restarted.currentConnection()?.serverID == "plex-repository-server")
+    }
+
     @Test("Requires explicit consent before sending credentials over HTTP")
     func requiresCleartextConsent() async throws {
         let http = StubMediaCenterHTTPClient { request in
