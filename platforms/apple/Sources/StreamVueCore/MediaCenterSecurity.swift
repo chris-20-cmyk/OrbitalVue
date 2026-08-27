@@ -7,6 +7,7 @@ public enum MediaCenterError: LocalizedError, Equatable, Sendable {
     case invalidDisplayName
     case invalidCredential
     case missingCredential
+    case insecureTransportConsentRequired
     case invalidResponse
     case serverStatus(Int)
     case responseTooLarge(maximumBytes: Int)
@@ -28,6 +29,8 @@ public enum MediaCenterError: LocalizedError, Equatable, Sendable {
             "The media-center credential is empty or malformed."
         case .missingCredential:
             "The protected media-center credential is missing. Connect the server again."
+        case .insecureTransportConsentRequired:
+            "This media server uses unencrypted HTTP. Confirm the insecure connection before sending or saving credentials."
         case .invalidResponse:
             "The media center returned an invalid response."
         case .serverStatus(let status):
@@ -92,6 +95,16 @@ public enum MediaCenterURLPolicy {
         let authority = baseURL.port.map { "\(formattedHost):\($0)" } ?? formattedHost
         let path = baseURL.path == "/" ? "" : baseURL.path
         return "\(authority)\(path)"
+    }
+
+    public static func requireAllowedTransport(
+        _ baseURL: URL,
+        allowInsecureHTTP: Bool
+    ) throws {
+        let normalized = try normalizeBaseURL(baseURL.absoluteString)
+        if normalized.scheme?.lowercased() == "http", !allowInsecureHTTP {
+            throw MediaCenterError.insecureTransportConsentRequired
+        }
     }
 
     public static func requireIdentifier(_ value: String, label: String) throws -> String {

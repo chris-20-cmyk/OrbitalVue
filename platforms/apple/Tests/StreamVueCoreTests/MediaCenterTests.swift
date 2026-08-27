@@ -4,6 +4,37 @@ import Testing
 
 @Suite("Media-center security and mapping")
 struct MediaCenterTests {
+    @Test("Requires explicit consent before sending credentials over HTTP")
+    func requiresCleartextConsent() async throws {
+        let http = StubMediaCenterHTTPClient { request in
+            #expect(request.headers["X-Plex-Token"] == nil)
+            return jsonResponse(#"{"MediaContainer":{"machineIdentifier":"plex-http-server","friendlyName":"Local Plex"}}"#)
+        }
+        let service = MediaCenterService(
+            httpClient: http,
+            secretStore: MediaCenterMemorySecretStore()
+        )
+
+        do {
+            _ = try await service.connectPlex(
+                serverAddress: "http://192.168.1.8:32400",
+                token: "local-plex-token"
+            )
+            Issue.record("HTTP credentials require an explicit insecure-transport confirmation.")
+        } catch let error as MediaCenterError {
+            #expect(error == .insecureTransportConsentRequired)
+        }
+        #expect(await http.requests().isEmpty)
+
+        let connection = try await service.connectPlex(
+            serverAddress: "http://192.168.1.8:32400",
+            token: "local-plex-token",
+            allowInsecureHTTP: true
+        )
+        #expect(connection.serverID == "plex-http-server")
+        #expect(try await service.hasCredential(for: connection))
+    }
+
     @Test("Accepts only canonical credential-free internal playback locators")
     func canonicalPlaybackLocators() throws {
         let locator = MediaCenterPlaybackLocator(

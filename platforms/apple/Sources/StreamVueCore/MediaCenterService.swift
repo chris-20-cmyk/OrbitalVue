@@ -29,9 +29,14 @@ public actor MediaCenterService {
     public func connectPlex(
         serverAddress: String,
         token rawToken: String,
-        displayName: String? = nil
+        displayName: String? = nil,
+        allowInsecureHTTP: Bool = false
     ) async throws -> MediaCenterConnection {
         let baseURL = try MediaCenterURLPolicy.normalizeBaseURL(serverAddress)
+        try MediaCenterURLPolicy.requireAllowedTransport(
+            baseURL,
+            allowInsecureHTTP: allowInsecureHTTP
+        )
         let token = try MediaCenterHeaderPolicy.credential(rawToken)
         let clientIdentifier = try MediaCenterURLPolicy.requireIdentifier(
             plexClientIdentifier,
@@ -62,7 +67,11 @@ public actor MediaCenterService {
             baseURL: baseURL.absoluteString,
             credentialID: credentialID
         )
-        try await saveCredential(token, for: connection)
+        try await saveCredential(
+            token,
+            for: connection,
+            allowInsecureHTTP: allowInsecureHTTP
+        )
         return connection
     }
 
@@ -72,9 +81,14 @@ public actor MediaCenterService {
         serverAddress: String,
         username rawUsername: String,
         password: String,
-        displayName: String? = nil
+        displayName: String? = nil,
+        allowInsecureHTTP: Bool = false
     ) async throws -> MediaCenterConnection {
         let baseURL = try MediaCenterURLPolicy.normalizeBaseURL(serverAddress)
+        try MediaCenterURLPolicy.requireAllowedTransport(
+            baseURL,
+            allowInsecureHTTP: allowInsecureHTTP
+        )
         let username = rawUsername.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !username.isEmpty, username.count <= 256,
               !password.isEmpty, password.utf8.count <= 16_384 else {
@@ -108,7 +122,11 @@ public actor MediaCenterService {
             credentialID: credentialID,
             userID: authentication.userID
         )
-        try await saveCredential(token, for: connection)
+        try await saveCredential(
+            token,
+            for: connection,
+            allowInsecureHTTP: allowInsecureHTTP
+        )
         return connection
     }
 
@@ -236,27 +254,34 @@ public actor MediaCenterService {
         guard let rawValue = try await secretStore.value(for: connection.credentialID) else {
             throw MediaCenterError.missingCredential
         }
+        let expectedBaseURL = try normalizedAddress(for: connection)
         guard let data = rawValue.data(using: .utf8),
               let stored = try? JSONDecoder().decode(MediaCenterVaultCredential.self, from: data),
               stored.contractVersion == streamVueMediaCenterContractVersion,
               stored.provider == connection.provider,
               stored.serverID == connection.serverID,
               stored.userID == connection.userID,
-              stored.baseURL == (try normalizedAddress(for: connection)) else {
+              stored.baseURL == expectedBaseURL else {
             throw MediaCenterError.invalidCredential
         }
+        try MediaCenterURLPolicy.requireAllowedTransport(
+            MediaCenterURLPolicy.normalizeBaseURL(stored.baseURL),
+            allowInsecureHTTP: stored.allowInsecureHTTP
+        )
         return try MediaCenterHeaderPolicy.credential(stored.value)
     }
 
     private func saveCredential(
         _ value: String,
-        for connection: MediaCenterConnection
+        for connection: MediaCenterConnection,
+        allowInsecureHTTP: Bool
     ) async throws {
         let stored = MediaCenterVaultCredential(
             provider: connection.provider,
             serverID: connection.serverID,
             userID: connection.userID,
             baseURL: try normalizedAddress(for: connection),
+            allowInsecureHTTP: allowInsecureHTTP,
             value: try MediaCenterHeaderPolicy.credential(value)
         )
         let data = try JSONEncoder().encode(stored)
@@ -318,6 +343,7 @@ private struct MediaCenterVaultCredential: Codable, Sendable {
     let serverID: String
     let userID: String?
     let baseURL: String
+    let allowInsecureHTTP: Bool
     let value: String
 
     private enum CodingKeys: String, CodingKey {
@@ -326,6 +352,7 @@ private struct MediaCenterVaultCredential: Codable, Sendable {
         case serverID = "serverId"
         case userID = "userId"
         case baseURL = "baseUrl"
+        case allowInsecureHTTP
         case value
     }
 
@@ -334,6 +361,7 @@ private struct MediaCenterVaultCredential: Codable, Sendable {
         serverID: String,
         userID: String?,
         baseURL: String,
+        allowInsecureHTTP: Bool,
         value: String
     ) {
         self.contractVersion = streamVueMediaCenterContractVersion
@@ -341,6 +369,7 @@ private struct MediaCenterVaultCredential: Codable, Sendable {
         self.serverID = serverID
         self.userID = userID
         self.baseURL = baseURL
+        self.allowInsecureHTTP = allowInsecureHTTP
         self.value = value
     }
 }
