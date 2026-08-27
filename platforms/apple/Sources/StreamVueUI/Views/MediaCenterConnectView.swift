@@ -95,7 +95,9 @@ struct MediaCenterConnectView: View {
                 .disabled(!canConnect || isSubmitting || store.isLoading)
             }
         }
+        #if os(iOS)
         .scrollContentBackground(.hidden)
+        #endif
         .background(theme.backgroundGradient.ignoresSafeArea())
         .navigationTitle("Connect \(provider.displayName)")
         #if os(iOS)
