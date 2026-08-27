@@ -14,7 +14,7 @@ StreamVue can be built and tested on Windows, Android, Android TV, Google TV, Sa
 | LG webOS TV | Free LG developer account and Developer Mode testing | LG Seller Lounge enrollment and review; confirm any seller terms during enrollment |
 | iPhone / iPad / Apple TV | Free Apple Account with short-lived personal provisioning | Apple Developer Program: US$99 per membership year; no one-time App Store option |
 
-No paid certificate is needed to continue building StreamVue 5.1. The generated Android debug APK installs on personal devices after Android's normal sideload confirmation. The generated AAB is intentionally unsigned so Google Play can apply the account's upload and app-signing setup later. Apple CI currently produces unsigned simulator-only ZIPs; physical Apple devices require Xcode signing with either a free Personal Team or a paid team.
+No paid certificate is needed to continue building StreamVue 5.1. The generated Android debug APK installs on personal devices after Android's normal sideload confirmation. The generated AAB is intentionally unsigned so Google Play can apply the account's upload and app-signing setup later. Apple CI compiles unsigned simulator products but does not publish KSPlayer-enabled binaries until the separate software-license gate is resolved; physical Apple devices require Xcode signing with either a free Personal Team or a paid team.
 
 ## Windows choices
 
@@ -69,7 +69,7 @@ The store path uses LG Seller Lounge and a reviewed `.ipk` package. LG's public 
 
 An Apple Account can use Xcode's Personal Team for free on-device testing. Apple limits free personal provisioning to 10 App IDs and 3 devices per platform, and the App IDs, device registrations, and profiles expire after 7 days. This is enough to develop and test StreamVue on personally owned devices, but it requires periodic rebuild/reinstallation.
 
-The generated Xcode project currently defines `com.streamvue.player` for iPhone/iPad and `com.streamvue.player.tv` for Apple TV. Select the Personal Team for both targets in Xcode; if either identifier is unavailable to that team, change the bundle ID to a unique value before signing. The CI ZIPs contain simulator `.app` bundles, not IPA files, and cannot be sideloaded onto physical devices. A compatible Mac and local Xcode installation are required for Personal Team device signing; the GitHub macOS runner only verifies unsigned simulator builds.
+The generated Xcode project currently defines `com.streamvue.player` for iPhone/iPad and `com.streamvue.player.tv` for Apple TV. Select the Personal Team for both targets in Xcode; if either identifier is unavailable to that team, change the bundle ID to a unique value before signing. A compatible Mac and local Xcode installation are required for Personal Team device signing; the GitHub macOS runner only verifies unsigned simulator builds and does not publish them.
 
 App Store, TestFlight, ad-hoc, and normal long-lived distribution require the [Apple Developer Program](https://developer.apple.com/support/compare-memberships/), currently US$99 per membership year. Eligible nonprofit, educational, or government organizations can request a fee waiver. Apple does not provide a one-time-fee App Store membership, and no separate commercial certificate purchase is needed beyond that membership. Final distribution also requires registered identifiers, signing and provisioning, App Store Connect records, store artwork, accurate privacy answers, and signed Release archives.
 
@@ -81,4 +81,4 @@ A code-signing certificate proves who produced a binary; a software license stat
 - MIT or Apache-2.0: permissive open source and potentially eligible for free OSS signing, but others may reuse the code under the license terms.
 - A custom source-available license: more control, but not OSI-approved and generally not eligible for free OSS-signing programs.
 
-No source-license choice has been made automatically in this repository.
+No source-license choice has been made automatically in this repository. This choice is now also a hard Apple distribution gate because the default KSPlayer 2.3.4 package is GPL-3.0; see [KSPlayer licensing](ksplayer-licensing.md).

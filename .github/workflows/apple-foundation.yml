@@ -98,21 +98,8 @@ jobs:
             COMPILER_INDEX_STORE_ENABLE=NO \
             build analyze | xcbeautify
 
-      - name: Package unsigned simulator builds
+      - name: Verify simulator products without distributing them
         run: |
-          mkdir -p artifacts/apple-foundation
-          ditto -c -k --sequesterRsrc --keepParent \
-            artifacts/apple-derived-data/ios/Build/Products/Debug-iphonesimulator/StreamVue.app \
-            artifacts/apple-foundation/StreamVue-5.1.0-alpha.1-ios-simulator-unsigned.zip
-          ditto -c -k --sequesterRsrc --keepParent \
-            artifacts/apple-derived-data/tvos/Build/Products/Debug-appletvsimulator/StreamVueTV.app \
-            artifacts/apple-foundation/StreamVue-5.1.0-alpha.1-tvos-simulator-unsigned.zip
-          (cd artifacts/apple-foundation && shasum -a 256 * > SHA256SUMS.txt)
-
-      - name: Upload reproducible Apple foundation packages
-        uses: actions/upload-artifact@v7
-        with:
-          name: streamvue-5.1-apple-foundation
-          if-no-files-found: error
-          retention-days: 14
-          path: artifacts/apple-foundation/
+          test -d artifacts/apple-derived-data/ios/Build/Products/Debug-iphonesimulator/StreamVue.app
+          test -d artifacts/apple-derived-data/tvos/Build/Products/Debug-appletvsimulator/StreamVueTV.app
+          echo "KSPlayer-enabled binaries stay inside CI until StreamVue selects a compatible distribution license."

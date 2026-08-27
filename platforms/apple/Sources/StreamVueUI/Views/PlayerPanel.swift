@@ -30,10 +30,11 @@ struct PlayerPanel: View {
 
     private func video(_ channel: CatalogChannel) -> some View {
         ZStack {
-            NativePlayerSurface(
-                player: player.player,
+            StreamPlayerSurface(
+                controller: player,
                 aspectMode: settings.aspectMode,
-                allowsPictureInPicture: settings.allowsPictureInPicture
+                allowsPictureInPicture: settings.allowsPictureInPicture,
+                role: .inline
             )
             .aspectRatio(16 / 9, contentMode: .fit)
 
@@ -139,9 +140,16 @@ struct PlayerPanel: View {
             .accessibilityLabel("Aspect ratio, \(settings.aspectMode.label)")
 
             if settings.allowsExternalPlayback {
-                StreamVueRoutePicker()
-                    .frame(width: 42, height: 42)
-                    .accessibilityLabel("AirPlay")
+                if player.activeEngine == .ksPlayer {
+                    Button { player.useAVKitForExternalPlayback() } label: {
+                        Image(systemName: "airplayvideo")
+                    }
+                    .accessibilityLabel("Switch to AVKit for AirPlay")
+                } else {
+                    StreamVueRoutePicker()
+                        .frame(width: 42, height: 42)
+                        .accessibilityLabel("AirPlay")
+                }
             }
 
             Button { onFullscreen(channel) } label: {
@@ -163,7 +171,10 @@ struct PlayerPanel: View {
             metric("STALLS", "\(player.telemetry.stallCount)")
             metric("DROPPED", "\(player.telemetry.droppedFrames)")
             Spacer()
-            Text(channel.stream.uri.lowercased().contains(".m3u8") ? "HLS" : "NATIVE")
+            Text(player.activeEngine == .ksPlayer ? "KS METAL" : "AVKIT")
+                .font(.caption2.weight(.black))
+                .foregroundStyle(theme.accent)
+            Text(channel.stream.uri.lowercased().contains(".m3u8") ? "HLS" : "DIRECT")
                 .font(.caption2.weight(.black))
                 .foregroundStyle(theme.muted)
         }
@@ -191,7 +202,7 @@ struct PlayerPanel: View {
             }
             Text("Ready when you are")
                 .font(.title2.bold())
-            Text("Select a channel to start native Apple playback.")
+            Text("Select a channel to start premium Apple playback.")
                 .foregroundStyle(theme.muted)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -222,10 +233,11 @@ struct FullscreenPlayerView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            NativePlayerSurface(
-                player: player.player,
+            StreamPlayerSurface(
+                controller: player,
                 aspectMode: settings.aspectMode,
-                allowsPictureInPicture: settings.allowsPictureInPicture
+                allowsPictureInPicture: settings.allowsPictureInPicture,
+                role: .fullscreen
             )
             .ignoresSafeArea()
 
@@ -251,7 +263,16 @@ struct FullscreenPlayerView: View {
                     }
                     .buttonStyle(.bordered)
                     if settings.allowsExternalPlayback {
-                        StreamVueRoutePicker().frame(width: 48, height: 48)
+                        if player.activeEngine == .ksPlayer {
+                            Button {
+                                player.useAVKitForExternalPlayback()
+                            } label: {
+                                Label("Use AVKit for AirPlay", systemImage: "airplayvideo")
+                            }
+                            .buttonStyle(.bordered)
+                        } else {
+                            StreamVueRoutePicker().frame(width: 48, height: 48)
+                        }
                     }
                 }
                 .padding(18)
@@ -260,6 +281,9 @@ struct FullscreenPlayerView: View {
             }
         }
         .persistentSystemOverlays(.hidden)
+        .onChange(of: settings.aspectMode) { _, mode in
+            player.applyKSAspectMode(mode)
+        }
     }
 }
 #endif

@@ -1,6 +1,6 @@
 # StreamVue for iPhone, iPad, and Apple TV
 
-This directory contains the native SwiftUI and AVFoundation StreamVue 5.1 foundation. It is one dependency-free Swift package plus two generated application targets:
+This directory contains the native SwiftUI StreamVue 5.1 foundation. It is one Swift package with pinned KSPlayer 2.3.4 and AVFoundation/AVKit playback plus two generated application targets:
 
 - `StreamVue` for iPhone and iPad
 - `StreamVueTV` for Apple TV
@@ -25,11 +25,13 @@ xcodebuild -project StreamVueApple.xcodeproj -scheme StreamVueTV -destination 'g
 
 The Xcode project is generated and ignored. `project.yml`, the Swift package, and the locked CI workflow remain the authoritative build inputs.
 
-## Native playback boundary
+## Selectable playback engines
 
-StreamVue uses `AVURLAsset`, `AVPlayerItem`, `AVPlayer`, and `AVPlayerViewController` directly. It supports standards-compliant HLS and progressive HTTP media that AVFoundation can decode. Hardware decoding, alternate audio/subtitles, spatial audio, Atmos-capable output, Picture in Picture, AirPlay, and Apple TV display matching remain system-managed features and depend on the source, device, receiver, and user settings.
+KSPlayer's KSMEPlayer is the default engine. It combines FFmpeg demuxing, Metal rendering, VideoToolbox hardware decode, request-header support, adaptive frame presentation, deinterlacing, broader containers, embedded tracks, and text/image subtitles. StreamVue owns the player chrome and keeps one KSPlayer surface alive while moving between inline and true fullscreen presentation. Users can choose AVKit as primary or allow automatic fallback in either direction.
 
-Apple does not support arbitrary AVURLAsset header injection. StreamVue supports a source-provided User-Agent and appropriately scoped cookies. Channels requiring Referer, Authorization, RTSP, RTMP, or UDP are capability-gated with a clear message rather than routed through a hidden proxy.
+The AVKit path uses `AVURLAsset`, `AVPlayerItem`, `AVPlayer`, and `AVPlayerViewController` directly for standards-compliant HLS and progressive HTTP media. AVKit handles compatible hardware decoding, spatial audio/Atmos, Picture in Picture, AirPlay, HDR, and Apple TV display matching. Apple does not support arbitrary AVURLAsset header injection, so Referer/Authorization streams can fall back to KSPlayer instead of passing credentials through a hidden proxy.
+
+KSPlayer's public package is GPL-3.0. StreamVue pins version 2.3.4 for reproducibility, but CI does not upload KSPlayer-enabled binaries while this repository has no compatible software license. Personal source builds may proceed; public binary/App Store distribution requires either a GPL-compatible StreamVue release or KSPlayer's separately licensed LGPL/commercial package. See [the licensing gate](../../docs/ksplayer-licensing.md).
 
 Because IPTV providers are user-selected and some still expose only HTTP endpoints, both app targets include the global ATS exception intended for apps that connect to arbitrary user-specified servers. StreamVue defaults an address without a scheme to HTTPS, warns before connecting to explicit HTTP sources, keeps normal server-trust evaluation for HTTPS, and refuses HTTPS-to-HTTP redirects. Public App Store submissions must include this provider-compatibility justification in review notes.
 
@@ -47,6 +49,6 @@ Because IPTV providers are user-selected and some still expose only HTTP endpoin
 
 `PrivacyInfo.xcprivacy` declares no tracking or collected data and documents the settings-only UserDefaults access reason. Store privacy answers must still match the final shipping feature set.
 
-## Signing
+## Signing and distribution
 
-CI produces unsigned simulator packages without an Apple Developer Program membership. Installing on a personal iPhone, iPad, or Apple TV requires Xcode signing with either a free Personal Team or paid Apple Developer Program team. App Store and TestFlight distribution require the paid annual membership and final App Store assets/provisioning.
+CI compiles and analyzes unsigned simulator products without an Apple Developer Program membership, but does not publish them while the KSPlayer licensing gate is unresolved. Installing a personal build on an iPhone, iPad, or Apple TV requires Xcode signing with either a free Personal Team or paid Apple Developer Program team. App Store and TestFlight distribution require both a compatible KSPlayer/StreamVue software license and the paid Apple membership plus final App Store assets/provisioning.

@@ -1,6 +1,6 @@
 # StreamVue Native
 
-StreamVue is a native IPTV player. The Windows 4.0 preview uses .NET, WPF, LibVLCSharp, the VideoLAN playback engine, and Velopack packaging. The Android 5.0 line uses Kotlin, Compose, and AndroidX Media3 for phones, tablets, Android TV, and Google TV. Samsung Tizen and LG webOS share a lightweight remote-first TypeScript surface while retaining each vendor's native television playback path. Apple 5.1 uses SwiftUI, AVFoundation, and AVKit for iPhone, iPad, and Apple TV.
+StreamVue is a native IPTV player. The Windows 4.0 preview uses .NET, WPF, LibVLCSharp, the VideoLAN playback engine, and Velopack packaging. The Android 5.0 line uses Kotlin, Compose, and AndroidX Media3 for phones, tablets, Android TV, and Google TV. Samsung Tizen and LG webOS share a lightweight remote-first TypeScript surface while retaining each vendor's native television playback path. Apple 5.1 uses SwiftUI with selectable KSPlayer/Metal and AVFoundation/AVKit engines for iPhone, iPad, and Apple TV.
 
 ## Android 5.0 foundation
 
@@ -31,12 +31,12 @@ See [TV build and sideload instructions](platforms/tv-web/README.md) and the [te
 - Native SwiftUI clients for iOS, iPadOS, and tvOS 17 or later, with an adaptive `NavigationSplitView` on touch devices and a focus-aware three-column Apple TV workspace
 - Playlist URL onboarding everywhere plus security-scoped M3U/M3U8 file import on iPhone and iPad
 - Exact playlist groups, categorized All Channels sections, search, favorites, 14 aspect modes, and true fullscreen playback
-- Direct AVFoundation/AVKit playback with system-managed hardware decoding, alternate tracks, compatible spatial audio/Atmos paths, Picture in Picture, AirPlay, and Apple TV display matching
-- Honest capability gating for sources that require Referer, Authorization, RTSP, RTMP, or UDP instead of silently proxying private credentials
+- KSPlayer 2.3.4 as the default Metal/FFmpeg engine, with hardware decoding, adaptive frame cadence, deinterlacing, configurable buffering/subtitle size, request headers, and transparent AVKit fallback
+- Direct AVFoundation/AVKit fallback with system-managed hardware decoding, compatible spatial audio/Atmos paths, Picture in Picture, AirPlay, and Apple TV display matching
 - Keychain-protected URL secrets, complete file protection for the cached playlist, launch refresh, and last-working-copy recovery
-- Xcode 26.6 CI that tests the shared Swift catalog, analyzes both app targets, and packages unsigned simulator verification builds
+- Xcode 26.6 CI that tests the shared Swift catalog and analyzes both app targets without publishing a license-incompatible binary
 
-The current Apple milestone is a source and simulator foundation, not an App Store package. Physical-device installation requires Xcode signing; App Store and TestFlight distribution require Apple Developer Program enrollment, final artwork, privacy answers, and signed archives. See [Apple build instructions](platforms/apple/README.md).
+The current Apple milestone is a source and simulator foundation, not an App Store package. Physical-device installation requires Xcode signing. The public KSPlayer dependency is GPL-3.0, so binary distribution additionally requires either a GPL-compatible StreamVue release or KSPlayer's separately licensed LGPL/commercial package. App Store and TestFlight distribution also require Apple Developer Program enrollment, final artwork, privacy answers, and signed archives. See [Apple build instructions](platforms/apple/README.md) and [KSPlayer licensing gate](docs/ksplayer-licensing.md).
 
 ## 4.0 production resilience
 
@@ -214,7 +214,7 @@ xcodebuild -project StreamVueApple.xcodeproj -scheme StreamVue -destination 'gen
 xcodebuild -project StreamVueApple.xcodeproj -scheme StreamVueTV -destination 'generic/platform=tvOS Simulator' CODE_SIGNING_ALLOWED=NO build
 ```
 
-CI produces unsigned iOS and tvOS simulator ZIPs for verification. They are not IPA files and cannot be installed on physical devices.
+CI compiles and analyzes unsigned iOS and tvOS simulator products but does not publish the KSPlayer-enabled binaries until StreamVue's software-license path is selected. These simulator products are not IPA files and cannot be installed on physical devices.
 
 ## Verification tools
 

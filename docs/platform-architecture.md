@@ -13,7 +13,7 @@ StreamVue is a player and personal source manager. It does not bundle, sell, dis
 | Android TV / Google TV | Kotlin / Compose, 10-foot surface | AndroidX Media3 | Same Android package and data layer |
 | Samsung TV | Tizen packaged web app | AVPlay | Catalog contract and JavaScript conformance parser |
 | LG TV | webOS packaged web app | webOS media APIs | Catalog contract and JavaScript conformance parser |
-| iPhone, iPad, Apple TV | SwiftUI | AVFoundation / AVPlayerViewController | Catalog contract and native Swift parser |
+| iPhone, iPad, Apple TV | SwiftUI | KSPlayer/Metal + AVFoundation/AVPlayerViewController | Catalog contract and native Swift parser |
 
 The UI and playback engine remain native to each device family. Only the catalog semantics and synthetic fixtures are portable. This avoids forcing desktop assumptions onto televisions and avoids shipping a browser-based video engine where a native decoder is available.
 
@@ -40,17 +40,17 @@ Before public store submission, each client must pass its native remote/touch ac
 
 ## Apple 5.1 foundation
 
-`platforms/apple` contains dependency-free `StreamVueCore` and `StreamVueUI` Swift package modules. XcodeGen creates separate `StreamVue` iPhone/iPad and `StreamVueTV` Apple TV application targets from the committed `project.yml`, keeping generated Xcode project state out of source control.
+`platforms/apple` contains a dependency-free `StreamVueCore` module and a `StreamVueUI` module that integrates the pinned KSPlayer package. XcodeGen creates separate `StreamVue` iPhone/iPad and `StreamVueTV` Apple TV application targets from the committed `project.yml`, keeping generated Xcode project state out of source control.
 
 The touch client adapts through `NavigationSplitView`; compact devices move selected playback into a true fullscreen cover. Apple TV uses a remote-first, focus-aware three-column group/channel/player workspace. Both clients consume the same source-ordered catalog, exact `group-title` sections, search, favorites, playback settings, and privacy-safe repository.
 
 The Swift parser enforces the shared 64 MiB input and 250,000-channel ceilings. URL credentials are separated from the non-secret source manifest and stored in Keychain. The last working playlist is written to protected Application Support storage and excluded from backup, then used only when launch refresh fails.
 
-Playback uses AVURLAsset, AVPlayerItem, AVPlayer, and AVPlayerViewController directly. The supported boundary is standards-compatible HLS and progressive HTTP media that AVFoundation can decode. Unsupported schemes and channels requiring arbitrary Referer or Authorization headers are rejected with an explicit capability message rather than sent through a hidden proxy.
+Playback is engine-neutral above the surface layer. KSPlayer 2.3.4 is the default KSMEPlayer/Metal path for broader demuxing, arbitrary provider headers, hardware decode, adaptive presentation, and embedded tracks; AVURLAsset, AVPlayerItem, AVPlayer, and AVPlayerViewController provide a selectable native path and two-way fallback. Neither path sends credentials through a StreamVue proxy.
 
 User-entered source domains cannot be enumerated ahead of time, and some providers expose only HTTP endpoints. The Apple targets therefore carry a deliberate global ATS exception: missing schemes default to HTTPS, explicit HTTP sources display a cleartext warning, HTTPS-to-HTTP redirects are refused, and App Store review notes must justify the exception as compatibility with arbitrary user-specified third-party servers.
 
-Current CI gates are Swift package contract/privacy tests, privacy-manifest validation, Xcode analysis of both simulator targets, and unsigned simulator packages with SHA-256 checksums. Store readiness additionally requires real-device HLS tests, Picture in Picture and AirPlay validation, iPad layout checks, Apple TV remote-focus/display-matching tests, final App Store artwork and privacy metadata, signed Release archives, and TestFlight acceptance.
+Current CI gates are Swift package contract/privacy tests, privacy-manifest validation, and Xcode analysis of both simulator targets. KSPlayer-enabled binaries remain unpublished until StreamVue chooses GPL-compatible distribution or obtains KSPlayer's separately licensed package. Store readiness additionally requires that license gate, real-device HLS tests, Picture in Picture and AirPlay validation, iPad layout checks, Apple TV remote-focus/display-matching tests, final App Store artwork and privacy metadata, signed Release archives, and TestFlight acceptance.
 
 ## Television foundation
 
