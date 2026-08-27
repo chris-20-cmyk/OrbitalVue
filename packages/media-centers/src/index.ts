@@ -34,6 +34,19 @@ export type {
   PlexServerIdentity
 } from "./plex.js";
 export {
+  PlexAccountClient,
+  selectPreferredPlexConnection
+} from "./plex-account.js";
+export type {
+  PlexAccountClientConfiguration,
+  PlexAccountToken,
+  PlexDevicePublicKey,
+  PlexDeviceSigner,
+  PlexDiscoveredServer,
+  PlexPinChallenge,
+  PlexServerConnection
+} from "./plex-account.js";
+export {
   normalizeMediaCenterBaseUrl,
   safeServerDisplayLocation
 } from "./url.js";

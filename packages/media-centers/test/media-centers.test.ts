@@ -2,15 +2,18 @@ import { describe, expect, it } from "vitest";
 import {
   MEDIA_CENTER_CONTRACT_VERSION,
   EmbyClient,
+  PlexAccountClient,
   PlexClient,
   authenticateEmby,
   createFetchTransport,
   createMediaCenterCatalog,
   normalizeMediaCenterBaseUrl,
   parseMediaCenterPlaybackUri,
+  selectPreferredPlexConnection,
   type MediaCenterConnection,
   type MediaCenterHttpRequest,
-  type MediaCenterHttpTransport
+  type MediaCenterHttpTransport,
+  type PlexDeviceSigner
 } from "../src/index.js";
 import { resolveServerPath } from "../src/url.js";
 
@@ -78,6 +81,119 @@ describe("media-center URL boundaries", () => {
 });
 
 describe("Plex integration", () => {
+  it("completes signed PIN auth and prefers a local discovered server connection", async () => {
+    const accountToken = "plex-account-jwt-never-in-url";
+    const serverToken = "plex-server-token-never-in-catalog";
+    const signedPayloads: Readonly<Record<string, string | number>>[] = [];
+    const signer: PlexDeviceSigner = {
+      publicKey: {
+        kty: "OKP",
+        crv: "Ed25519",
+        x: "MDEyMzQ1Njc4OUFCQ0RFRkdISUpLTE1OT1BRUlNUVVY",
+        kid: "streamvue-device-key",
+        alg: "EdDSA"
+      },
+      sign: async (payload) => {
+        signedPayloads.push(payload);
+        return "signed-header.signed-payload.signed-signature";
+      }
+    };
+    const mock = createMockTransport((request) => {
+      const url = new URL(request.url);
+      expect(url.searchParams.get("X-Plex-Token")).toBeNull();
+      if (url.pathname === "/api/v2/pins" && request.method === "POST") {
+        expect(JSON.parse(request.body ?? "{}")).toMatchObject({ strong: true });
+        return { id: 42, code: "ABCD", expiresIn: 300 };
+      }
+      if (url.pathname === "/api/v2/pins/42") {
+        expect(url.searchParams.get("deviceJWT")).toBe(
+          "signed-header.signed-payload.signed-signature"
+        );
+        return { authToken: accountToken, expiresIn: 604_800 };
+      }
+      if (url.pathname === "/api/v2/auth/nonce") {
+        return { nonce: "refresh-nonce" };
+      }
+      if (url.pathname === "/api/v2/auth/token") {
+        expect(JSON.parse(request.body ?? "{}")).toEqual({
+          jwt: "signed-header.signed-payload.signed-signature"
+        });
+        return { auth_token: accountToken, expires_in: 604_800 };
+      }
+      if (url.hostname === "plex.tv" && url.pathname === "/api/v2/user") {
+        expect(request.headers["X-Plex-Token"]).toBe(accountToken);
+        return { id: 1 };
+      }
+      if (url.pathname === "/api/v2/resources") {
+        expect(request.headers["X-Plex-Token"]).toBe(accountToken);
+        return [
+          {
+            name: "Home Plex",
+            clientIdentifier: "plex-server-1",
+            provides: "server",
+            owned: true,
+            accessToken: serverToken,
+            connections: [
+              {
+                uri: "https://relay.example.invalid:443",
+                local: false,
+                relay: true,
+                IPv6: false
+              },
+              {
+                uri: "http://192.168.1.8:32400",
+                local: true,
+                relay: false,
+                IPv6: false
+              }
+            ]
+          },
+          {
+            name: "Living Room Player",
+            clientIdentifier: "plex-player-1",
+            provides: "player",
+            accessToken: "ignored",
+            connections: [{ uri: "https://player.example.invalid" }]
+          }
+        ];
+      }
+      throw new Error(`Unexpected Plex account request: ${request.method} ${request.url}`);
+    });
+    const now = new Date("2026-08-26T12:00:00.000Z");
+    const client = new PlexAccountClient(mock.transport, {
+      clientIdentifier: "streamvue-test-device",
+      product: "StreamVue\r\nX-Injected: blocked",
+      version: "5.1-test",
+      now: () => now
+    });
+
+    const pin = await client.createPin(signer);
+    const claimed = await client.claimPin(pin, signer);
+    const refreshed = await client.refreshToken(signer);
+    await client.verifyToken(accountToken);
+    const servers = await client.getServers(accountToken);
+
+    expect(pin).toMatchObject({ id: 42, code: "ABCD" });
+    expect(pin.authorizationUrl).toContain("clientID=streamvue-test-device");
+    expect(pin.authorizationUrl).toContain("code=ABCD");
+    expect(claimed?.token).toBe(accountToken);
+    expect(refreshed.token).toBe(accountToken);
+    expect(signedPayloads[0]).toMatchObject({ aud: "plex.tv", iss: "streamvue-test-device" });
+    expect(signedPayloads[1]).toMatchObject({ nonce: "refresh-nonce" });
+    expect(servers).toHaveLength(1);
+    expect(servers[0]).toMatchObject({
+      serverId: "plex-server-1",
+      accessToken: serverToken,
+      owned: true
+    });
+    expect(selectPreferredPlexConnection(servers[0]!.connections)?.uri)
+      .toBe("http://192.168.1.8:32400");
+    expect(mock.requests.every((request) => !request.url.includes(accountToken))).toBe(true);
+    expect(mock.requests.every((request) => !request.url.includes(serverToken))).toBe(true);
+    expect(mock.requests.every((request) => !request.headers["X-Plex-Product"]?.includes("\r")))
+      .toBe(true);
+  });
+
   it("maps mocked libraries and items without persisting access tokens", async () => {
     const plexToken = "plex-client-token-never-persist";
     const upstreamToken = "plex-upstream-query-token";

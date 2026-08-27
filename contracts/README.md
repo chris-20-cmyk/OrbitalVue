@@ -26,7 +26,7 @@ Breaking changes require a new major contract version. New optional fields can b
 
 Media-center items enter the browse catalog through opaque `streamvue-media://` locators. A platform adapter resolves a locator immediately before playback and injects the current token from Keychain, Windows Credential Manager/DPAPI, Android Keystore-backed storage, or the TV platform's secure storage. A resolved playback plan is ephemeral and must never be written to the portable catalog.
 
-The TypeScript reference implementation and mocked Plex/Emby conformance tests live in `packages/media-centers`:
+The TypeScript reference implementation and mocked Plex/Emby conformance tests live in `packages/media-centers`. Plex account onboarding uses its current Ed25519-signed PIN and refresh flow; platforms own the private signing key and every returned token:
 
 ```text
 pnpm media-centers:test
