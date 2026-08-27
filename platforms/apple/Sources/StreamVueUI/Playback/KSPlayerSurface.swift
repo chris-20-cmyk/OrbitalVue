@@ -1,7 +1,7 @@
 #if os(iOS) || os(tvOS)
 import CoreMedia
 import Foundation
-import KSPlayer
+@preconcurrency import KSPlayer
 import SwiftUI
 import UIKit
 
@@ -45,6 +45,9 @@ final class StreamVueKSOptions: KSOptions {
 @MainActor
 final class StreamVueKSVideoView: VideoPlayerView {
     var preferredSubtitleLanguage: PreferredSubtitleLanguage = .system
+    var streamVueSubtitleFontSize: CGFloat = 16 {
+        didSet { applyStreamVueSubtitleStyle() }
+    }
     var allowsStreamVuePictureInPicture = true {
         didSet { toolBar.pipButton.isHidden = !allowsStreamVuePictureInPicture }
     }
@@ -70,6 +73,7 @@ final class StreamVueKSVideoView: VideoPlayerView {
         totalTime: TimeInterval
     ) {
         super.player(layer: layer, currentTime: currentTime, totalTime: totalTime)
+        applyStreamVueSubtitleStyle()
         onTime?(layer, currentTime, totalTime)
     }
 
@@ -88,8 +92,29 @@ final class StreamVueKSVideoView: VideoPlayerView {
     }
 
     func refreshStreamVueSubtitleStyle() {
-        updateSrt()
+        applyStreamVueSubtitleStyle()
         selectPreferredSubtitle()
+    }
+
+    private func applyStreamVueSubtitleStyle() {
+        if subtitleLabel.font.pointSize != streamVueSubtitleFontSize {
+            subtitleLabel.font = .systemFont(ofSize: streamVueSubtitleFontSize)
+        }
+        guard let currentText = subtitleLabel.attributedText,
+              currentText.length > 0 else {
+            return
+        }
+        if let currentFont = currentText.attribute(.font, at: 0, effectiveRange: nil) as? UIFont,
+           currentFont.pointSize == streamVueSubtitleFontSize {
+            return
+        }
+        guard let attributedText = currentText.mutableCopy() as? NSMutableAttributedString else { return }
+        attributedText.addAttribute(
+            .font,
+            value: UIFont.systemFont(ofSize: streamVueSubtitleFontSize),
+            range: NSRange(location: 0, length: attributedText.length)
+        )
+        subtitleLabel.attributedText = attributedText
     }
 
     private func selectPreferredSubtitle() {

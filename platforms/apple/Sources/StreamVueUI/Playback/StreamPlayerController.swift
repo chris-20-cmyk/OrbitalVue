@@ -1,9 +1,20 @@
 #if os(iOS) || os(tvOS)
 import AVFoundation
 import Foundation
-import KSPlayer
+@preconcurrency import KSPlayer
 import Observation
 import StreamVueCore
+
+@MainActor
+private enum KSPlayerCompatibility {
+    /// KSPlayer 2.3 exposes engine selection and display-link cadence as process-wide
+    /// settings. Keep the pre-concurrency dependency's mutable globals behind one
+    /// main-actor boundary until KSPlayer offers per-instance equivalents.
+    static func configureMetalEngine(adaptiveFrameRate: Bool) {
+        KSOptions.firstPlayerType = KSMEPlayer.self
+        KSOptions.preferredFrame = adaptiveFrameRate
+    }
+}
 
 public enum PlaybackPhase: Equatable, Sendable {
     case idle
@@ -91,7 +102,7 @@ public final class StreamPlayerController {
         ksLayer?.options.canStartPictureInPictureAutomaticallyFromInline = settings.allowsPictureInPicture
         ksVideoView.allowsStreamVuePictureInPicture = settings.allowsPictureInPicture
         ksVideoView.preferredSubtitleLanguage = settings.preferredSubtitleLanguage
-        SubtitleModel.textFontSize = CGFloat(settings.ksSubtitleFontSize)
+        ksVideoView.streamVueSubtitleFontSize = CGFloat(settings.ksSubtitleFontSize)
         ksVideoView.refreshStreamVueSubtitleStyle()
         applyKSAspectMode(settings.aspectMode)
     }
@@ -174,10 +185,9 @@ public final class StreamPlayerController {
             return
         }
 
-        KSOptions.firstPlayerType = KSMEPlayer.self
-        KSOptions.secondPlayerType = nil
-        KSOptions.preferredFrame = settings.ksAdaptiveFrameRate
-        SubtitleModel.textFontSize = CGFloat(settings.ksSubtitleFontSize)
+        KSPlayerCompatibility.configureMetalEngine(
+            adaptiveFrameRate: settings.ksAdaptiveFrameRate
+        )
 
         let options = StreamVueKSOptions(
             adaptiveFrameRate: settings.ksAdaptiveFrameRate,
