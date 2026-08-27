@@ -35,16 +35,13 @@ struct PlaybackSettingsView: View {
                         }
                     }
                     Toggle("Play when a channel is selected", isOn: $settings.autoPlaySelection)
-                    Stepper(
+                    IntegerAdjustmentRow(
+                        title: "Channel zapping delay",
                         value: $settings.channelZappingDelayMilliseconds,
-                        in: 0 ... 2_000,
-                        step: 100
-                    ) {
-                        LabeledContent(
-                            "Channel zapping delay",
-                            value: "\(settings.channelZappingDelayMilliseconds) ms"
-                        )
-                    }
+                        range: 0 ... 2_000,
+                        step: 100,
+                        unit: "ms"
+                    )
                     Toggle("Allow AirPlay and external playback", isOn: $settings.allowsExternalPlayback)
                     #if os(iOS)
                     Toggle("Picture in Picture", isOn: $settings.allowsPictureInPicture)
@@ -53,15 +50,13 @@ struct PlaybackSettingsView: View {
 
                 if settings.playbackEngine == .ksPlayer {
                     Section("KSPlayer (Metal)") {
-                        Stepper(
+                        IntegerAdjustmentRow(
+                            title: "Buffer duration",
                             value: $settings.ksBufferDurationSeconds,
-                            in: 1 ... 30
-                        ) {
-                            LabeledContent(
-                                "Buffer duration",
-                                value: "\(settings.ksBufferDurationSeconds) seconds"
-                            )
-                        }
+                            range: 1 ... 30,
+                            step: 1,
+                            unit: "seconds"
+                        )
                         Toggle("Adaptive frame rate", isOn: $settings.ksAdaptiveFrameRate)
                         Toggle("Hardware decode", isOn: $settings.ksHardwareDecode)
                         Toggle(
@@ -82,16 +77,13 @@ struct PlaybackSettingsView: View {
                                 Text(language.label).tag(language)
                             }
                         }
-                        Stepper(
+                        FloatingPointAdjustmentRow(
+                            title: "Subtitle font size",
                             value: $settings.ksSubtitleFontSize,
-                            in: 12 ... 80,
-                            step: 2
-                        ) {
-                            LabeledContent(
-                                "Subtitle font size",
-                                value: "\(Int(settings.ksSubtitleFontSize)) pt"
-                            )
-                        }
+                            range: 12 ... 80,
+                            step: 2,
+                            unit: "pt"
+                        )
                     }
 
                     Section("KSPlayer capabilities") {
@@ -165,8 +157,7 @@ struct PlaybackSettingsView: View {
                         .foregroundStyle(theme.muted)
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(theme.backgroundGradient.ignoresSafeArea())
+            .modifier(SettingsFormBackground())
             .navigationTitle("Playback & privacy")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -189,6 +180,97 @@ struct PlaybackSettingsView: View {
                 Text("The protected source address and cached channel list will be removed from this device.")
             }
         }
+    }
+}
+
+private struct IntegerAdjustmentRow: View {
+    let title: String
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    let step: Int
+    let unit: String
+
+    var body: some View {
+        #if os(tvOS)
+        LabeledContent(title) {
+            HStack(spacing: 16) {
+                Button {
+                    value = max(range.lowerBound, value - step)
+                } label: {
+                    Image(systemName: "minus")
+                }
+                .disabled(value <= range.lowerBound)
+
+                Text("\(value) \(unit)")
+                    .monospacedDigit()
+                    .frame(minWidth: 120)
+
+                Button {
+                    value = min(range.upperBound, value + step)
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .disabled(value >= range.upperBound)
+            }
+        }
+        #else
+        Stepper(value: $value, in: range, step: step) {
+            LabeledContent(title, value: "\(value) \(unit)")
+        }
+        #endif
+    }
+}
+
+private struct FloatingPointAdjustmentRow: View {
+    let title: String
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let step: Double
+    let unit: String
+
+    var body: some View {
+        #if os(tvOS)
+        LabeledContent(title) {
+            HStack(spacing: 16) {
+                Button {
+                    value = max(range.lowerBound, value - step)
+                } label: {
+                    Image(systemName: "minus")
+                }
+                .disabled(value <= range.lowerBound)
+
+                Text("\(Int(value)) \(unit)")
+                    .monospacedDigit()
+                    .frame(minWidth: 120)
+
+                Button {
+                    value = min(range.upperBound, value + step)
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .disabled(value >= range.upperBound)
+            }
+        }
+        #else
+        Stepper(value: $value, in: range, step: step) {
+            LabeledContent(title, value: "\(Int(value)) \(unit)")
+        }
+        #endif
+    }
+}
+
+private struct SettingsFormBackground: ViewModifier {
+    @Environment(StreamVueTheme.self) private var theme
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content
+            .scrollContentBackground(.hidden)
+            .background(theme.backgroundGradient.ignoresSafeArea())
+        #else
+        content
+            .background(theme.backgroundGradient.ignoresSafeArea())
+        #endif
     }
 }
 
