@@ -69,8 +69,8 @@ private struct NativePlayerControllerView: UIViewControllerRepresentable {
         controller.player = player
         controller.showsPlaybackControls = true
         controller.videoGravity = videoGravity
-        controller.updatesNowPlayingInfoCenter = true
         #if os(iOS)
+        controller.updatesNowPlayingInfoCenter = true
         controller.allowsPictureInPicturePlayback = allowsPictureInPicture
         controller.canStartPictureInPictureAutomaticallyFromInline = allowsPictureInPicture
         #elseif os(tvOS)
