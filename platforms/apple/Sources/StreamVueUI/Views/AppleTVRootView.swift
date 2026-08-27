@@ -228,7 +228,10 @@ private struct TVChannelRail: View {
                 .lineLimit(1)
             TextField(
                 "Search channels or groups",
-                text: Binding(get: { store.query }, set: store.updateQuery)
+                text: Binding(
+                    get: { store.query },
+                    set: { value in store.updateQuery(value) }
+                )
             )
             .textFieldStyle(.plain)
             .padding(.horizontal, 16)

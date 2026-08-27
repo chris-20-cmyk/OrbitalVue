@@ -109,8 +109,8 @@ jobs:
       - name: Build Apple TV
         shell: bash
         run: |
-          set -o pipefail
           xcodebuild \
+            -quiet \
             -jobs 2 \
             -project platforms/apple/StreamVueApple.xcodeproj \
             -scheme StreamVueTV \
@@ -121,7 +121,7 @@ jobs:
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES \
             SWIFT_ENABLE_BATCH_MODE=NO \
-            build | xcbeautify
+            build
 
       - name: Analyze Apple TV
         shell: bash
