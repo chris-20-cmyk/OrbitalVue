@@ -104,7 +104,11 @@ private struct TVHeader: View {
         HStack(spacing: 20) {
             BrandMark()
             if let catalog = store.catalog {
-                Text("\(catalog.channels.count.formatted()) CHANNELS  •  \(store.groups.count.formatted()) GROUPS")
+                Text(
+                    store.isMediaCenterSource
+                        ? "\(catalog.channels.count.formatted()) ITEMS  •  \(store.groups.count.formatted()) LIBRARIES"
+                        : "\(catalog.channels.count.formatted()) CHANNELS  •  \(store.groups.count.formatted()) GROUPS"
+                )
                     .font(.caption.weight(.bold))
                     .tracking(1)
                     .foregroundStyle(theme.muted)
@@ -153,7 +157,7 @@ private struct TVWorkspace: View {
 
     private var title: String {
         switch destination {
-        case .all: "All channels"
+        case .all: store.isMediaCenterSource ? "All media" : "All channels"
         case .favorites: "Favorites"
         case .group(let name): name
         }
@@ -173,7 +177,12 @@ private struct TVGroupRail: View {
                 .foregroundStyle(theme.muted)
             ScrollView {
                 LazyVStack(spacing: 10) {
-                    groupButton("All channels", count: store.catalog?.channels.count ?? 0, icon: "rectangle.stack", value: .all)
+                    groupButton(
+                        store.isMediaCenterSource ? "All media" : "All channels",
+                        count: store.catalog?.channels.count ?? 0,
+                        icon: "rectangle.stack",
+                        value: .all
+                    )
                     groupButton("Favorites", count: store.favorites.count, icon: "star", value: .favorites)
                     ForEach(store.groups) { group in
                         groupButton(group.name, count: group.count, icon: "square.grid.2x2", value: .group(group.name))
@@ -227,7 +236,7 @@ private struct TVChannelRail: View {
                 .font(.title2.bold())
                 .lineLimit(1)
             TextField(
-                "Search channels or groups",
+                store.isMediaCenterSource ? "Search media or libraries" : "Search channels or groups",
                 text: Binding(
                     get: { store.query },
                     set: { value in store.updateQuery(value) }
@@ -240,7 +249,7 @@ private struct TVChannelRail: View {
             .overlay { RoundedRectangle(cornerRadius: 13).stroke(theme.border) }
 
             if sections.isEmpty {
-                EmptyLibraryView(favoritesOnly: favoritesOnly)
+                EmptyLibraryView(favoritesOnly: favoritesOnly, mediaCenter: store.isMediaCenterSource)
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {

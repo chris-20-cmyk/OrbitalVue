@@ -180,15 +180,30 @@ struct NoticeBanner: View {
 
 struct EmptyLibraryView: View {
     let favoritesOnly: Bool
+    var mediaCenter = false
     @Environment(StreamVueTheme.self) private var theme
 
     var body: some View {
         ContentUnavailableView(
-            favoritesOnly ? "No favorite channels" : "No matching channels",
+            title,
             systemImage: favoritesOnly ? "star" : "magnifyingglass",
-            description: Text(favoritesOnly ? "Mark channels with the star to keep them here." : "Try another search or playlist group.")
+            description: Text(description)
         )
         .foregroundStyle(theme.text)
+    }
+
+    private var title: String {
+        if favoritesOnly { return mediaCenter ? "No favorite media" : "No favorite channels" }
+        return mediaCenter ? "No matching media" : "No matching channels"
+    }
+
+    private var description: String {
+        if favoritesOnly {
+            return mediaCenter
+                ? "Mark movies, episodes, or recordings with the star to keep them here."
+                : "Mark channels with the star to keep them here."
+        }
+        return mediaCenter ? "Try another search or library." : "Try another search or playlist group."
     }
 }
 #endif

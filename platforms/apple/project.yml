@@ -49,6 +49,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.entertainment
         ITSAppUsesNonExemptEncryption: false
+        NSLocalNetworkUsageDescription: StreamVue connects to IPTV, Plex, and Emby servers that you choose on your local network.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         UIApplicationSupportsIndirectInputEvents: true
@@ -90,6 +91,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.entertainment
         ITSAppUsesNonExemptEncryption: false
+        NSLocalNetworkUsageDescription: StreamVue connects to IPTV, Plex, and Emby servers that you choose on your local network.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         UIBackgroundModes:

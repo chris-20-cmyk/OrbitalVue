@@ -9,6 +9,7 @@ public struct StreamVueApplicationRoot: View {
     @State private var player: StreamPlayerController
     @State private var theme: StreamVueTheme
     @State private var ksRetuneTask: Task<Void, Never>?
+    @State private var playbackResolutionTask: Task<Void, Never>?
 
     public init() {
         _store = State(initialValue: StreamVueStore())
@@ -16,6 +17,7 @@ public struct StreamVueApplicationRoot: View {
         _player = State(initialValue: StreamPlayerController())
         _theme = State(initialValue: StreamVueTheme())
         _ksRetuneTask = State(initialValue: nil)
+        _playbackResolutionTask = State(initialValue: nil)
     }
 
     public var body: some View {
@@ -47,7 +49,7 @@ public struct StreamVueApplicationRoot: View {
                 }
             }
             guard !Task.isCancelled else { return }
-            player.tune(to: channel, settings: settings)
+            await resolveAndTune(channel)
         }
         .onChange(of: settings.playbackEngine) { _, _ in retuneSelectedChannel() }
         .onChange(of: settings.bufferPreference) { _, _ in player.configure(settings: settings) }
@@ -62,7 +64,10 @@ public struct StreamVueApplicationRoot: View {
         .onChange(of: settings.preferredAudioLanguage) { _, _ in scheduleKSRetune() }
         .onChange(of: settings.preferredSubtitleLanguage) { _, _ in scheduleKSRetune() }
         .onChange(of: settings.ksSubtitleFontSize) { _, _ in player.configure(settings: settings) }
-        .onDisappear { ksRetuneTask?.cancel() }
+        .onDisappear {
+            ksRetuneTask?.cancel()
+            playbackResolutionTask?.cancel()
+        }
     }
 
     private func retuneKSPlayer() {
@@ -85,7 +90,20 @@ public struct StreamVueApplicationRoot: View {
 
     private func retuneSelectedChannel() {
         guard let channel = store.selectedChannel else { return }
-        player.tune(to: channel, settings: settings)
+        playbackResolutionTask?.cancel()
+        playbackResolutionTask = Task { @MainActor in
+            await resolveAndTune(channel)
+        }
+    }
+
+    private func resolveAndTune(_ channel: CatalogChannel) async {
+        guard let playableChannel = await store.playbackChannel(for: channel) else {
+            guard !Task.isCancelled, store.selectedChannel?.id == channel.id else { return }
+            player.stop()
+            return
+        }
+        guard !Task.isCancelled, store.selectedChannel?.id == channel.id else { return }
+        player.tune(to: playableChannel, settings: settings)
     }
 }
 

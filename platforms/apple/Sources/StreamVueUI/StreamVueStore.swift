@@ -25,15 +25,23 @@ public final class StreamVueStore {
     public var query = ""
     public var selectedChannel: CatalogChannel?
 
+    public var isMediaCenterSource: Bool {
+        guard let type = catalog?.sources.first?.type else { return false }
+        return type == .plex || type == .emby
+    }
+
     private let repository: PlaylistRepository
+    private let mediaCenterRepository: MediaCenterRepository
     private let defaults: UserDefaults
     private var hasStarted = false
 
     public init(
         repository: PlaylistRepository = PlaylistRepository(),
+        mediaCenterRepository: MediaCenterRepository = MediaCenterRepository(),
         defaults: UserDefaults = .standard
     ) {
         self.repository = repository
+        self.mediaCenterRepository = mediaCenterRepository
         self.defaults = defaults
         favorites = Set(defaults.stringArray(forKey: Keys.favorites) ?? [])
     }
@@ -42,7 +50,7 @@ public final class StreamVueStore {
         guard !hasStarted else { return }
         hasStarted = true
         do {
-            if let loaded = try await repository.loadSaved() {
+            if let loaded = try await loadPreferredSource() {
                 apply(loaded)
             } else {
                 isLoading = false
@@ -54,20 +62,64 @@ public final class StreamVueStore {
     }
 
     public func importURL(_ value: String) async {
-        await perform(label: "Connecting securely…") {
+        await perform(label: "Connecting securely…", sourceKind: .playlist) {
             try await repository.importURL(value)
         }
     }
 
     public func importDocument(_ url: URL) async {
-        await perform(label: "Reading playlist…") {
+        await perform(label: "Reading playlist…", sourceKind: .playlist) {
             try await repository.importDocument(at: url)
         }
     }
 
+    @discardableResult
+    public func connectPlex(
+        serverAddress: String,
+        token: String,
+        displayName: String? = nil,
+        allowInsecureHTTP: Bool = false
+    ) async -> Bool {
+        await perform(label: "Connecting to Plex…", sourceKind: .mediaCenter) {
+            try await mediaCenterRepository.connectPlex(
+                serverAddress: serverAddress,
+                token: token,
+                displayName: displayName,
+                allowInsecureHTTP: allowInsecureHTTP
+            )
+        }
+    }
+
+    @discardableResult
+    public func connectEmby(
+        serverAddress: String,
+        username: String,
+        password: String,
+        displayName: String? = nil,
+        allowInsecureHTTP: Bool = false
+    ) async -> Bool {
+        await perform(label: "Connecting to Emby…", sourceKind: .mediaCenter) {
+            try await mediaCenterRepository.connectEmby(
+                serverAddress: serverAddress,
+                username: username,
+                password: password,
+                displayName: displayName,
+                allowInsecureHTTP: allowInsecureHTTP
+            )
+        }
+    }
+
     public func refresh() async {
-        await perform(label: "Refreshing channels…") {
-            guard let loaded = try await repository.refreshCurrent() else {
+        let sourceKind = activeSourceKind
+        await perform(label: "Refreshing library…", sourceKind: sourceKind) {
+            let loaded: LoadedCatalog?
+            switch sourceKind {
+            case .playlist:
+                loaded = try await repository.refreshCurrent()
+            case .mediaCenter:
+                loaded = try await mediaCenterRepository.refreshCurrent()
+            }
+            guard let loaded else {
                 throw PlaylistRepositoryError.sourceUnavailable
             }
             return loaded
@@ -77,7 +129,13 @@ public final class StreamVueStore {
     public func removeSource() async {
         isLoading = true
         do {
-            try await repository.removeSource()
+            switch activeSourceKind {
+            case .playlist:
+                try await repository.removeSource()
+            case .mediaCenter:
+                try await mediaCenterRepository.removeSource()
+            }
+            defaults.removeObject(forKey: Keys.activeSourceKind)
             catalog = nil
             groups = []
             visibleSections = []
@@ -85,7 +143,7 @@ public final class StreamVueStore {
             selectedChannel = nil
             selectedGroup = nil
             query = ""
-            notice = "Playlist removed from this device"
+            notice = "Source removed from this device"
             isLoading = false
         } catch {
             show(error)
@@ -120,15 +178,81 @@ public final class StreamVueStore {
     public func dismissNotice() { notice = nil }
     public func dismissError() { errorMessage = nil }
 
-    private func perform(label: String, operation: () async throws -> LoadedCatalog) async {
+    /// Resolves a cache-safe media-center locator into an ephemeral URL and
+    /// protected headers immediately before playback. The resolved descriptor
+    /// is never written back to the catalog.
+    public func playbackChannel(for channel: CatalogChannel) async -> CatalogChannel? {
+        guard URL(string: channel.stream.uri)?.scheme?.lowercased() == "streamvue-media" else {
+            return channel
+        }
+        do {
+            let plan = try await mediaCenterRepository.playbackPlan(for: channel.stream.uri)
+            return CatalogChannel(
+                id: channel.id,
+                number: channel.number,
+                name: channel.name,
+                group: channel.group,
+                kind: channel.kind,
+                sourceId: channel.sourceId,
+                stream: StreamDescriptor(
+                    uri: plan.url.absoluteString,
+                    requestHeaders: plan.requestHeaders
+                ),
+                guide: channel.guide,
+                catchup: channel.catchup,
+                tags: channel.tags
+            )
+        } catch {
+            show(error)
+            return nil
+        }
+    }
+
+    @discardableResult
+    private func perform(
+        label: String,
+        sourceKind: ActiveSourceKind,
+        operation: () async throws -> LoadedCatalog
+    ) async -> Bool {
         isLoading = true
         loadingLabel = label
         errorMessage = nil
         do {
             apply(try await operation())
+            activeSourceKind = sourceKind
+            return true
         } catch {
             show(error)
+            return false
         }
+    }
+
+    private func loadPreferredSource() async throws -> LoadedCatalog? {
+        let preferred = activeSourceKind
+        if let loaded = try await loadSaved(preferred) { return loaded }
+        let alternate: ActiveSourceKind = preferred == .playlist ? .mediaCenter : .playlist
+        if let loaded = try await loadSaved(alternate) {
+            activeSourceKind = alternate
+            return loaded
+        }
+        return nil
+    }
+
+    private func loadSaved(_ sourceKind: ActiveSourceKind) async throws -> LoadedCatalog? {
+        switch sourceKind {
+        case .playlist:
+            return try await repository.loadSaved()
+        case .mediaCenter:
+            return try await mediaCenterRepository.loadSaved()
+        }
+    }
+
+    private var activeSourceKind: ActiveSourceKind {
+        get {
+            defaults.string(forKey: Keys.activeSourceKind)
+                .flatMap(ActiveSourceKind.init(rawValue:)) ?? .playlist
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.activeSourceKind) }
     }
 
     private func apply(_ loaded: LoadedCatalog) {
@@ -221,6 +345,12 @@ public final class StreamVueStore {
 
     private enum Keys {
         static let favorites = "apple.favorite-channel-ids"
+        static let activeSourceKind = "apple.active-source-kind"
+    }
+
+    private enum ActiveSourceKind: String {
+        case playlist
+        case mediaCenter = "media-center"
     }
 }
 #endif

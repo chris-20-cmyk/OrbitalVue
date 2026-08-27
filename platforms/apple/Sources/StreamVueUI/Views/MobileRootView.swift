@@ -88,12 +88,12 @@ struct MobileRootView: View {
         NavigationSplitView {
             List(selection: $browseDestination) {
                 Section {
-                    Label("All channels", systemImage: "rectangle.stack")
+                    Label(store.isMediaCenterSource ? "All media" : "All channels", systemImage: "rectangle.stack")
                         .tag(BrowseDestination.all)
                     Label("Favorites", systemImage: "star")
                         .tag(BrowseDestination.favorites)
                 }
-                Section("Playlist groups") {
+                Section(store.isMediaCenterSource ? "Libraries" : "Playlist groups") {
                     ForEach(store.groups) { group in
                         HStack {
                             Text(group.name).lineLimit(1)
@@ -108,7 +108,7 @@ struct MobileRootView: View {
             }
             .scrollContentBackground(.hidden)
             .background(theme.background)
-            .navigationTitle("Channels")
+            .navigationTitle(store.isMediaCenterSource ? "Media" : "Channels")
             .safeAreaInset(edge: .top) {
                 BrandMark(compact: true)
                     .padding(.horizontal, 16)
@@ -151,7 +151,7 @@ struct MobileRootView: View {
         switch browseDestination {
         case .favorites: "Favorites"
         case .group(let group): group
-        case .all, .none: "All channels"
+        case .all, .none: store.isMediaCenterSource ? "All media" : "All channels"
         }
     }
 
@@ -174,7 +174,7 @@ private struct ChannelBrowserView: View {
     var body: some View {
         Group {
             if sections.isEmpty {
-                EmptyLibraryView(favoritesOnly: favoritesOnly)
+                EmptyLibraryView(favoritesOnly: favoritesOnly, mediaCenter: store.isMediaCenterSource)
             } else {
                 List {
                     ForEach(sections) { section in
@@ -214,7 +214,7 @@ private struct ChannelBrowserView: View {
                 set: { value in store.updateQuery(value) }
             ),
             placement: .navigationBarDrawer(displayMode: .always),
-            prompt: "Search channels or groups"
+            prompt: store.isMediaCenterSource ? "Search media or libraries" : "Search channels or groups"
         )
     }
 }

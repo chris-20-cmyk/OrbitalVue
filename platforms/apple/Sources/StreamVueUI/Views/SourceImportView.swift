@@ -17,7 +17,7 @@ struct SourceImportView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     BrandMark()
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Connect your channels")
+                        Text("Connect your content")
                             .font(.largeTitle.bold())
                         Text("Use a provider URL or import an M3U/M3U8 file you are authorized to access. StreamVue never uploads your playlist.")
                             .foregroundStyle(theme.muted)
@@ -59,13 +59,7 @@ struct SourceImportView: View {
                     }
 
                     #if os(iOS)
-                    HStack(spacing: 12) {
-                        Rectangle().fill(theme.border).frame(height: 1)
-                        Text("OR")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(theme.muted)
-                        Rectangle().fill(theme.border).frame(height: 1)
-                    }
+                    SourceDivider(title: "OR")
                     Button {
                         isImportingFile = true
                     } label: {
@@ -75,6 +69,34 @@ struct SourceImportView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.large)
                     #endif
+
+                    SourceDivider(title: "OR CONNECT")
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 10) {
+                            Text("MEDIA CENTERS")
+                                .font(.caption.weight(.bold))
+                                .tracking(1.4)
+                                .foregroundStyle(theme.muted)
+                            Text("PREMIUM")
+                                .font(.caption2.weight(.black))
+                                .foregroundStyle(theme.background)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(theme.accent, in: Capsule())
+                        }
+                        Text("Bring your personal movies, shows, recordings, and live-TV libraries into the same StreamVue experience.")
+                            .font(.subheadline)
+                            .foregroundStyle(theme.muted)
+
+                        ForEach(MediaCenterProvider.allCases) { provider in
+                            NavigationLink {
+                                MediaCenterConnectView(provider: provider) { dismiss() }
+                            } label: {
+                                MediaCenterSourceCard(provider: provider)
+                            }
+                        }
+                    }
 
                     Label(
                         "By connecting a source, you confirm that you have permission to view its content.",
@@ -133,6 +155,54 @@ struct SourceImportView: View {
     }
 }
 
+private struct SourceDivider: View {
+    let title: String
+    @Environment(StreamVueTheme.self) private var theme
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Rectangle().fill(theme.border).frame(height: 1)
+            Text(title)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(theme.muted)
+            Rectangle().fill(theme.border).frame(height: 1)
+        }
+    }
+}
+
+private struct MediaCenterSourceCard: View {
+    let provider: MediaCenterProvider
+    @Environment(StreamVueTheme.self) private var theme
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: provider == .plex ? "play.rectangle.on.rectangle" : "rectangle.stack")
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(theme.accent)
+                .frame(width: 48, height: 48)
+                .background(theme.accentDim.opacity(0.65), in: RoundedRectangle(cornerRadius: 13))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(provider.displayName)
+                    .font(.headline)
+                    .foregroundStyle(theme.text)
+                Text(provider == .plex ? "Connect a Plex Media Server" : "Connect an Emby server")
+                    .font(.subheadline)
+                    .foregroundStyle(theme.muted)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(theme.accent)
+        }
+        .padding(16)
+        .background(theme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(theme.border, lineWidth: 1)
+        }
+    }
+}
+
 struct FirstRunOnboardingView: View {
     let onAddSource: () -> Void
     @Environment(StreamVueTheme.self) private var theme
@@ -155,19 +225,19 @@ struct FirstRunOnboardingView: View {
                 VStack(spacing: 10) {
                     Text("A better signal path")
                         .font(.system(.largeTitle, design: .rounded, weight: .bold))
-                    Text("Native playback, exact playlist groups, private on-device storage, and a library designed for every Apple screen.")
+                    Text("Native playback, exact playlist groups, private media-center access, and a library designed for every Apple screen.")
                         .font(.title3)
                         .foregroundStyle(theme.muted)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 660)
                 }
                 Button(action: onAddSource) {
-                    Label("Connect a playlist", systemImage: "plus")
+                    Label("Add a source", systemImage: "plus")
                         .frame(minWidth: 220)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                Label("No bundled channels. Your source stays on this device.", systemImage: "lock.shield")
+                Label("No bundled content. Your source stays on this device.", systemImage: "lock.shield")
                     .font(.footnote)
                     .foregroundStyle(theme.muted)
             }

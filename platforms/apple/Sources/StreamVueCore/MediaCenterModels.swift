@@ -2,9 +2,11 @@ import Foundation
 
 public let streamVueMediaCenterContractVersion = "1.0"
 
-public enum MediaCenterProvider: String, Codable, CaseIterable, Sendable {
+public enum MediaCenterProvider: String, Codable, CaseIterable, Hashable, Identifiable, Sendable {
     case plex
     case emby
+
+    public var id: String { rawValue }
 
     public var catalogSourceType: CatalogSourceType {
         switch self {
