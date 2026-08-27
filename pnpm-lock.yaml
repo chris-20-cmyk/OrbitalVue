@@ -20,6 +20,12 @@ importers:
 
   packages/catalog-js: {}
 
+  packages/media-centers:
+    dependencies:
+      '@streamvue/catalog':
+        specifier: workspace:*
+        version: link:../catalog-js
+
   platforms/tv-web:
     dependencies:
       '@streamvue/catalog':

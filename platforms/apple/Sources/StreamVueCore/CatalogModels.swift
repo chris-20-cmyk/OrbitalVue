@@ -16,6 +16,8 @@ public enum CatalogSourceType: String, Codable, CaseIterable, Sendable {
     case m3uFile = "m3u-file"
     case m3uURL = "m3u-url"
     case xtream
+    case plex
+    case emby
     case generated
 }
 

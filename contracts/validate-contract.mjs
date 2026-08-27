@@ -6,6 +6,12 @@ const here = dirname(fileURLToPath(import.meta.url));
 const schema = JSON.parse(await readFile(join(here, "streamvue-catalog.schema.json"), "utf8"));
 const catalog = JSON.parse(await readFile(join(here, "fixtures", "catalog.expected.json"), "utf8"));
 const playlist = await readFile(join(here, "fixtures", "iptv-features.m3u"), "utf8");
+const mediaCenterSchema = JSON.parse(
+  await readFile(join(here, "media-center-contract-v1.schema.json"), "utf8")
+);
+const mediaCenter = JSON.parse(
+  await readFile(join(here, "fixtures", "media-center.expected.json"), "utf8")
+);
 
 const fail = (message) => {
   throw new Error(`Contract validation failed: ${message}`);
@@ -23,7 +29,15 @@ if (!Array.isArray(catalog.channels) || catalog.channels.length === 0) fail("at 
 const sourceIds = new Set(catalog.sources.map((source) => source.id));
 const channelIds = new Set();
 const allowedKinds = new Set(["live", "movie", "series", "recording", "replay"]);
-const allowedSchemes = new Set(["http:", "https:", "rtsp:", "rtmp:", "udp:", "file:"]);
+const allowedSchemes = new Set([
+  "http:",
+  "https:",
+  "rtsp:",
+  "rtmp:",
+  "udp:",
+  "file:",
+  "streamvue-media:"
+]);
 
 for (const source of catalog.sources) {
   if (!source.id || !source.name || !source.type) fail("source identity is incomplete");
@@ -52,4 +66,65 @@ for (const channel of catalog.channels) {
   }
 }
 
-console.log(`StreamVue catalog contract 1.0 is valid (${catalog.channels.length} fixture channels).`);
+if (mediaCenterSchema.$schema !== "https://json-schema.org/draft/2020-12/schema") {
+  fail("the media-center schema must remain on JSON Schema Draft 2020-12");
+}
+if (mediaCenter.contractVersion !== "1.0") fail("unexpected media-center contractVersion");
+if (Number.isNaN(Date.parse(mediaCenter.loadedAt))) fail("media-center loadedAt is not an ISO date-time");
+if (!mediaCenter.connection || !["plex", "emby"].includes(mediaCenter.connection.provider)) {
+  fail("media-center connection provider is invalid");
+}
+if (!mediaCenter.connection.credentialId) fail("media-center connection has no credential reference");
+if (!/^https?:$/.test(new URL(mediaCenter.connection.baseUrl).protocol)) {
+  fail("media-center connection must use HTTP or HTTPS");
+}
+if (new URL(mediaCenter.connection.baseUrl).username || new URL(mediaCenter.connection.baseUrl).password) {
+  fail("media-center baseUrl contains credentials");
+}
+if (!Array.isArray(mediaCenter.libraries) || mediaCenter.libraries.length === 0) {
+  fail("media-center fixture has no libraries");
+}
+if (!Array.isArray(mediaCenter.items) || mediaCenter.items.length === 0) {
+  fail("media-center fixture has no items");
+}
+
+const forbiddenSecretKeys = new Set([
+  "password",
+  "username",
+  "pw",
+  "token",
+  "accesstoken",
+  "x-plex-token",
+  "x-emby-token",
+  "requestheaders",
+  "playbackplan",
+  "playsessionid",
+  "livestreamid"
+]);
+const inspectForSecrets = (value, path = "mediaCenter") => {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => inspectForSecrets(entry, `${path}[${index}]`));
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  for (const [key, child] of Object.entries(value)) {
+    if (forbiddenSecretKeys.has(key.toLowerCase())) fail(`${path}.${key} is not cache-safe`);
+    if (typeof child === "string" && /[?&](?:api_key|x-plex-token|token|access_token|password|pw)=/i.test(child)) {
+      fail(`${path}.${key} contains a credential-bearing query`);
+    }
+    inspectForSecrets(child, `${path}.${key}`);
+  }
+};
+inspectForSecrets(mediaCenter);
+
+for (const item of mediaCenter.items) {
+  if (item.provider !== mediaCenter.connection.provider) fail(`media-center item ${item.id} has a different provider`);
+  if (item.serverId !== mediaCenter.connection.serverId) fail(`media-center item ${item.id} has a different server`);
+  if (!mediaCenter.libraries.some((library) => library.id === item.libraryId)) {
+    fail(`media-center item ${item.id} refers to an unknown library`);
+  }
+}
+
+console.log(
+  `StreamVue contracts 1.0 are valid (${catalog.channels.length} playlist channels, ${mediaCenter.items.length} media-center items).`
+);

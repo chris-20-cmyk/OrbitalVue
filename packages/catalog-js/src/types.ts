@@ -1,7 +1,7 @@
 export const CATALOG_CONTRACT_VERSION = "1.0" as const;
 
 export type ChannelKind = "live" | "movie" | "series" | "recording" | "replay";
-export type SourceType = "m3u-file" | "m3u-url" | "xtream" | "generated";
+export type SourceType = "m3u-file" | "m3u-url" | "xtream" | "plex" | "emby" | "generated";
 
 export interface CatalogSource {
   id: string;

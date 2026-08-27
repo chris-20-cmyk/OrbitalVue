@@ -228,7 +228,7 @@ public actor PlaylistRepository {
                 notice: nil,
                 usedCachedFallback: false
             )
-        case .xtream, .generated:
+        case .xtream, .plex, .emby, .generated:
             throw PlaylistRepositoryError.sourceUnavailable
         }
     }

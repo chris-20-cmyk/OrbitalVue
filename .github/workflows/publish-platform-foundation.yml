@@ -76,6 +76,7 @@ jobs:
       - name: Verify and build Samsung and LG television clients
         run: |
           node contracts/validate-contract.mjs
+          pnpm media-centers:test
           pnpm tv:check
           pnpm tv:test
           pnpm tv:build

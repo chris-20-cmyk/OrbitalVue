@@ -8,6 +8,7 @@ on:
       - "feature/**"
     paths:
       - "packages/catalog-js/**"
+      - "packages/media-centers/**"
       - "platforms/tv-web/**"
       - "contracts/**"
       - "package.json"
@@ -18,6 +19,7 @@ on:
   pull_request:
     paths:
       - "packages/catalog-js/**"
+      - "packages/media-centers/**"
       - "platforms/tv-web/**"
       - "contracts/**"
       - "package.json"
@@ -50,6 +52,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Validate portable catalog contract
         run: node contracts/validate-contract.mjs
+      - name: Build and test authenticated media-center adapters
+        run: pnpm media-centers:test
       - name: Check, test, and build television clients
         run: |
           pnpm tv:check

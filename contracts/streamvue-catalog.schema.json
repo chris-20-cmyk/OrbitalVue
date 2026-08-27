@@ -70,7 +70,7 @@
           "maxLength": 256
         },
         "type": {
-          "enum": ["m3u-file", "m3u-url", "xtream", "generated"]
+          "enum": ["m3u-file", "m3u-url", "xtream", "plex", "emby", "generated"]
         },
         "displayLocation": {
           "description": "A safe display label. It must not contain credentials or tokens.",

@@ -1,0 +1,71 @@
+{
+  "contractVersion": "1.0",
+  "loadedAt": "2026-08-26T12:00:00.000Z",
+  "connection": {
+    "contractVersion": "1.0",
+    "provider": "plex",
+    "serverId": "PLEX-DEMO-01",
+    "displayName": "Living Room Library",
+    "baseUrl": "https://plex.example.invalid:32400",
+    "displayLocation": "plex.example.invalid:32400",
+    "credentialId": "vault:plex:PLEX-DEMO-01"
+  },
+  "libraries": [
+    {
+      "id": "movies",
+      "title": "Movies",
+      "kind": "movies",
+      "itemCount": 1
+    }
+  ],
+  "items": [
+    {
+      "id": "1001",
+      "provider": "plex",
+      "serverId": "PLEX-DEMO-01",
+      "libraryId": "movies",
+      "libraryTitle": "Movies",
+      "kind": "movie",
+      "title": "Synthetic Feature",
+      "year": 2026,
+      "durationMs": 7200000,
+      "resumePositionMs": 0,
+      "played": false,
+      "artworkPath": "/library/metadata/1001/thumb/demo",
+      "mediaSources": [
+        {
+          "id": "part-1001",
+          "playbackPath": "/library/parts/1001/file.mkv",
+          "container": "mkv",
+          "videoCodec": "hevc",
+          "audioCodec": "eac3",
+          "width": 3840,
+          "height": 2160,
+          "bitrate": 18000000,
+          "supportsDirectPlay": true,
+          "supportsDirectStream": true,
+          "supportsTranscode": true,
+          "tracks": [
+            {
+              "index": 0,
+              "type": "video",
+              "codec": "hevc",
+              "isDefault": true,
+              "isForced": false
+            },
+            {
+              "index": 1,
+              "type": "audio",
+              "codec": "eac3",
+              "language": "eng",
+              "title": "English 5.1",
+              "isDefault": true,
+              "isForced": false,
+              "channels": 6
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

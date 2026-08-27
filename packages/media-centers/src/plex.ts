@@ -1,0 +1,292 @@
+import { requestJson, type MediaCenterHttpTransport } from "./http.js";
+import { asArray, asBoolean, asNumber, asRecord, asString, clampPage } from "./parse.js";
+import type {
+  MediaCenterConnection,
+  MediaCenterItem,
+  MediaCenterItemKind,
+  MediaCenterLibrary,
+  MediaCenterLibraryKind,
+  MediaCenterMediaSource,
+  MediaCenterPage,
+  MediaCenterPlaybackPlan,
+  MediaCenterTrack
+} from "./types.js";
+import {
+  normalizeMediaCenterBaseUrl,
+  requireIdentifier,
+  resolveServerPath,
+  sanitizeServerPathForStorage,
+  withQuery
+} from "./url.js";
+
+export interface PlexClientConfiguration {
+  connection: MediaCenterConnection;
+  token: string;
+  clientIdentifier: string;
+  product?: string;
+  version?: string;
+}
+
+export interface PlexServerIdentity {
+  serverId: string;
+  name: string;
+  version?: string;
+}
+
+export class PlexClient {
+  private readonly baseUrl: string;
+  private readonly headers: Record<string, string>;
+
+  constructor(
+    private readonly transport: MediaCenterHttpTransport,
+    private readonly configuration: PlexClientConfiguration
+  ) {
+    if (configuration.connection.provider !== "plex") {
+      throw new TypeError("A Plex client requires a Plex connection.");
+    }
+    const token = configuration.token.trim();
+    if (!token) throw new TypeError("A Plex access token is required.");
+    this.baseUrl = normalizeMediaCenterBaseUrl(configuration.connection.baseUrl);
+    this.headers = {
+      Accept: "application/json",
+      "X-Plex-Token": token,
+      "X-Plex-Client-Identifier": requireIdentifier(
+        configuration.clientIdentifier,
+        "Plex client identifier"
+      ),
+      "X-Plex-Product": safeHeaderValue(configuration.product, "StreamVue"),
+      "X-Plex-Version": safeHeaderValue(configuration.version, "5.1.0"),
+      "X-Plex-Platform": "StreamVue",
+      "X-Plex-Pms-Api-Version": "1.2.2"
+    };
+  }
+
+  async getIdentity(): Promise<PlexServerIdentity> {
+    const payload = await this.get("/identity");
+    const container = asRecord(asRecord(payload).MediaContainer);
+    const serverId = asString(container.machineIdentifier)
+      ?? this.configuration.connection.serverId;
+    const name = asString(container.friendlyName)
+      ?? this.configuration.connection.displayName;
+    const version = asString(container.version);
+    return {
+      serverId: requireIdentifier(serverId, "Plex server identifier"),
+      name,
+      ...(version === undefined ? {} : { version })
+    };
+  }
+
+  async getLibraries(): Promise<MediaCenterLibrary[]> {
+    const payload = await this.get("/library/sections");
+    const container = asRecord(asRecord(payload).MediaContainer);
+    return asArray(container.Directory).flatMap((value) => {
+      const directory = asRecord(value);
+      const id = asString(directory.key);
+      const title = asString(directory.title);
+      if (!id || !title) return [];
+      const itemCount = asNumber(directory.totalSize ?? directory.size);
+      return [{
+        id: requireIdentifier(id, "Plex library identifier"),
+        title,
+        kind: plexLibraryKind(asString(directory.type)),
+        ...(itemCount === undefined ? {} : { itemCount })
+      }];
+    });
+  }
+
+  async getItems(
+    library: MediaCenterLibrary,
+    start = 0,
+    size = 200
+  ): Promise<MediaCenterPage<MediaCenterItem>> {
+    const page = clampPage(start, size);
+    const libraryId = requireIdentifier(library.id, "Plex library identifier");
+    const payload = await this.get(`/library/sections/${encodeURIComponent(libraryId)}/all`, {
+      "X-Plex-Container-Start": String(page.start),
+      "X-Plex-Container-Size": String(page.size)
+    });
+    const container = asRecord(asRecord(payload).MediaContainer);
+    const items = asArray(container.Metadata).flatMap((value) => {
+      const parsed = this.parseItem(asRecord(value), library);
+      return parsed === undefined ? [] : [parsed];
+    });
+    return {
+      items,
+      start: asNumber(container.offset) ?? page.start,
+      size: items.length,
+      total: asNumber(container.totalSize) ?? asNumber(container.size) ?? items.length
+    };
+  }
+
+  getPlaybackPlan(
+    item: MediaCenterItem,
+    mediaSourceId?: string
+  ): MediaCenterPlaybackPlan {
+    if (item.provider !== "plex" || item.serverId !== this.configuration.connection.serverId) {
+      throw new TypeError("The Plex item does not belong to this server connection.");
+    }
+    const source = mediaSourceId === undefined
+      ? item.mediaSources[0]
+      : item.mediaSources.find((candidate) => candidate.id === mediaSourceId);
+    if (!source?.playbackPath) {
+      throw new TypeError("This Plex item does not expose a direct-play media part.");
+    }
+    return {
+      itemId: item.id,
+      mediaSourceId: source.id,
+      method: "direct-play",
+      url: resolveServerPath(this.baseUrl, source.playbackPath),
+      requestHeaders: { ...this.headers },
+      sensitiveHeaderNames: ["X-Plex-Token"],
+      requiresPlaybackReporting: true
+    };
+  }
+
+  artworkRequest(item: MediaCenterItem, maxWidth = 640): MediaCenterPlaybackPlan | undefined {
+    if (!item.artworkPath) return undefined;
+    const url = withQuery(resolveServerPath(this.baseUrl, item.artworkPath), {
+      width: Math.min(2_000, Math.max(64, Math.floor(maxWidth)))
+    });
+    return {
+      itemId: item.id,
+      mediaSourceId: "artwork",
+      method: "direct-play",
+      url,
+      requestHeaders: { ...this.headers },
+      sensitiveHeaderNames: ["X-Plex-Token"],
+      requiresPlaybackReporting: false
+    };
+  }
+
+  private async get(path: string, additionalHeaders: Record<string, string> = {}): Promise<unknown> {
+    return requestJson(this.transport, {
+      method: "GET",
+      url: resolveServerPath(this.baseUrl, path),
+      headers: { ...this.headers, ...additionalHeaders }
+    });
+  }
+
+  private parseItem(
+    metadata: Record<string, unknown>,
+    library: MediaCenterLibrary
+  ): MediaCenterItem | undefined {
+    const id = asString(metadata.ratingKey);
+    const title = asString(metadata.title);
+    if (!id || !title) return undefined;
+    const kind = plexItemKind(asString(metadata.type));
+    if (!kind) return undefined;
+    const mediaSources = asArray(metadata.Media).flatMap((value) =>
+      parsePlexMedia(asRecord(value), this.baseUrl)
+    );
+    const sortTitle = asString(metadata.titleSort);
+    const seriesTitle = asString(metadata.grandparentTitle);
+    const seasonNumber = asNumber(metadata.parentIndex);
+    const episodeNumber = asNumber(metadata.index);
+    const year = asNumber(metadata.year);
+    const durationMs = asNumber(metadata.duration);
+    const resumePositionMs = asNumber(metadata.viewOffset);
+    const rawArtworkPath = asString(metadata.thumb);
+    const artworkPath = rawArtworkPath === undefined
+      ? undefined
+      : sanitizeServerPathForStorage(this.baseUrl, rawArtworkPath);
+    return {
+      id: requireIdentifier(id, "Plex item identifier"),
+      provider: "plex",
+      serverId: this.configuration.connection.serverId,
+      libraryId: library.id,
+      libraryTitle: library.title,
+      kind,
+      title,
+      ...(sortTitle === undefined ? {} : { sortTitle }),
+      ...(seriesTitle === undefined ? {} : { seriesTitle }),
+      ...(seasonNumber === undefined ? {} : { seasonNumber }),
+      ...(episodeNumber === undefined ? {} : { episodeNumber }),
+      ...(year === undefined ? {} : { year }),
+      ...(durationMs === undefined ? {} : { durationMs }),
+      ...(resumePositionMs === undefined ? {} : { resumePositionMs }),
+      played: (asNumber(metadata.viewCount) ?? 0) > 0,
+      ...(artworkPath === undefined ? {} : { artworkPath }),
+      mediaSources
+    };
+  }
+}
+
+function safeHeaderValue(value: string | undefined, fallback: string): string {
+  const sanitized = value?.replace(/[\r\n]/g, "").trim().slice(0, 256);
+  return sanitized || fallback;
+}
+
+function plexLibraryKind(value: string | undefined): MediaCenterLibraryKind {
+  switch (value?.toLowerCase()) {
+  case "movie": return "movies";
+  case "show": return "shows";
+  case "artist": return "music";
+  default: return "other";
+  }
+}
+
+function plexItemKind(value: string | undefined): MediaCenterItemKind | undefined {
+  switch (value?.toLowerCase()) {
+  case "movie": return "movie";
+  case "episode": return "episode";
+  case "clip": return "video";
+  case "track": return "audio";
+  default: return undefined;
+  }
+}
+
+function parsePlexMedia(
+  media: Record<string, unknown>,
+  baseUrl: string
+): MediaCenterMediaSource[] {
+  const mediaId = asString(media.id);
+  return asArray(media.Part).flatMap((value, partIndex) => {
+    const part = asRecord(value);
+    const rawPlaybackPath = asString(part.key);
+    const sourceId = asString(part.id) ?? mediaId ?? `part-${partIndex}`;
+    if (!rawPlaybackPath) return [];
+    const playbackPath = sanitizeServerPathForStorage(baseUrl, rawPlaybackPath);
+    const container = asString(part.container) ?? asString(media.container);
+    const videoCodec = asString(media.videoCodec);
+    const audioCodec = asString(media.audioCodec);
+    const width = asNumber(media.width);
+    const height = asNumber(media.height);
+    const bitrate = asNumber(media.bitrate);
+    return [{
+      id: requireIdentifier(sourceId, "Plex media source identifier"),
+      playbackPath,
+      ...(container === undefined ? {} : { container }),
+      ...(videoCodec === undefined ? {} : { videoCodec }),
+      ...(audioCodec === undefined ? {} : { audioCodec }),
+      ...(width === undefined ? {} : { width }),
+      ...(height === undefined ? {} : { height }),
+      ...(bitrate === undefined ? {} : { bitrate }),
+      supportsDirectPlay: true,
+      supportsDirectStream: true,
+      supportsTranscode: true,
+      tracks: asArray(part.Stream).flatMap(parsePlexTrack)
+    }];
+  });
+}
+
+function parsePlexTrack(value: unknown): MediaCenterTrack[] {
+  const stream = asRecord(value);
+  const index = asNumber(stream.index ?? stream.id);
+  const streamType = asNumber(stream.streamType);
+  if (index === undefined || !streamType || streamType < 1 || streamType > 3) return [];
+  const type = streamType === 1 ? "video" : streamType === 2 ? "audio" : "subtitle";
+  const codec = asString(stream.codec);
+  const language = asString(stream.languageCode ?? stream.language);
+  const title = asString(stream.title ?? stream.displayTitle);
+  const channels = asNumber(stream.channels);
+  return [{
+    index,
+    type,
+    ...(codec === undefined ? {} : { codec }),
+    ...(language === undefined ? {} : { language }),
+    ...(title === undefined ? {} : { title }),
+    isDefault: asBoolean(stream.default ?? stream.selected),
+    isForced: asBoolean(stream.forced),
+    ...(channels === undefined ? {} : { channels })
+  }];
+}
