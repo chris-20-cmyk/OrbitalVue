@@ -77,12 +77,15 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild \
+            -jobs 2 \
             -project platforms/apple/StreamVueApple.xcodeproj \
             -scheme StreamVue \
             -destination "generic/platform=iOS Simulator" \
             -derivedDataPath artifacts/apple-derived-data/ios \
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
             SWIFT_ENABLE_BATCH_MODE=NO \
             build | xcbeautify
 
@@ -91,12 +94,15 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild \
+            -jobs 2 \
             -project platforms/apple/StreamVueApple.xcodeproj \
             -scheme StreamVue \
             -destination "generic/platform=iOS Simulator" \
             -derivedDataPath artifacts/apple-derived-data/ios \
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
             SWIFT_ENABLE_BATCH_MODE=NO \
             analyze | xcbeautify
 
@@ -105,12 +111,15 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild \
+            -jobs 2 \
             -project platforms/apple/StreamVueApple.xcodeproj \
             -scheme StreamVueTV \
             -destination "generic/platform=tvOS Simulator" \
             -derivedDataPath artifacts/apple-derived-data/tvos \
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
             SWIFT_ENABLE_BATCH_MODE=NO \
             build | xcbeautify
 
@@ -119,12 +128,15 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild \
+            -jobs 2 \
             -project platforms/apple/StreamVueApple.xcodeproj \
             -scheme StreamVueTV \
             -destination "generic/platform=tvOS Simulator" \
             -derivedDataPath artifacts/apple-derived-data/tvos \
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
             SWIFT_ENABLE_BATCH_MODE=NO \
             analyze | xcbeautify
 
