@@ -91,7 +91,9 @@ struct SourceImportView: View {
             }
             .background(theme.backgroundGradient.ignoresSafeArea())
             .navigationTitle("Add source")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
