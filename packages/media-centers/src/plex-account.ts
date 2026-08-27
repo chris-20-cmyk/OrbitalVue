@@ -252,14 +252,24 @@ function parsePlexConnection(value: unknown): PlexServerConnection[] {
 }
 
 function validatePublicKey(value: PlexDevicePublicKey): PlexDevicePublicKey {
+  const untrustedKey = value as unknown as Record<string, unknown>;
+  if (Object.prototype.hasOwnProperty.call(untrustedKey, "d")) {
+    throw new TypeError("A Plex public device key must not contain private key material.");
+  }
   if (value.kty !== "OKP" || value.crv !== "Ed25519" || value.alg !== "EdDSA") {
     throw new TypeError("Plex requires an Ed25519 device signing key.");
   }
   if (!/^[A-Za-z0-9_-]{40,64}$/.test(value.x)) {
     throw new TypeError("The Plex device public key is invalid.");
   }
-  requireIdentifier(value.kid, "Plex device key identifier");
-  return { ...value };
+  const kid = requireIdentifier(value.kid, "Plex device key identifier");
+  return {
+    kty: "OKP",
+    crv: "Ed25519",
+    x: value.x,
+    kid,
+    alg: "EdDSA"
+  };
 }
 
 function validateCompactJwt(value: string): string {

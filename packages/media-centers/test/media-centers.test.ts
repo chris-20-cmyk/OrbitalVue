@@ -7,6 +7,7 @@ import {
   authenticateEmby,
   createFetchTransport,
   createMediaCenterCatalog,
+  mediaCenterPlaybackUri,
   normalizeMediaCenterBaseUrl,
   parseMediaCenterPlaybackUri,
   selectPreferredPlexConnection,
@@ -78,9 +79,75 @@ describe("media-center URL boundaries", () => {
       headers: {}
     })).rejects.toMatchObject({ code: "response-too-large", status: 200 });
   });
+
+  it("accepts only canonical, credential-free internal playback addresses", () => {
+    const canonical = mediaCenterPlaybackUri({
+      provider: "plex",
+      serverId: "plex-server-1",
+      itemId: "item:100"
+    });
+    expect(canonical).toBe("streamvue-media://plex/plex-server-1/item%3A100");
+    expect(parseMediaCenterPlaybackUri(canonical)).toEqual({
+      provider: "plex",
+      serverId: "plex-server-1",
+      itemId: "item:100"
+    });
+
+    for (const unsafe of [
+      "streamvue-media://user:password@plex/plex-server-1/item-1",
+      "streamvue-media://plex:123/plex-server-1/item-1",
+      "streamvue-media://plex/plex-server-1/item-1?X-Plex-Token=secret",
+      "streamvue-media://plex/plex-server-1/item-1#access-token",
+      "streamvue-media://plex/plex-server-1/item-1/",
+      " streamvue-media://plex/plex-server-1/item-1 "
+    ]) {
+      expect(() => parseMediaCenterPlaybackUri(unsafe)).toThrow();
+    }
+  });
 });
 
 describe("Plex integration", () => {
+  it("whitelists public JWK fields and rejects private device key material", async () => {
+    const mock = createMockTransport((request) => {
+      expect(JSON.parse(request.body ?? "{}")).toEqual({
+        jwk: {
+          kty: "OKP",
+          crv: "Ed25519",
+          x: "MDEyMzQ1Njc4OUFCQ0RFRkdISUpLTE1OT1BRUlNUVVY",
+          kid: "streamvue-device-key",
+          alg: "EdDSA"
+        },
+        strong: true
+      });
+      return { id: 1, code: "SAFE" };
+    });
+    const client = new PlexAccountClient(mock.transport, {
+      clientIdentifier: "streamvue-test-device"
+    });
+    const publicKeyWithExtraField = {
+      kty: "OKP",
+      crv: "Ed25519",
+      x: "MDEyMzQ1Njc4OUFCQ0RFRkdISUpLTE1OT1BRUlNUVVY",
+      kid: " streamvue-device-key ",
+      alg: "EdDSA",
+      unexpected: "must-not-be-serialized"
+    } as PlexDeviceSigner["publicKey"];
+    await client.createPin({
+      publicKey: publicKeyWithExtraField,
+      sign: async () => "signed-header.signed-payload.signed-signature"
+    });
+
+    const privateKey = {
+      ...publicKeyWithExtraField,
+      d: "PRIVATE-KEY-MATERIAL"
+    } as PlexDeviceSigner["publicKey"];
+    await expect(client.createPin({
+      publicKey: privateKey,
+      sign: async () => "signed-header.signed-payload.signed-signature"
+    })).rejects.toThrow(/private key material/i);
+    expect(mock.requests).toHaveLength(1);
+  });
+
   it("completes signed PIN auth and prefers a local discovered server connection", async () => {
     const accountToken = "plex-account-jwt-never-in-url";
     const serverToken = "plex-server-token-never-in-catalog";

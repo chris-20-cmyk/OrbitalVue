@@ -92,16 +92,24 @@ export function createMediaCenterCatalog(
 }
 
 export function mediaCenterPlaybackUri(locator: MediaCenterPlaybackLocator): string {
-  return `streamvue-media://${locator.provider}/${encodeURIComponent(locator.serverId)}/${encodeURIComponent(locator.itemId)}`;
+  return mediaCenterLocatorUri("streamvue-media", locator);
 }
 
 export function mediaCenterArtworkUri(locator: MediaCenterPlaybackLocator): string {
-  return `streamvue-artwork://${locator.provider}/${encodeURIComponent(locator.serverId)}/${encodeURIComponent(locator.itemId)}`;
+  return mediaCenterLocatorUri("streamvue-artwork", locator);
 }
 
 export function parseMediaCenterPlaybackUri(value: string): MediaCenterPlaybackLocator {
+  if (value !== value.trim()) {
+    throw new TypeError("The media-center playback address is not canonical.");
+  }
   const url = new URL(value);
-  if (url.protocol !== "streamvue-media:") {
+  if (url.protocol !== "streamvue-media:"
+    || url.username !== ""
+    || url.password !== ""
+    || url.port !== ""
+    || url.search !== ""
+    || url.hash !== "") {
     throw new TypeError("This is not a StreamVue media-center playback address.");
   }
   const provider = url.hostname.toLowerCase();
@@ -112,11 +120,27 @@ export function parseMediaCenterPlaybackUri(value: string): MediaCenterPlaybackL
   if (parts.length !== 2) {
     throw new TypeError("The media-center playback address is incomplete.");
   }
-  return {
+  const locator: MediaCenterPlaybackLocator = {
     provider,
     serverId: requireIdentifier(parts[0] ?? "", "media-center server identifier"),
     itemId: requireIdentifier(parts[1] ?? "", "media-center item identifier")
   };
+  if (url.href !== mediaCenterPlaybackUri(locator)) {
+    throw new TypeError("The media-center playback address is not canonical.");
+  }
+  return locator;
+}
+
+function mediaCenterLocatorUri(
+  scheme: "streamvue-media" | "streamvue-artwork",
+  locator: MediaCenterPlaybackLocator
+): string {
+  if (locator.provider !== "plex" && locator.provider !== "emby") {
+    throw new TypeError("The media-center playback provider is not supported.");
+  }
+  const serverId = requireIdentifier(locator.serverId, "media-center server identifier");
+  const itemId = requireIdentifier(locator.itemId, "media-center item identifier");
+  return `${scheme}://${locator.provider}/${encodeURIComponent(serverId)}/${encodeURIComponent(itemId)}`;
 }
 
 function toCatalogChannel(
