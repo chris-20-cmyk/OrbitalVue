@@ -209,7 +209,10 @@ private struct ChannelBrowserView: View {
         }
         .navigationTitle(title)
         .searchable(
-            text: Binding(get: { store.query }, set: store.updateQuery),
+            text: Binding(
+                get: { store.query },
+                set: { value in store.updateQuery(value) }
+            ),
             placement: .navigationBarDrawer(displayMode: .always),
             prompt: "Search channels or groups"
         )
