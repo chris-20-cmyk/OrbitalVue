@@ -75,8 +75,8 @@ jobs:
       - name: Build iPhone and iPad
         shell: bash
         run: |
-          set -o pipefail
           xcodebuild \
+            -quiet \
             -jobs 2 \
             -project platforms/apple/StreamVueApple.xcodeproj \
             -scheme StreamVue \
@@ -87,7 +87,7 @@ jobs:
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES \
             SWIFT_ENABLE_BATCH_MODE=NO \
-            build | xcbeautify
+            build
 
       - name: Analyze iPhone and iPad
         shell: bash
