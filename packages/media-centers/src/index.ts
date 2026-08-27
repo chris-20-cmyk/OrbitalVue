@@ -10,6 +10,12 @@ export type {
   MediaCenterPlaybackLocator
 } from "./catalog.js";
 export {
+  assertMediaCenterCredentialBinding,
+  createMediaCenterCredentialBinding,
+  requireAllowedTransport
+} from "./credential.js";
+export type { MediaCenterCredentialBinding } from "./credential.js";
+export {
   authenticateEmby,
   EmbyClient
 } from "./emby.js";

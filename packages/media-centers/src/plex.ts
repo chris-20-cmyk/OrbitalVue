@@ -1,4 +1,8 @@
 import { requestJson, type MediaCenterHttpTransport } from "./http.js";
+import {
+  assertMediaCenterCredentialBinding,
+  type MediaCenterCredentialBinding
+} from "./credential.js";
 import { asArray, asBoolean, asNumber, asRecord, asString, clampPage } from "./parse.js";
 import type {
   MediaCenterConnection,
@@ -22,6 +26,7 @@ import {
 export interface PlexClientConfiguration {
   connection: MediaCenterConnection;
   token: string;
+  credentialBinding: MediaCenterCredentialBinding;
   clientIdentifier: string;
   product?: string;
   version?: string;
@@ -35,7 +40,9 @@ export interface PlexServerIdentity {
 
 export class PlexClient {
   private readonly baseUrl: string;
+  private readonly clientHeaders: Record<string, string>;
   private readonly headers: Record<string, string>;
+  private identityVerified = false;
 
   constructor(
     private readonly transport: MediaCenterHttpTransport,
@@ -44,12 +51,17 @@ export class PlexClient {
     if (configuration.connection.provider !== "plex") {
       throw new TypeError("A Plex client requires a Plex connection.");
     }
+    assertMediaCenterCredentialBinding(
+      configuration.connection,
+      configuration.credentialBinding
+    );
     const token = configuration.token.trim();
-    if (!token) throw new TypeError("A Plex access token is required.");
+    if (!token || /[\r\n]/.test(token) || token.length > 16_384) {
+      throw new TypeError("A valid Plex access token is required.");
+    }
     this.baseUrl = normalizeMediaCenterBaseUrl(configuration.connection.baseUrl);
-    this.headers = {
+    this.clientHeaders = {
       Accept: "application/json",
-      "X-Plex-Token": token,
       "X-Plex-Client-Identifier": requireIdentifier(
         configuration.clientIdentifier,
         "Plex client identifier"
@@ -59,18 +71,30 @@ export class PlexClient {
       "X-Plex-Platform": "StreamVue",
       "X-Plex-Pms-Api-Version": "1.2.2"
     };
+    this.headers = { ...this.clientHeaders, "X-Plex-Token": token };
   }
 
   async getIdentity(): Promise<PlexServerIdentity> {
-    const payload = await this.get("/identity");
+    const payload = await requestJson(this.transport, {
+      method: "GET",
+      url: resolveServerPath(this.baseUrl, "/identity"),
+      headers: this.clientHeaders
+    });
     const container = asRecord(asRecord(payload).MediaContainer);
-    const serverId = asString(container.machineIdentifier)
-      ?? this.configuration.connection.serverId;
+    const rawServerId = asString(container.machineIdentifier);
+    if (!rawServerId) {
+      throw new TypeError("Plex did not return a server identity.");
+    }
+    const serverId = requireIdentifier(rawServerId, "Plex server identifier");
+    if (serverId !== this.configuration.connection.serverId) {
+      throw new TypeError("The Plex server identity does not match this credential.");
+    }
     const name = asString(container.friendlyName)
       ?? this.configuration.connection.displayName;
     const version = asString(container.version);
+    this.identityVerified = true;
     return {
-      serverId: requireIdentifier(serverId, "Plex server identifier"),
+      serverId,
       name,
       ...(version === undefined ? {} : { version })
     };
@@ -122,6 +146,7 @@ export class PlexClient {
     item: MediaCenterItem,
     mediaSourceId?: string
   ): MediaCenterPlaybackPlan {
+    this.requireVerifiedIdentity();
     if (item.provider !== "plex" || item.serverId !== this.configuration.connection.serverId) {
       throw new TypeError("The Plex item does not belong to this server connection.");
     }
@@ -143,6 +168,7 @@ export class PlexClient {
   }
 
   artworkRequest(item: MediaCenterItem, maxWidth = 640): MediaCenterPlaybackPlan | undefined {
+    this.requireVerifiedIdentity();
     if (!item.artworkPath) return undefined;
     const url = withQuery(resolveServerPath(this.baseUrl, item.artworkPath), {
       width: Math.min(2_000, Math.max(64, Math.floor(maxWidth)))
@@ -159,11 +185,18 @@ export class PlexClient {
   }
 
   private async get(path: string, additionalHeaders: Record<string, string> = {}): Promise<unknown> {
+    if (!this.identityVerified) await this.getIdentity();
     return requestJson(this.transport, {
       method: "GET",
       url: resolveServerPath(this.baseUrl, path),
       headers: { ...this.headers, ...additionalHeaders }
     });
+  }
+
+  private requireVerifiedIdentity(): void {
+    if (!this.identityVerified) {
+      throw new TypeError("Verify the Plex server identity before resolving protected media.");
+    }
   }
 
   private parseItem(

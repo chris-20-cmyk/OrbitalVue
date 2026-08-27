@@ -4,7 +4,9 @@ import {
   EmbyClient,
   PlexAccountClient,
   PlexClient,
+  assertMediaCenterCredentialBinding,
   authenticateEmby,
+  createMediaCenterCredentialBinding,
   createFetchTransport,
   createMediaCenterCatalog,
   mediaCenterPlaybackUri,
@@ -104,9 +106,63 @@ describe("media-center URL boundaries", () => {
       expect(() => parseMediaCenterPlaybackUri(unsafe)).toThrow();
     }
   });
+
+  it("binds protected credentials to one server and requires HTTP consent", () => {
+    const connection: MediaCenterConnection = {
+      contractVersion: MEDIA_CENTER_CONTRACT_VERSION,
+      provider: "plex",
+      serverId: "plex-server-1",
+      displayName: "Plex",
+      baseUrl: "https://plex.home:32400",
+      displayLocation: "plex.home:32400",
+      credentialId: "vault-plex-1"
+    };
+    const binding = createMediaCenterCredentialBinding(connection);
+    expect(() => assertMediaCenterCredentialBinding({
+      ...connection,
+      baseUrl: "https://attacker.example.invalid"
+    }, binding)).toThrow(/does not belong/);
+
+    const cleartextConnection = {
+      ...connection,
+      baseUrl: "http://192.168.1.8:32400"
+    };
+    expect(() => createMediaCenterCredentialBinding(cleartextConnection))
+      .toThrow(/unencrypted HTTP/);
+    expect(createMediaCenterCredentialBinding(cleartextConnection, true).allowInsecureHttp)
+      .toBe(true);
+  });
 });
 
 describe("Plex integration", () => {
+  it("does not send a token when the public Plex identity is wrong", async () => {
+    const connection: MediaCenterConnection = {
+      contractVersion: MEDIA_CENTER_CONTRACT_VERSION,
+      provider: "plex",
+      serverId: "expected-plex-server",
+      displayName: "Plex",
+      baseUrl: "https://plex.home:32400",
+      displayLocation: "plex.home:32400",
+      credentialId: "vault-plex-identity-test"
+    };
+    const token = "must-not-leave-the-vault";
+    const mock = createMockTransport((request) => {
+      expect(new URL(request.url).pathname).toBe("/identity");
+      expect(request.headers["X-Plex-Token"]).toBeUndefined();
+      return { MediaContainer: { machineIdentifier: "different-plex-server" } };
+    });
+    const client = new PlexClient(mock.transport, {
+      connection,
+      token,
+      credentialBinding: createMediaCenterCredentialBinding(connection),
+      clientIdentifier: "streamvue-identity-test"
+    });
+
+    await expect(client.getLibraries()).rejects.toThrow(/identity does not match/i);
+    expect(mock.requests).toHaveLength(1);
+    expect(Object.values(mock.requests[0]!.headers)).not.toContain(token);
+  });
+
   it("whitelists public JWK fields and rejects private device key material", async () => {
     const mock = createMockTransport((request) => {
       expect(JSON.parse(request.body ?? "{}")).toEqual({
@@ -212,6 +268,12 @@ describe("Plex integration", () => {
                 local: true,
                 relay: false,
                 IPv6: false
+              },
+              {
+                uri: "https://192-168-1-8.example.plex.direct:32400",
+                local: true,
+                relay: false,
+                IPv6: false
               }
             ]
           },
@@ -254,7 +316,7 @@ describe("Plex integration", () => {
       owned: true
     });
     expect(selectPreferredPlexConnection(servers[0]!.connections)?.uri)
-      .toBe("http://192.168.1.8:32400");
+      .toBe("https://192-168-1-8.example.plex.direct:32400");
     expect(mock.requests.every((request) => !request.url.includes(accountToken))).toBe(true);
     expect(mock.requests.every((request) => !request.url.includes(serverToken))).toBe(true);
     expect(mock.requests.every((request) => !request.headers["X-Plex-Product"]?.includes("\r")))
@@ -277,6 +339,7 @@ describe("Plex integration", () => {
       const url = new URL(request.url);
       expect(url.search).not.toContain(plexToken);
       if (url.pathname === "/identity") {
+        expect(request.headers["X-Plex-Token"]).toBeUndefined();
         return { MediaContainer: { machineIdentifier: "plex-server-1", friendlyName: "Plex" } };
       }
       if (url.pathname === "/library/sections") {
@@ -322,6 +385,7 @@ describe("Plex integration", () => {
     const client = new PlexClient(mock.transport, {
       connection,
       token: plexToken,
+      credentialBinding: createMediaCenterCredentialBinding(connection),
       clientIdentifier: "streamvue-test-device",
       product: "StreamVue\r\nX-Injected: no",
       version: "5.1-test"
@@ -358,6 +422,40 @@ describe("Plex integration", () => {
 });
 
 describe("Emby integration", () => {
+  it("does not send a token when the public Emby identity is wrong", async () => {
+    const connection: MediaCenterConnection = {
+      contractVersion: MEDIA_CENTER_CONTRACT_VERSION,
+      provider: "emby",
+      serverId: "expected-emby-server",
+      displayName: "Emby",
+      baseUrl: "https://emby.home",
+      displayLocation: "emby.home",
+      credentialId: "vault-emby-identity-test",
+      userId: "user-1"
+    };
+    const token = "must-not-leave-the-vault";
+    const mock = createMockTransport((request) => {
+      expect(new URL(request.url).pathname).toBe("/emby/System/Info/Public");
+      expect(request.headers["X-Emby-Token"]).toBeUndefined();
+      return { Id: "different-emby-server", ServerName: "Wrong Emby" };
+    });
+    const client = new EmbyClient(mock.transport, {
+      connection,
+      token,
+      credentialBinding: createMediaCenterCredentialBinding(connection),
+      device: {
+        client: "StreamVue",
+        device: "Vitest",
+        deviceId: "streamvue-identity-test",
+        version: "5.1-test"
+      }
+    });
+
+    await expect(client.getLibraries()).rejects.toThrow(/identity does not match/i);
+    expect(mock.requests).toHaveLength(1);
+    expect(Object.values(mock.requests[0]!.headers)).not.toContain(token);
+  });
+
   it("authenticates and maps playback while keeping passwords and tokens out of the catalog", async () => {
     const password = "emby-password-never-persist";
     const embyToken = "emby-access-token-never-persist";
@@ -366,6 +464,11 @@ describe("Emby integration", () => {
       const url = new URL(request.url);
       expect(url.search).not.toContain(password);
       expect(url.search).not.toContain(embyToken);
+      if (url.pathname === "/emby/System/Info/Public") {
+        expect(request.headers["X-Emby-Token"]).toBeUndefined();
+        expect(Object.values(request.headers)).not.toContain(embyToken);
+        return { Id: "emby-server-1", ServerName: "Home Emby", Version: "4.9" };
+      }
       if (url.pathname === "/emby/Users/AuthenticateByName") {
         expect(request.method).toBe("POST");
         expect(JSON.parse(request.body ?? "{}")).toEqual({
@@ -450,7 +553,12 @@ describe("Emby integration", () => {
       credentialId: "vault-emby-1",
       userId: session.userId
     };
-    const client = new EmbyClient(mock.transport, { connection, token: session.accessToken, device });
+    const client = new EmbyClient(mock.transport, {
+      connection,
+      token: session.accessToken,
+      credentialBinding: createMediaCenterCredentialBinding(connection),
+      device
+    });
     const libraries = await client.getLibraries();
     const page = await client.getItems(libraries[0]!, Number.NaN, Number.POSITIVE_INFINITY);
     const item = page.items[0]!;
@@ -480,5 +588,8 @@ describe("Emby integration", () => {
     expect(serializedCatalog).not.toContain(upstreamToken);
     expect(serializedCatalog).not.toContain("X-Emby-Token");
     expect(serializedCatalog).not.toContain("X-Emby-Authorization");
+    expect(mock.requests.filter((request) =>
+      new URL(request.url).pathname === "/emby/System/Info/Public"
+    )).toHaveLength(2);
   });
 });

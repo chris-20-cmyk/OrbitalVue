@@ -308,9 +308,9 @@ function plexAuthorizationUrl(clientIdentifier: string, code: string, product: s
 }
 
 function connectionPriority(connection: PlexServerConnection): number {
-  return (connection.local ? 0 : 100)
+  return (connection.secure ? 0 : 1_000)
+    + (connection.local ? 0 : 100)
     + (connection.relay ? 50 : 0)
-    + (connection.secure ? 0 : 10)
     + (connection.ipv6 ? 1 : 0);
 }
 

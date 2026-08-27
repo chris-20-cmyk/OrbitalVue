@@ -1,4 +1,9 @@
 import { requestJson, type MediaCenterHttpTransport } from "./http.js";
+import {
+  assertMediaCenterCredentialBinding,
+  requireAllowedTransport,
+  type MediaCenterCredentialBinding
+} from "./credential.js";
 import { asArray, asBoolean, asNumber, asRecord, asString, clampPage } from "./parse.js";
 import type {
   MediaCenterConnection,
@@ -26,6 +31,7 @@ export interface EmbyAuthenticationRequest {
   username: string;
   password: string;
   device: MediaCenterDeviceIdentity;
+  allowInsecureHttp?: boolean;
 }
 
 export interface EmbyAuthenticationResult {
@@ -35,9 +41,16 @@ export interface EmbyAuthenticationResult {
   userName: string;
 }
 
+interface EmbyServerIdentity {
+  serverId: string;
+  name: string;
+  version?: string;
+}
+
 export interface EmbyClientConfiguration {
   connection: MediaCenterConnection;
   token: string;
+  credentialBinding: MediaCenterCredentialBinding;
   device: MediaCenterDeviceIdentity;
 }
 
@@ -48,7 +61,9 @@ export async function authenticateEmby(
   const username = request.username.trim();
   if (!username) throw new TypeError("Enter an Emby user name.");
   if (!request.password) throw new TypeError("Enter the Emby password.");
+  requireAllowedTransport(request.baseUrl, request.allowInsecureHttp ?? false);
   const apiBaseUrl = embyApiBaseUrl(request.baseUrl);
+  const publicIdentity = await getEmbyPublicIdentity(transport, apiBaseUrl);
   const payload = await requestJson<unknown>(transport, {
     method: "POST",
     url: resolveServerPath(apiBaseUrl, "/Users/AuthenticateByName"),
@@ -69,10 +84,17 @@ export async function authenticateEmby(
   if (!token || !serverId || !userId) {
     throw new TypeError("Emby authenticated but returned an incomplete session.");
   }
+  if (/\r|\n/.test(token) || token.length > 16_384) {
+    throw new TypeError("Emby returned an invalid access token.");
+  }
+  const safeServerId = requireIdentifier(serverId, "Emby server identifier");
+  if (safeServerId !== publicIdentity.serverId) {
+    throw new TypeError("The Emby server identity changed during authentication.");
+  }
   return {
     accessToken: token,
     userId: requireIdentifier(userId, "Emby user identifier"),
-    serverId: requireIdentifier(serverId, "Emby server identifier"),
+    serverId: safeServerId,
     userName
   };
 }
@@ -81,6 +103,7 @@ export class EmbyClient {
   private readonly apiBaseUrl: string;
   private readonly headers: Record<string, string>;
   private readonly userId: string;
+  private identityVerified = false;
 
   constructor(
     private readonly transport: MediaCenterHttpTransport,
@@ -89,8 +112,14 @@ export class EmbyClient {
     if (configuration.connection.provider !== "emby") {
       throw new TypeError("An Emby client requires an Emby connection.");
     }
+    assertMediaCenterCredentialBinding(
+      configuration.connection,
+      configuration.credentialBinding
+    );
     const token = configuration.token.trim();
-    if (!token) throw new TypeError("An Emby access token is required.");
+    if (!token || /[\r\n]/.test(token) || token.length > 16_384) {
+      throw new TypeError("A valid Emby access token is required.");
+    }
     this.userId = requireIdentifier(
       configuration.connection.userId ?? "",
       "Emby user identifier"
@@ -233,6 +262,7 @@ export class EmbyClient {
   }
 
   artworkRequest(item: MediaCenterItem, maxWidth = 640): MediaCenterPlaybackPlan | undefined {
+    this.requireVerifiedIdentity();
     if (!item.artworkPath) return undefined;
     const url = withQuery(resolveServerPath(this.apiBaseUrl, item.artworkPath), {
       MaxWidth: Math.min(2_000, Math.max(64, Math.floor(maxWidth)))
@@ -253,7 +283,20 @@ export class EmbyClient {
   }
 
   private async getAbsolute(url: string): Promise<unknown> {
+    if (!this.identityVerified) {
+      const identity = await getEmbyPublicIdentity(this.transport, this.apiBaseUrl);
+      if (identity.serverId !== this.configuration.connection.serverId) {
+        throw new TypeError("The Emby server identity does not match this credential.");
+      }
+      this.identityVerified = true;
+    }
     return requestJson(this.transport, { method: "GET", url, headers: this.headers });
+  }
+
+  private requireVerifiedIdentity(): void {
+    if (!this.identityVerified) {
+      throw new TypeError("Verify the Emby server identity before resolving protected media.");
+    }
   }
 
   private parseItem(
@@ -304,6 +347,26 @@ export class EmbyClient {
 function embyApiBaseUrl(input: string): string {
   const base = normalizeMediaCenterBaseUrl(input);
   return new URL(base).pathname.toLowerCase().endsWith("/emby") ? base : `${base}/emby`;
+}
+
+async function getEmbyPublicIdentity(
+  transport: MediaCenterHttpTransport,
+  apiBaseUrl: string
+): Promise<EmbyServerIdentity> {
+  const payload = asRecord(await requestJson(transport, {
+    method: "GET",
+    url: resolveServerPath(apiBaseUrl, "/System/Info/Public"),
+    headers: { Accept: "application/json" }
+  }));
+  const rawServerId = asString(payload.Id ?? payload.ServerId);
+  if (!rawServerId) throw new TypeError("Emby did not return a public server identity.");
+  const name = asString(payload.ServerName) ?? "Emby";
+  const version = asString(payload.Version);
+  return {
+    serverId: requireIdentifier(rawServerId, "Emby server identifier"),
+    name,
+    ...(version === undefined ? {} : { version })
+  };
 }
 
 function embyAuthorization(
