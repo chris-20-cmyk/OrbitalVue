@@ -72,7 +72,7 @@ jobs:
           test "$(sips -g pixelHeight "$ICON" | awk '/pixelHeight/ {print $2}')" = "1024"
           test "$(sips -g hasAlpha "$ICON" | awk '/hasAlpha/ {print $2}')" = "no"
 
-      - name: Build and analyze iPhone and iPad
+      - name: Build iPhone and iPad
         shell: bash
         run: |
           set -o pipefail
@@ -83,9 +83,24 @@ jobs:
             -derivedDataPath artifacts/apple-derived-data/ios \
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            build analyze | xcbeautify
+            SWIFT_ENABLE_BATCH_MODE=NO \
+            build | xcbeautify
 
-      - name: Build and analyze Apple TV
+      - name: Analyze iPhone and iPad
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project platforms/apple/StreamVueApple.xcodeproj \
+            -scheme StreamVue \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath artifacts/apple-derived-data/ios \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            SWIFT_ENABLE_BATCH_MODE=NO \
+            analyze | xcbeautify
+
+      - name: Build Apple TV
         shell: bash
         run: |
           set -o pipefail
@@ -96,7 +111,22 @@ jobs:
             -derivedDataPath artifacts/apple-derived-data/tvos \
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            build analyze | xcbeautify
+            SWIFT_ENABLE_BATCH_MODE=NO \
+            build | xcbeautify
+
+      - name: Analyze Apple TV
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project platforms/apple/StreamVueApple.xcodeproj \
+            -scheme StreamVueTV \
+            -destination "generic/platform=tvOS Simulator" \
+            -derivedDataPath artifacts/apple-derived-data/tvos \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            SWIFT_ENABLE_BATCH_MODE=NO \
+            analyze | xcbeautify
 
       - name: Verify simulator products without distributing them
         run: |
