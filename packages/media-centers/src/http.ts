@@ -86,7 +86,13 @@ async function readBoundedResponseBody(
   response: Response,
   maxResponseBytes: number
 ): Promise<string> {
-  if (!response.body) return "";
+  if (!response.body) {
+    const body = await response.text();
+    if (new TextEncoder().encode(body).byteLength > maxResponseBytes) {
+      throw responseTooLarge(response.status, maxResponseBytes);
+    }
+    return body;
+  }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let byteCount = 0;

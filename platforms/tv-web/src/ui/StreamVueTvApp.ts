@@ -1,5 +1,9 @@
 import type { CatalogChannel, StreamVueCatalog } from "@streamvue/catalog";
-import { CatalogRepository, type CatalogLoadResult } from "../catalog/CatalogRepository.js";
+import {
+  CatalogRepository,
+  isMediaCenterCatalog,
+  type CatalogLoadResult
+} from "../catalog/CatalogRepository.js";
 import { SpatialNavigator } from "../navigation/SpatialNavigator.js";
 import { exitTelevisionApp, registerPlatformRemoteKeys } from "../platform/platform.js";
 import { createPlayerAdapter } from "../playback/createPlayer.js";
@@ -12,6 +16,7 @@ import { icon, type IconName } from "./icons.js";
 
 type Screen = "loading" | "onboarding" | "browse" | "player";
 type Modal = "source" | "search" | "confirm-clear" | null;
+type SourceMode = "playlist" | "plex" | "emby";
 
 const FAVORITES_KEY = "streamvue-tv-favorites-v1";
 const ALL_GROUPS = "All Channels";
@@ -24,6 +29,7 @@ export class StreamVueTvApp {
   private catalog: StreamVueCatalog | null = null;
   private screen: Screen = "loading";
   private modal: Modal = null;
+  private sourceMode: SourceMode = "playlist";
   private selectedGroup = ALL_GROUPS;
   private selectedChannelId: string | null = null;
   private favorites = loadFavorites();
@@ -35,6 +41,7 @@ export class StreamVueTvApp {
   private aspectIndex = 0;
   private hideChromeTimer: number | null = null;
   private noticeTimer: number | null = null;
+  private playbackRequestSerial = 0;
 
   constructor(private readonly root: HTMLElement) {
     window.addEventListener("keydown", this.onAppKeyDown, { capture: true });
@@ -87,7 +94,7 @@ export class StreamVueTvApp {
     return `<main class="startup-screen" aria-busy="true">
       ${brandMark()}
       <div class="startup-loader" aria-hidden="true"></div>
-      <p>Preparing your channels</p>
+      <p>Preparing your library</p>
     </main>`;
   }
 
@@ -95,19 +102,22 @@ export class StreamVueTvApp {
     return `<main class="onboarding-screen">
       <header class="onboarding-header">${brandMark()}<span>Television edition</span></header>
       <section class="onboarding-copy">
-        <h1>Connect your channels</h1>
-        <p>Enter an M3U playlist address or choose a playlist file. StreamVue keeps the source private on this television.</p>
+        <h1>Connect your content</h1>
+        <p>Bring an M3U playlist or your personal Plex or Emby library to the television. StreamVue includes no content of its own.</p>
         ${this.error ? `<div class="message message-error" role="alert">${escapeHtml(this.error)}</div>` : ""}
         <label class="field-label" for="playlist-url">M3U playlist URL</label>
         <input id="playlist-url" class="tv-input" data-focusable="true" data-autofocus="true" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://provider.example/playlist.m3u" />
         <div class="onboarding-actions">
           <button class="button button-primary" data-action="connect-url" data-focusable="true">Connect playlist</button>
           <button class="button button-secondary" data-action="choose-file" data-focusable="true">Choose M3U file</button>
+          <button class="button button-secondary" data-action="open-source-mode" data-source-mode="plex" data-focusable="true">Connect Plex</button>
+          <button class="button button-secondary" data-action="open-source-mode" data-source-mode="emby" data-focusable="true">Connect Emby</button>
           <button class="button button-quiet" data-action="use-demo" data-focusable="true">Explore the interface</button>
         </div>
-        <input id="playlist-file" class="visually-hidden" type="file" accept=".m3u,.m3u8,text/plain,audio/x-mpegurl,application/vnd.apple.mpegurl" />
+        <input id="playlist-file" class="visually-hidden" type="file" tabindex="-1" aria-hidden="true" accept=".m3u,.m3u8,text/plain,audio/x-mpegurl,application/vnd.apple.mpegurl" />
       </section>
-      <footer class="privacy-note">StreamVue includes no channels. Connect only sources you are authorized to use.</footer>
+      <footer class="privacy-note">Connect only sources and personal servers you are authorized to use.</footer>
+      ${this.modalTemplate()}
     </main>`;
   }
 
@@ -120,25 +130,26 @@ export class StreamVueTvApp {
     const channelIndex = selected ? channels.findIndex((channel) => channel.id === selected.id) : 0;
     const channelWindow = windowAround(channels, channelIndex, channelWindowSize());
 
+    const mediaCenter = isMediaCenterCatalog(catalog);
     return `<main class="tv-shell">
       <header class="topbar">
-        <div class="topbar-title">${brandMark()}<span class="topbar-divider"></span><h1>Live TV</h1></div>
+        <div class="topbar-title">${brandMark()}<span class="topbar-divider"></span><h1>${mediaCenter ? "Media Library" : "Live TV"}</h1></div>
         <div class="topbar-actions">
           <span class="source-status">${escapeHtml(sourceStatus(catalog))}</span>
-          <button class="icon-button" aria-label="Search channels" data-action="open-search" data-focusable="true">${icon("search")}</button>
+          <button class="icon-button" aria-label="Search ${mediaCenter ? "media" : "channels"}" data-action="open-search" data-focusable="true">${icon("search")}</button>
           <button class="icon-button" aria-label="Source settings" data-action="open-source" data-focusable="true">${icon("settings")}</button>
         </div>
       </header>
       <section class="browser-grid">
-        <nav class="group-rail" aria-label="Channel groups">
-          ${groupWindow.items.map((group) => groupButton(group, group === this.selectedGroup, this.groupCount(group))).join("")}
+        <nav class="group-rail" aria-label="${mediaCenter ? "Media libraries" : "Channel groups"}">
+          ${groupWindow.items.map((group) => groupButton(group, group === this.selectedGroup, this.groupCount(group), mediaCenter)).join("")}
         </nav>
         <section class="channel-pane" aria-label="${escapeAttribute(this.selectedGroup)}">
-          <div class="pane-heading"><h2>${escapeHtml(this.selectedGroup)}</h2><span>${channels.length.toLocaleString()}</span></div>
+          <div class="pane-heading"><h2>${escapeHtml(mediaCenter && this.selectedGroup === ALL_GROUPS ? "All Media" : this.selectedGroup)}</h2><span>${channels.length.toLocaleString()}</span></div>
           <div class="channel-list" role="list">
             ${channelWindow.items.length > 0
               ? this.channelRows(channelWindow.items, channelWindow.start, selected?.id ?? null)
-              : `<div class="empty-list"><strong>No channels here yet</strong><span>Add a favorite or choose another group.</span></div>`}
+              : `<div class="empty-list"><strong>No ${mediaCenter ? "media" : "channels"} here yet</strong><span>Add a favorite or choose another group.</span></div>`}
           </div>
         </section>
         <section class="detail-pane" data-role="details" aria-live="polite">
@@ -164,18 +175,25 @@ export class StreamVueTvApp {
 
   private detailTemplate(channel: CatalogChannel): string {
     const isFavorite = this.favorites.has(channel.id);
-    const demoProgram = channel.name === "Northstar News" ? "Evening Report" : "Live channel";
+    const mediaCenter = this.catalog ? isMediaCenterCatalog(this.catalog) : false;
+    const demoProgram = channel.name === "Northstar News"
+      ? "Evening Report"
+      : mediaCenter
+        ? mediaKindLabel(channel)
+        : "Live channel";
+    const preview = mediaCenter
+      ? `<div class="media-preview-placeholder"><span>${escapeHtml(channelInitials(channel.name))}</span><small>${escapeHtml(mediaKindLabel(channel))}</small></div>`
+      : `<img src="./assets/broadcast-preview.png" alt="" /><span class="preview-live"><i></i> LIVE</span>`;
     return `<div class="preview-frame">
-        <img src="./assets/broadcast-preview.png" alt="" />
-        <span class="preview-live"><i></i> LIVE</span>
+        ${preview}
       </div>
       <div class="channel-detail-copy">
         <h2>${escapeHtml(channel.name.toUpperCase())}</h2>
         <p class="detail-group">${escapeHtml(channel.group)}</p>
-        <p class="now-line"><i></i><span>Now:</span> ${escapeHtml(demoProgram)}</p>
+        <p class="now-line"><i></i><span>${mediaCenter ? "Type:" : "Now:"}</span> ${escapeHtml(demoProgram)}</p>
       </div>
       <div class="detail-actions">
-        <button class="button button-watch" data-action="watch" data-focusable="true">${icon("play")}<span>Watch now</span></button>
+        <button class="button button-watch" data-action="watch" data-focusable="true">${icon("play")}<span>${mediaCenter ? "Play" : "Watch now"}</span></button>
         <button class="button button-favorite${isFavorite ? " is-active" : ""}" data-action="favorite" data-focusable="true">${icon("favorite")}<span>${isFavorite ? "Favorited" : "Favorite"}</span></button>
       </div>`;
   }
@@ -193,44 +211,81 @@ export class StreamVueTvApp {
   }
 
   private sourceModalTemplate(): string {
-    const source = this.requireCatalog().sources[0];
-    return `<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="source-title">
-      <div class="modal-header"><div><h2 id="source-title">Channel source</h2><p>${escapeHtml(source?.displayLocation ?? "Private source")}</p></div><button class="icon-button" aria-label="Close" data-action="close-modal" data-focusable="true">×</button></div>
+    const source = this.catalog?.sources[0];
+    return `<div class="modal-backdrop"><section class="modal modal-source" role="dialog" aria-modal="true" aria-labelledby="source-title">
+      <div class="modal-header"><div><h2 id="source-title">Source manager</h2><p>${escapeHtml(source?.displayLocation ?? "Add a private source")}</p></div><button class="icon-button" aria-label="Close" data-action="close-modal" data-focusable="true">×</button></div>
       ${this.error ? `<div class="message message-error" role="alert">${escapeHtml(this.error)}</div>` : ""}
-      <label class="field-label" for="source-url">Connect a new M3U URL</label>
-      <input id="source-url" class="tv-input" data-focusable="true" data-autofocus="true" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://provider.example/playlist.m3u" />
-      <div class="modal-actions">
-        <button class="button button-primary" data-action="connect-source-url" data-focusable="true">Connect & replace</button>
-        <button class="button button-secondary" data-action="choose-file" data-focusable="true">Choose M3U file</button>
-        <button class="button button-danger" data-action="request-clear" data-focusable="true">Remove saved source</button>
+      <div class="source-tabs" role="tablist" aria-label="Source type">
+        ${sourceTab("playlist", "Playlist", this.sourceMode)}
+        ${sourceTab("plex", "Plex", this.sourceMode)}
+        ${sourceTab("emby", "Emby", this.sourceMode)}
+      </div>
+      ${this.sourceFormTemplate()}
+      <p class="vault-note">${escapeHtml(this.repository.credentialSecurityLabel)}</p>
+      <div class="source-utility-actions">
+        ${this.catalog ? `<button class="button button-secondary" data-action="refresh-source" data-focusable="true">Refresh active source</button><button class="button button-danger" data-action="request-clear" data-focusable="true">Remove saved source</button>` : ""}
         <button class="button button-quiet" data-action="close-modal" data-focusable="true">Close</button>
       </div>
-      <input id="playlist-file" class="visually-hidden" type="file" accept=".m3u,.m3u8,text/plain,audio/x-mpegurl,application/vnd.apple.mpegurl" />
+      <input id="playlist-file" class="visually-hidden" type="file" tabindex="-1" aria-hidden="true" accept=".m3u,.m3u8,text/plain,audio/x-mpegurl,application/vnd.apple.mpegurl" />
     </section></div>`;
   }
 
+  private sourceFormTemplate(): string {
+    if (this.sourceMode === "playlist") {
+      return `<div class="source-form" role="tabpanel">
+        <label class="field-label" for="source-url">M3U playlist URL</label>
+        <input id="source-url" class="tv-input" data-focusable="true" data-autofocus="true" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://provider.example/playlist.m3u" />
+        <div class="source-form-actions">
+          <button class="button button-primary" data-action="connect-source-url" data-focusable="true">Connect playlist</button>
+          <button class="button button-secondary" data-action="choose-file" data-focusable="true">Choose M3U file</button>
+        </div>
+      </div>`;
+    }
+    const provider = this.sourceMode === "plex" ? "Plex" : "Emby";
+    const providerFields = this.sourceMode === "plex"
+      ? `<label class="field-label" for="plex-access">Plex server token</label><input id="plex-access" class="tv-input" type="password" data-focusable="true" autocomplete="off" spellcheck="false" placeholder="Paste the token for this server" />`
+      : `<div class="source-field-grid"><div><label class="field-label" for="emby-user">Emby username</label><input id="emby-user" class="tv-input" data-focusable="true" autocomplete="off" spellcheck="false" /></div><div><label class="field-label" for="emby-password">Emby password</label><input id="emby-password" class="tv-input" type="password" data-focusable="true" autocomplete="off" /></div></div>`;
+    return `<div class="source-form" role="tabpanel">
+      <p class="premium-copy"><strong>${provider} personal library</strong><span>Credentials are verified against one server before protected requests begin.</span></p>
+      <label class="field-label" for="media-server">Server address</label>
+      <input id="media-server" class="tv-input" data-focusable="true" data-autofocus="true" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://media-server.example:port" />
+      ${providerFields}
+      <label class="field-label" for="media-name">Server nickname <span>optional</span></label>
+      <input id="media-name" class="tv-input" data-focusable="true" autocomplete="off" spellcheck="false" placeholder="Living room library" />
+      <label class="consent-row">
+        <input id="allow-media-http" type="checkbox" data-focusable="true" />
+        <span><strong>Allow an unencrypted local HTTP server</strong><small>Only enable this for a server you trust on your home network.</small></span>
+      </label>
+      <div class="source-form-actions">
+        <button class="button button-primary" data-action="connect-${this.sourceMode}" data-focusable="true">Connect ${provider}</button>
+      </div>
+    </div>`;
+  }
+
   private searchModalTemplate(): string {
+    const mediaCenter = this.catalog ? isMediaCenterCatalog(this.catalog) : false;
     return `<div class="modal-backdrop"><section class="modal modal-search" role="dialog" aria-modal="true" aria-labelledby="search-title">
-      <div class="modal-header"><div><h2 id="search-title">Find a channel</h2><p>Search names and exact playlist groups.</p></div><button class="icon-button" aria-label="Close" data-action="close-modal" data-focusable="true">×</button></div>
-      <input id="channel-search" class="tv-input" data-focusable="true" data-autofocus="true" autocomplete="off" value="${escapeAttribute(this.searchQuery)}" placeholder="Type a channel or group" />
+      <div class="modal-header"><div><h2 id="search-title">Find ${mediaCenter ? "media" : "a channel"}</h2><p>Search names and ${mediaCenter ? "media libraries" : "exact playlist groups"}.</p></div><button class="icon-button" aria-label="Close" data-action="close-modal" data-focusable="true">×</button></div>
+      <input id="channel-search" class="tv-input" data-focusable="true" data-autofocus="true" autocomplete="off" value="${escapeAttribute(this.searchQuery)}" placeholder="Type ${mediaCenter ? "a title or library" : "a channel or group"}" />
       <div class="search-results" data-role="search-results">${this.searchResultsTemplate()}</div>
     </section></div>`;
   }
 
   private searchResultsTemplate(): string {
     const query = this.searchQuery.trim().toLowerCase();
-    if (!query) return `<p class="search-empty">Start typing to search your channel library.</p>`;
+    const noun = this.catalog && isMediaCenterCatalog(this.catalog) ? "media library" : "channel library";
+    if (!query) return `<p class="search-empty">Start typing to search your ${noun}.</p>`;
     const results = this.requireCatalog().channels
       .filter((channel) => channel.name.toLowerCase().includes(query) || channel.group.toLowerCase().includes(query))
       .slice(0, 8);
-    if (results.length === 0) return `<p class="search-empty">No channels match “${escapeHtml(this.searchQuery)}”.</p>`;
+    if (results.length === 0) return `<p class="search-empty">No results match “${escapeHtml(this.searchQuery)}”.</p>`;
     return results.map((channel) => `<button class="search-result" data-action="search-result" data-channel-id="${escapeAttribute(channel.id)}" data-focusable="true"><strong>${escapeHtml(channel.name)}</strong><span>${escapeHtml(channel.group)}</span></button>`).join("");
   }
 
   private confirmClearTemplate(): string {
     return `<div class="modal-backdrop"><section class="modal modal-confirm" role="alertdialog" aria-modal="true" aria-labelledby="clear-title">
-      <h2 id="clear-title">Remove this channel source?</h2>
-      <p>The private cached catalog will be removed from this television. Your provider account is not changed.</p>
+      <h2 id="clear-title">Remove this content source?</h2>
+      <p>The private cached catalog and its protected device credential will be removed from this television. Your provider account is not changed.</p>
       <div class="modal-actions horizontal">
         <button class="button button-secondary" data-action="cancel-clear" data-focusable="true" data-autofocus="true">Keep source</button>
         <button class="button button-danger" data-action="confirm-clear" data-focusable="true">Remove source</button>
@@ -278,10 +333,11 @@ export class StreamVueTvApp {
     this.updateEngineLabel();
     this.navigator.setScope(this.root);
     this.focusAfterRender("[data-action='close-player']");
-    await this.player.play(channel);
+    await this.playResolvedChannel(channel);
   }
 
   private closePlayer(): void {
+    this.playbackRequestSerial += 1;
     this.clearChromeTimer();
     this.player?.destroy();
     this.player = null;
@@ -337,6 +393,74 @@ export class StreamVueTvApp {
     }
   }
 
+  private async connectPlex(): Promise<void> {
+    const server = this.inputValue("media-server");
+    const accessToken = this.inputValue("plex-access", false);
+    const displayName = this.inputValue("media-name");
+    const allowInsecureHttp = this.checkboxValue("allow-media-http");
+    this.setBusy(true);
+    this.error = null;
+    try {
+      const loaded = await this.repository.connectPlex({
+        serverAddress: server,
+        accessToken,
+        ...(displayName ? { displayName } : {}),
+        allowInsecureHttp
+      });
+      this.applyCatalog(loaded);
+      this.render();
+      this.focusAfterRender();
+    } catch (error) {
+      this.error = readableError(error, "Plex could not be connected.");
+      this.setBusy(false);
+      this.render();
+      this.focusAfterRender("#media-server");
+    }
+  }
+
+  private async connectEmby(): Promise<void> {
+    const server = this.inputValue("media-server");
+    const username = this.inputValue("emby-user");
+    const password = this.inputValue("emby-password", false);
+    const displayName = this.inputValue("media-name");
+    const allowInsecureHttp = this.checkboxValue("allow-media-http");
+    this.setBusy(true);
+    this.error = null;
+    try {
+      const loaded = await this.repository.connectEmby({
+        serverAddress: server,
+        username,
+        password,
+        ...(displayName ? { displayName } : {}),
+        allowInsecureHttp
+      });
+      this.applyCatalog(loaded);
+      this.render();
+      this.focusAfterRender();
+    } catch (error) {
+      this.error = readableError(error, "Emby could not be connected.");
+      this.setBusy(false);
+      this.render();
+      this.focusAfterRender("#media-server");
+    }
+  }
+
+  private async refreshSource(): Promise<void> {
+    this.setBusy(true);
+    this.error = null;
+    try {
+      const loaded = await this.repository.refreshCurrent();
+      this.applyCatalog(loaded);
+      this.render();
+      this.focusAfterRender();
+    } catch (error) {
+      this.error = readableError(error, "The active source could not be refreshed.");
+      this.setBusy(false);
+      this.render();
+      this.focusAfterRender("[data-action='refresh-source']");
+    }
+  }
+
   private async importFile(file: File): Promise<void> {
     this.setBusy(true);
     this.error = null;
@@ -356,6 +480,15 @@ export class StreamVueTvApp {
   private setBusy(busy: boolean): void {
     this.root.toggleAttribute("aria-busy", busy);
     this.root.querySelectorAll<HTMLButtonElement>("button").forEach((button) => { button.disabled = busy; });
+  }
+
+  private inputValue(id: string, trim = true): string {
+    const value = this.root.querySelector<HTMLInputElement>(`#${id}`)?.value ?? "";
+    return trim ? value.trim() : value;
+  }
+
+  private checkboxValue(id: string): boolean {
+    return this.root.querySelector<HTMLInputElement>(`#${id}`)?.checked ?? false;
   }
 
   private async clearSource(): Promise<void> {
@@ -394,7 +527,7 @@ export class StreamVueTvApp {
     if (playImmediately && this.screen === "player" && this.player) {
       this.playbackSignal = { state: "opening", message: null, warning: null };
       this.updatePlayerIdentity(channel);
-      void this.player.play(channel);
+      void this.playResolvedChannel(channel);
       return;
     }
     this.render();
@@ -423,6 +556,37 @@ export class StreamVueTvApp {
     this.focusAfterRender();
   }
 
+  private selectSourceMode(mode: SourceMode): void {
+    this.sourceMode = mode;
+    this.error = null;
+    this.render();
+    const scope = this.modalElement();
+    if (scope) this.navigator.setScope(scope);
+    this.focusAfterRender(`[data-source-mode='${mode}']`);
+  }
+
+  private openSourceMode(mode: SourceMode): void {
+    this.sourceMode = mode;
+    this.openModal("source");
+  }
+
+  private async playResolvedChannel(channel: CatalogChannel): Promise<void> {
+    const serial = ++this.playbackRequestSerial;
+    this.updatePlaybackSignal({ state: "opening", message: null, warning: null });
+    try {
+      const resolved = await this.repository.resolvePlayback(channel);
+      if (serial !== this.playbackRequestSerial || !this.player || this.screen !== "player") return;
+      await this.player.play(resolved.channel, resolved.startPositionMs);
+    } catch (error) {
+      if (serial !== this.playbackRequestSerial) return;
+      this.updatePlaybackSignal({
+        state: "error",
+        message: readableError(error, "Playback could not be unlocked."),
+        warning: null
+      });
+    }
+  }
+
   private closeModal(): void {
     this.modal = null;
     this.error = null;
@@ -446,6 +610,11 @@ export class StreamVueTvApp {
     if (!action || !target) return;
     if (action === "connect-url") void this.connectUrl("playlist-url");
     else if (action === "connect-source-url") void this.connectUrl("source-url");
+    else if (action === "connect-plex") void this.connectPlex();
+    else if (action === "connect-emby") void this.connectEmby();
+    else if (action === "refresh-source") void this.refreshSource();
+    else if (action === "open-source-mode") this.openSourceMode(sourceMode(target.dataset.sourceMode));
+    else if (action === "select-source-mode") this.selectSourceMode(sourceMode(target.dataset.sourceMode));
     else if (action === "choose-file") this.root.querySelector<HTMLInputElement>("#playlist-file")?.click();
     else if (action === "use-demo") void this.repository.useDemo().then((loaded) => { this.applyCatalog(loaded); this.render(); this.focusAfterRender(); });
     else if (action === "open-search") this.openModal("search");
@@ -651,14 +820,33 @@ export class StreamVueTvApp {
   }
 }
 
-function groupButton(group: string, active: boolean, count: number): string {
+function groupButton(group: string, active: boolean, count: number, mediaCenter: boolean): string {
   const iconName: IconName = group === ALL_GROUPS ? "grid"
     : group === FAVORITES_GROUP ? "favorite"
       : /movie|cinema/i.test(group) ? "film"
         : /news/i.test(group) ? "news"
           : /sport/i.test(group) ? "sports"
             : "folder";
-  return `<button class="group-button${active ? " is-active" : ""}" data-action="select-group" data-group="${escapeAttribute(group)}" data-focusable="true">${icon(iconName)}<span>${escapeHtml(group)}</span><small>${count.toLocaleString()}</small></button>`;
+  const label = mediaCenter && group === ALL_GROUPS ? "All Media" : group;
+  return `<button class="group-button${active ? " is-active" : ""}" data-action="select-group" data-group="${escapeAttribute(group)}" data-focusable="true">${icon(iconName)}<span>${escapeHtml(label)}</span><small>${count.toLocaleString()}</small></button>`;
+}
+
+function sourceTab(mode: SourceMode, label: string, active: SourceMode): string {
+  return `<button class="source-tab${mode === active ? " is-active" : ""}" role="tab" aria-selected="${mode === active}" data-action="select-source-mode" data-source-mode="${mode}" data-focusable="true">${escapeHtml(label)}</button>`;
+}
+
+function sourceMode(value: string | undefined): SourceMode {
+  return value === "plex" || value === "emby" ? value : "playlist";
+}
+
+function mediaKindLabel(channel: CatalogChannel): string {
+  switch (channel.kind) {
+  case "movie": return "Movie";
+  case "series": return "Series episode";
+  case "recording": return "Recording";
+  case "replay": return "Replay";
+  case "live": return "Live television";
+  }
 }
 
 function channelButton(channel: CatalogChannel, selected: boolean, favorite: boolean): string {

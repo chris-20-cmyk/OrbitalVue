@@ -82,6 +82,25 @@ describe("media-center URL boundaries", () => {
     })).rejects.toMatchObject({ code: "response-too-large", status: 200 });
   });
 
+  it("reads bounded text on television engines without ReadableStream support", async () => {
+    const fetchImplementation = async (): Promise<Response> => ({
+      status: 200,
+      headers: new Headers(),
+      body: null,
+      text: async () => "{\"MediaContainer\":{\"machineIdentifier\":\"tv-plex\"}}"
+    }) as Response;
+    const transport = createFetchTransport(fetchImplementation as typeof fetch, 256);
+
+    await expect(transport({
+      method: "GET",
+      url: "https://media.home/identity",
+      headers: {}
+    })).resolves.toMatchObject({
+      status: 200,
+      body: "{\"MediaContainer\":{\"machineIdentifier\":\"tv-plex\"}}"
+    });
+  });
+
   it("accepts only canonical, credential-free internal playback addresses", () => {
     const canonical = mediaCenterPlaybackUri({
       provider: "plex",

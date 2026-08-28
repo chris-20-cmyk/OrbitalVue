@@ -34,10 +34,11 @@ export type {
   MediaCenterHttpResponse,
   MediaCenterHttpTransport
 } from "./http.js";
-export { PlexClient } from "./plex.js";
+export { PlexClient, probePlexServerIdentity } from "./plex.js";
 export type {
   PlexClientConfiguration,
-  PlexServerIdentity
+  PlexServerIdentity,
+  PlexServerProbeConfiguration
 } from "./plex.js";
 export {
   PlexAccountClient,

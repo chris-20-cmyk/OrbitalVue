@@ -9,9 +9,9 @@
     "media-centers:build": "pnpm --filter @streamvue/catalog build && pnpm --filter @streamvue/media-centers build",
     "media-centers:test": "pnpm --filter @streamvue/catalog build && pnpm --filter @streamvue/media-centers test",
     "tv:dev": "pnpm --filter @streamvue/tv-web dev",
-    "tv:check": "pnpm --filter @streamvue/catalog build && pnpm --filter @streamvue/tv-web check",
+    "tv:check": "pnpm media-centers:build && pnpm --filter @streamvue/tv-web check",
     "tv:test": "pnpm --filter @streamvue/catalog test && pnpm --filter @streamvue/tv-web test",
-    "tv:build": "pnpm --filter @streamvue/catalog build && pnpm --filter @streamvue/tv-web build"
+    "tv:build": "pnpm media-centers:build && pnpm --filter @streamvue/tv-web build"
   },
   "devDependencies": {
     "typescript": "7.0.2",

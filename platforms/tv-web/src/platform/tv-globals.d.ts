@@ -17,6 +17,7 @@ interface SamsungAvPlay {
   play(): void;
   pause(): void;
   stop(): void;
+  seekTo(milliseconds: number): void;
   getState(): "NONE" | "IDLE" | "READY" | "PLAYING" | "PAUSED";
   setListener(listener: SamsungAvPlayListener): void;
   setDisplayRect(x: number, y: number, width: number, height: number): void;
@@ -35,10 +36,46 @@ interface SamsungTizen {
   tvinputdevice: {
     registerKey(keyName: string): void;
   };
+  keymanager?: {
+    saveData(
+      name: string,
+      data: string,
+      password?: string | null,
+      successCallback?: () => void,
+      errorCallback?: (error: { name?: string; message?: string }) => void
+    ): void;
+    getData(alias: { name: string }, password?: string | null): string;
+    removeData(alias: { name: string }): void;
+  };
+}
+
+interface WebOsServiceResponse {
+  returnValue?: boolean;
+  errorCode?: number;
+  errorText?: string;
+  handle?: string;
+  iv?: string;
+  output?: string;
+}
+
+interface WebOsService {
+  request(
+    uri: string,
+    options: {
+      method: string;
+      parameters: Record<string, unknown>;
+      onSuccess(response: WebOsServiceResponse): void;
+      onFailure(error: WebOsServiceResponse): void;
+    }
+  ): unknown;
+}
+
+interface WebOsApi {
+  service?: WebOsService;
 }
 
 interface Window {
   webapis?: SamsungWebApis;
   tizen?: SamsungTizen;
-  webOS?: unknown;
+  webOS?: WebOsApi;
 }

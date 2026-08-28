@@ -1,6 +1,7 @@
 import { requestJson, type MediaCenterHttpTransport } from "./http.js";
 import {
   assertMediaCenterCredentialBinding,
+  requireAllowedTransport,
   type MediaCenterCredentialBinding
 } from "./credential.js";
 import { asArray, asBoolean, asNumber, asRecord, asString, clampPage } from "./parse.js";
@@ -38,6 +39,43 @@ export interface PlexServerIdentity {
   version?: string;
 }
 
+export interface PlexServerProbeConfiguration {
+  baseUrl: string;
+  clientIdentifier: string;
+  product?: string;
+  version?: string;
+  allowInsecureHttp?: boolean;
+}
+
+export async function probePlexServerIdentity(
+  transport: MediaCenterHttpTransport,
+  configuration: PlexServerProbeConfiguration
+): Promise<PlexServerIdentity> {
+  requireAllowedTransport(
+    configuration.baseUrl,
+    configuration.allowInsecureHttp ?? false
+  );
+  const baseUrl = normalizeMediaCenterBaseUrl(configuration.baseUrl);
+  const payload = await requestJson(transport, {
+    method: "GET",
+    url: resolveServerPath(baseUrl, "/identity"),
+    headers: plexClientHeaders(configuration)
+  });
+  const container = asRecord(asRecord(payload).MediaContainer);
+  const rawServerId = asString(container.machineIdentifier);
+  if (!rawServerId) {
+    throw new TypeError("Plex did not return a server identity.");
+  }
+  const serverId = requireIdentifier(rawServerId, "Plex server identifier");
+  const name = asString(container.friendlyName) ?? "Plex";
+  const version = asString(container.version);
+  return {
+    serverId,
+    name,
+    ...(version === undefined ? {} : { version })
+  };
+}
+
 export class PlexClient {
   private readonly baseUrl: string;
   private readonly clientHeaders: Record<string, string>;
@@ -60,44 +98,27 @@ export class PlexClient {
       throw new TypeError("A valid Plex access token is required.");
     }
     this.baseUrl = normalizeMediaCenterBaseUrl(configuration.connection.baseUrl);
-    this.clientHeaders = {
-      Accept: "application/json",
-      "X-Plex-Client-Identifier": requireIdentifier(
-        configuration.clientIdentifier,
-        "Plex client identifier"
-      ),
-      "X-Plex-Product": safeHeaderValue(configuration.product, "StreamVue"),
-      "X-Plex-Version": safeHeaderValue(configuration.version, "5.1.0"),
-      "X-Plex-Platform": "StreamVue",
-      "X-Plex-Pms-Api-Version": "1.2.2"
-    };
+    this.clientHeaders = plexClientHeaders(configuration);
     this.headers = { ...this.clientHeaders, "X-Plex-Token": token };
   }
 
   async getIdentity(): Promise<PlexServerIdentity> {
-    const payload = await requestJson(this.transport, {
-      method: "GET",
-      url: resolveServerPath(this.baseUrl, "/identity"),
-      headers: this.clientHeaders
+    const identity = await probePlexServerIdentity(this.transport, {
+      baseUrl: this.baseUrl,
+      clientIdentifier: this.configuration.clientIdentifier,
+      ...(this.configuration.product === undefined
+        ? {}
+        : { product: this.configuration.product }),
+      ...(this.configuration.version === undefined
+        ? {}
+        : { version: this.configuration.version }),
+      allowInsecureHttp: this.configuration.credentialBinding.allowInsecureHttp
     });
-    const container = asRecord(asRecord(payload).MediaContainer);
-    const rawServerId = asString(container.machineIdentifier);
-    if (!rawServerId) {
-      throw new TypeError("Plex did not return a server identity.");
-    }
-    const serverId = requireIdentifier(rawServerId, "Plex server identifier");
-    if (serverId !== this.configuration.connection.serverId) {
+    if (identity.serverId !== this.configuration.connection.serverId) {
       throw new TypeError("The Plex server identity does not match this credential.");
     }
-    const name = asString(container.friendlyName)
-      ?? this.configuration.connection.displayName;
-    const version = asString(container.version);
     this.identityVerified = true;
-    return {
-      serverId,
-      name,
-      ...(version === undefined ? {} : { version })
-    };
+    return identity;
   }
 
   async getLibraries(): Promise<MediaCenterLibrary[]> {
@@ -242,6 +263,24 @@ export class PlexClient {
       mediaSources
     };
   }
+}
+
+function plexClientHeaders(configuration: {
+  clientIdentifier: string;
+  product?: string;
+  version?: string;
+}): Record<string, string> {
+  return {
+    Accept: "application/json",
+    "X-Plex-Client-Identifier": requireIdentifier(
+      configuration.clientIdentifier,
+      "Plex client identifier"
+    ),
+    "X-Plex-Product": safeHeaderValue(configuration.product, "StreamVue"),
+    "X-Plex-Version": safeHeaderValue(configuration.version, "5.1.0"),
+    "X-Plex-Platform": "StreamVue",
+    "X-Plex-Pms-Api-Version": "1.2.2"
+  };
 }
 
 function safeHeaderValue(value: string | undefined, fallback: string): string {

@@ -100,10 +100,9 @@ export class SpatialNavigator {
       }
       return;
     }
-    if (isTextEntry(document.activeElement)) return;
-
     const direction = keyDirection(event.key);
     if (!direction) return;
+    if (isTextEntry(document.activeElement) && (direction === "left" || direction === "right")) return;
     const focusable = this.focusableElements();
     const current = document.activeElement as HTMLElement | null;
     const currentIndex = current ? focusable.indexOf(current) : -1;

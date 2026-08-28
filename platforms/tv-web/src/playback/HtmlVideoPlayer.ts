@@ -20,7 +20,7 @@ export class HtmlVideoPlayer implements PlayerAdapter {
     window.addEventListener("resize", this.resize);
   }
 
-  async play(channel: CatalogChannel): Promise<void> {
+  async play(channel: CatalogChannel, startPositionMs = 0): Promise<void> {
     this.stop();
     const unsupportedHeaders = Object.keys(channel.stream.requestHeaders);
     this.onSignal({
@@ -33,6 +33,10 @@ export class HtmlVideoPlayer implements PlayerAdapter {
     this.video.src = channel.stream.uri;
     this.video.load();
     try {
+      if (startPositionMs > 0) {
+        await waitForMetadata(this.video);
+        this.video.currentTime = startPositionMs / 1_000;
+      }
       await this.video.play();
     } catch (error) {
       this.onSignal({ state: "error", message: readableError(error, "Playback could not start."), warning: null });
@@ -103,6 +107,21 @@ export class HtmlVideoPlayer implements PlayerAdapter {
       : "The television could not play this channel.";
     this.onSignal({ state: "error", message, warning: null });
   };
+}
+
+async function waitForMetadata(video: HTMLVideoElement): Promise<void> {
+  if (video.readyState >= HTMLMediaElement.HAVE_METADATA) return;
+  await new Promise<void>((resolve) => {
+    const finish = (): void => {
+      window.clearTimeout(timeout);
+      video.removeEventListener("loadedmetadata", finish);
+      video.removeEventListener("error", finish);
+      resolve();
+    };
+    const timeout = window.setTimeout(finish, 5_000);
+    video.addEventListener("loadedmetadata", finish, { once: true });
+    video.addEventListener("error", finish, { once: true });
+  });
 }
 
 function forcedAspect(mode: AspectMode): number | null {

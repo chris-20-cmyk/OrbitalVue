@@ -5,6 +5,8 @@ This project is the shared television UI for StreamVue 5.0. It deliberately uses
 ## What works
 
 - M3U/M3U8 URL and file import with a 64 MB safety limit
+- Direct connection to personal Plex and Emby servers, with paged movie, episode, and live-TV catalogs
+- On-demand protected playback resolution and resume-position handoff without writing access tokens into the catalog cache
 - Automatic URL refresh at launch with an IndexedDB last-working catalog
 - Exact playlist groups and grouped section labels in All Channels
 - Large-library windowing, search, and private favorites
@@ -15,6 +17,10 @@ This project is the shared television UI for StreamVue 5.0. It deliberately uses
 - Buffering shown only while the native player reports buffering
 
 Raw playlist locations never appear in normal browsing; only the provider host and optional port are displayed. The full source URL remains in app-private television storage so it can refresh at launch.
+
+Plex and Emby credentials are kept outside the catalog database. Samsung builds use Tizen KeyManager. LG webOS 24 and newer use Key Manager 3 backed by the television's trusted execution environment; older or unsupported televisions intentionally keep the credential for the current app session only and ask the user to reconnect after a restart. Public server identity is verified before a protected request is sent, and cached media snapshots contain only opaque StreamVue locators.
+
+The television's native player cannot attach arbitrary authorization headers. StreamVue therefore materializes the provider token into the native playback URL only for the active playback request, clears that URL when playback stops, and never stores it in source metadata or offline snapshots.
 
 Samsung AVPlay exposes User-Agent and Cookie streaming properties but not an arbitrary Referer property. LG's portable HTML5 video path cannot guarantee custom request headers. StreamVue reports that limitation instead of sending a private source through a proxy.
 

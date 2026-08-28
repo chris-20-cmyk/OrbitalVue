@@ -25,7 +25,7 @@ export class SamsungAvPlayer implements PlayerAdapter {
     window.addEventListener("resize", this.resize);
   }
 
-  async play(channel: CatalogChannel): Promise<void> {
+  async play(channel: CatalogChannel, startPositionMs = 0): Promise<void> {
     this.stop();
     const warning = channel.stream.requestHeaders.Referer
       ? "Samsung AVPlay cannot apply a custom Referer header; User-Agent and Cookie remain supported."
@@ -44,6 +44,7 @@ export class SamsungAvPlayer implements PlayerAdapter {
           () => {
             try {
               this.resize();
+              if (startPositionMs > 0) this.avplay.seekTo(Math.floor(startPositionMs));
               this.avplay.play();
               this.onSignal({ state: "playing", message: null, warning });
               resolve();

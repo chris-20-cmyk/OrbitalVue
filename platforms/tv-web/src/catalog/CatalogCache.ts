@@ -1,16 +1,26 @@
 import type { StreamVueCatalog } from "@streamvue/catalog";
+import type { MediaCenterSnapshot } from "@streamvue/media-centers";
 
 export interface SavedCatalogRecord {
   key: "active";
   sourceUrl: string | null;
   catalog: StreamVueCatalog;
   savedAt: string;
+  sourceKind?: "playlist-url" | "playlist-file" | "media-center";
+  mediaCenterSnapshot?: MediaCenterSnapshot;
 }
 
 const DATABASE_NAME = "streamvue-tv-catalog-v1";
 const STORE_NAME = "catalogs";
 
-export class CatalogCache {
+export interface CatalogStore {
+  read(): Promise<SavedCatalogRecord | null>;
+  write(sourceUrl: string | null, catalog: StreamVueCatalog): Promise<void>;
+  writeMediaCenter(snapshot: MediaCenterSnapshot, catalog: StreamVueCatalog): Promise<void>;
+  clear(): Promise<void>;
+}
+
+export class CatalogCache implements CatalogStore {
   private databasePromise: Promise<IDBDatabase> | undefined;
 
   async read(): Promise<SavedCatalogRecord | null> {
@@ -25,14 +35,32 @@ export class CatalogCache {
   }
 
   async write(sourceUrl: string | null, catalog: StreamVueCatalog): Promise<void> {
-    if (!("indexedDB" in window)) return;
-    const database = await this.open();
-    const record: SavedCatalogRecord = {
+    await this.writeRecord({
       key: "active",
       sourceUrl,
       catalog,
-      savedAt: new Date().toISOString()
-    };
+      savedAt: new Date().toISOString(),
+      sourceKind: sourceUrl ? "playlist-url" : "playlist-file"
+    });
+  }
+
+  async writeMediaCenter(
+    snapshot: MediaCenterSnapshot,
+    catalog: StreamVueCatalog
+  ): Promise<void> {
+    await this.writeRecord({
+      key: "active",
+      sourceUrl: null,
+      catalog,
+      savedAt: new Date().toISOString(),
+      sourceKind: "media-center",
+      mediaCenterSnapshot: snapshot
+    });
+  }
+
+  private async writeRecord(record: SavedCatalogRecord): Promise<void> {
+    if (!("indexedDB" in window)) return;
+    const database = await this.open();
     await new Promise<void>((resolve, reject) => {
       const transaction = database.transaction(STORE_NAME, "readwrite");
       transaction.objectStore(STORE_NAME).put(record);
