@@ -48,6 +48,7 @@ public partial class MainWindow : Window
 
     private readonly PlaylistSourceService _playlistSource = new();
     private readonly XtreamSourceService _xtreamSource = new();
+    private readonly MediaCenterSourceService _mediaCenterSource = new();
     private readonly AppSettingsStore _settingsStore = new();
     private readonly PlaylistCacheStore _playlistCache = new();
     private readonly PlaylistSourceRefreshService _playlistSourceRefresh;
@@ -85,6 +86,7 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _loadCancellation;
     private CancellationTokenSource? _updateCancellation;
     private CancellationTokenSource? _guideCancellation;
+    private CancellationTokenSource? _mediaPlaybackCancellation;
     private ChannelItem? _currentChannel;
     private ChannelItem? _activeSignalFeed;
     private ChannelItem? _previousChannel;
@@ -143,6 +145,8 @@ public partial class MainWindow : Window
     private string _dvrWakeSignature = string.Empty;
     private string? _currentRecordingPath;
     private bool _recordingResumeApplied = true;
+    private long _pendingMediaResumeMilliseconds;
+    private bool _mediaResumeApplied = true;
     private bool _seekingRecording;
     private bool _allowFinalClose;
     private bool _hiddenToTray;
@@ -730,6 +734,10 @@ public partial class MainWindow : Window
             await PrepareModalCaptureAsync(commandLineArguments);
             if (commandLineArguments.Contains("--guide-tab", StringComparer.OrdinalIgnoreCase))
                 SourceTabs.SelectedItem = GuideSourceTab;
+            if (commandLineArguments.Contains("--plex-tab", StringComparer.OrdinalIgnoreCase))
+                SourceTabs.SelectedItem = PlexSourceTab;
+            if (commandLineArguments.Contains("--emby-tab", StringComparer.OrdinalIgnoreCase))
+                SourceTabs.SelectedItem = EmbySourceTab;
             if (commandLineArguments.Contains("--maximized", StringComparer.OrdinalIgnoreCase))
                 WindowState = WindowState.Maximized;
             ShowModal(ImportOverlay);
@@ -793,6 +801,12 @@ public partial class MainWindow : Window
                 XtreamUsernameBox.Text = credentials.Username;
                 XtreamPasswordBox.Password = credentials.Password;
                 break;
+            case "plex":
+                PlexServerBox.Text = _settings.LastSource;
+                break;
+            case "emby":
+                EmbyServerBox.Text = _settings.LastSource;
+                break;
         }
     }
 
@@ -806,6 +820,11 @@ public partial class MainWindow : Window
             "file" => await _playlistSource.LoadFileAsync(source.SourceValue, progress, cancellationToken),
             "url" => await _playlistSource.LoadUrlAsync(source.SourceValue, progress, cancellationToken),
             "xtream" => await LoadSavedXtreamSourceAsync(source.SourceValue, progress, cancellationToken),
+            "plex" or "emby" => await _mediaCenterSource.LoadSavedAsync(
+                source.SourceType,
+                source.SourceValue,
+                progress,
+                cancellationToken),
             _ => throw new InvalidDataException("This saved playlist type is not supported.")
         };
     }
@@ -977,7 +996,7 @@ public partial class MainWindow : Window
         SourceManagerEmptyText.Visibility = sources.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         var enabled = sources.Count(source => source.IsEnabled);
         SourceManagerSummaryText.Text = sources.Count == 0
-            ? "Add an M3U file, URL, or Xtream account to begin."
+            ? "Add an M3U, Xtream, Plex, or Emby source to begin."
             : $"{sources.Count:N0} saved • {enabled:N0} enabled • startup refresh is set per source";
         SourceRefreshEnabledButton.IsEnabled = !_isLoading && enabled > 0;
     }
@@ -1194,7 +1213,7 @@ public partial class MainWindow : Window
         {
             PlaylistHealthGlyph.Text = "○";
             PlaylistHealthStateText.Text = "Waiting for a playlist";
-            PlaylistHealthDetailText.Text = "Connect an M3U file, URL, or Xtream account to enable launch verification.";
+            PlaylistHealthDetailText.Text = "Connect an M3U, Xtream, Plex, or Emby source to enable launch verification.";
         }
         else if (health.UsedCachedFallback)
         {
@@ -1335,6 +1354,9 @@ public partial class MainWindow : Window
                 (progress, token) => _playlistSource.LoadUrlAsync(_activePlaylistSourceValue, progress, token),
                 "url", _activePlaylistSourceValue, allowCachedFallback: true),
             "xtream" => await RefreshSavedXtreamPlaylistAsync(_activePlaylistSourceValue),
+            "plex" or "emby" => await RefreshSavedMediaCenterAsync(
+                _activePlaylistSourceType,
+                _activePlaylistSourceValue),
             _ => false
         };
         UpdatePlaylistHealthUi();
@@ -1349,6 +1371,13 @@ public partial class MainWindow : Window
             (progress, token) => _xtreamSource.LoadAsync(credentials.Server, credentials.Username, credentials.Password, progress, token),
             "xtream", sourceValue, allowCachedFallback: true);
     }
+
+    private Task<bool> RefreshSavedMediaCenterAsync(string provider, string sourceValue) =>
+        LoadPlaylistAsync(
+            (progress, token) => _mediaCenterSource.LoadSavedAsync(provider, sourceValue, progress, token),
+            provider,
+            sourceValue,
+            allowCachedFallback: true);
 
     private static bool IsPlaylistFileExtension(string extension) =>
         extension.Equals(".m3u", StringComparison.OrdinalIgnoreCase) ||
@@ -2520,6 +2549,12 @@ public partial class MainWindow : Window
         if (ChannelList.SelectedItem is not ChannelItem channel) return;
         if (_multiviewMode)
         {
+            if (channel.IsProtectedMedia)
+            {
+                FooterStatusDot.Fill = WarningBrush;
+                FooterStatusText.Text = "Plex and Emby libraries currently open in the main player • exit Multiview to play this item";
+                return;
+            }
             EnsureMultiviewSession();
             _multiviewSession!.AssignChannel(_multiviewSession.ActiveSlot, ResolveBestSignalFeed(channel));
             UpdateMultiviewPresentation();
@@ -2537,9 +2572,28 @@ public partial class MainWindow : Window
         ChannelItem? requestedSignalFeed = null,
         bool rememberChannel = true)
     {
-        var route = string.IsNullOrWhiteSpace(recordingPath) ? GetSignalRoute(channel) : null;
+        if (string.IsNullOrWhiteSpace(recordingPath) && channel.IsProtectedMedia)
+        {
+            _ = TuneProtectedMediaAsync(channel, rememberChannel);
+            return;
+        }
+
+        CancelMediaPlaybackResolution(clearResume: true);
+        TuneChannelCore(channel, recordingPath, requestedSignalFeed, rememberChannel);
+    }
+
+    private void TuneChannelCore(
+        ChannelItem channel,
+        string? recordingPath = null,
+        ChannelItem? requestedSignalFeed = null,
+        bool rememberChannel = true,
+        ChannelItem? playbackOverride = null,
+        ChannelPlaybackProfile? playbackProfile = null,
+        bool force = false)
+    {
+        var route = string.IsNullOrWhiteSpace(recordingPath) && playbackOverride is null ? GetSignalRoute(channel) : null;
         var logicalChannel = route?.Representative ?? channel;
-        if (ReferenceEquals(logicalChannel, _currentChannel) &&
+        if (!force && ReferenceEquals(logicalChannel, _currentChannel) &&
             string.Equals(recordingPath, _currentRecordingPath, StringComparison.OrdinalIgnoreCase) &&
             (requestedSignalFeed is null || string.Equals(requestedSignalFeed.StableKey, _activeSignalFeed?.StableKey, StringComparison.OrdinalIgnoreCase))) return;
         CaptureSignalTelemetry(_playback?.GetSnapshot(), persist: false);
@@ -2562,7 +2616,7 @@ public partial class MainWindow : Window
         _showPlayerTopStatus = logicalChannel.Kind == ChannelKind.Live;
         RefreshPlayerSurfaceVisibility();
         PlaybackDetailText.Text = logicalChannel.Group;
-        var profile = GetOrCreateChannelProfile(logicalChannel);
+        var profile = playbackProfile ?? GetOrCreateChannelProfile(logicalChannel);
         _applyingChannelProfile = true;
         SelectComboByContent(AspectBox, profile.AspectRatio ?? _settings.Playback.AspectRatio);
         _applyingChannelProfile = false;
@@ -2579,11 +2633,88 @@ public partial class MainWindow : Window
         {
             _activeSignalFeed = logicalChannel;
             ResetSignalSessionCounters();
-            _playback?.Play(logicalChannel, profile);
+            _playback?.Play(playbackOverride ?? logicalChannel, profile);
         }
         if (_currentRecordingPath is null && rememberChannel) TouchRecentChannel(logicalChannel);
         UpdateSignalRouteAvailability();
         UpdateFullscreenHud();
+    }
+
+    private async Task TuneProtectedMediaAsync(
+        ChannelItem logicalChannel,
+        bool rememberChannel,
+        ChannelPlaybackProfile? profile = null)
+    {
+        CancelMediaPlaybackResolution(clearResume: false);
+        var cancellation = new CancellationTokenSource();
+        _mediaPlaybackCancellation = cancellation;
+        FooterStatusDot.Fill = WarningBrush;
+        FooterStatusText.Text = $"Preparing protected {logicalChannel.SourceName ?? "media-center"} playback…";
+        PlaybackDetailText.Text = "Resolving a short-lived playback address";
+
+        try
+        {
+            var resolved = await _mediaCenterSource.ResolvePlaybackAsync(logicalChannel, cancellation.Token);
+            cancellation.Token.ThrowIfCancellationRequested();
+            var playbackChannel = CreateResolvedMediaChannel(logicalChannel, resolved);
+            _pendingMediaResumeMilliseconds = Math.Max(0, resolved.ResumePositionMilliseconds);
+            _mediaResumeApplied = _pendingMediaResumeMilliseconds < 30_000 || logicalChannel.Kind == ChannelKind.Live;
+            TuneChannelCore(
+                logicalChannel,
+                rememberChannel: rememberChannel,
+                playbackOverride: playbackChannel,
+                playbackProfile: profile,
+                force: true);
+            PlaybackDetailText.Text = $"{logicalChannel.Group} • {resolved.Method.Replace('-', ' ')}";
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            if (cancellation.IsCancellationRequested) return;
+            FooterStatusDot.Fill = ErrorBrush;
+            FooterStatusText.Text = "Protected playback could not be prepared";
+            PlaybackDetailText.Text = SafeErrorMessage(exception);
+        }
+        finally
+        {
+            if (ReferenceEquals(_mediaPlaybackCancellation, cancellation))
+                _mediaPlaybackCancellation = null;
+            cancellation.Dispose();
+        }
+    }
+
+    private static ChannelItem CreateResolvedMediaChannel(ChannelItem logicalChannel, ResolvedMediaPlayback resolved) => new()
+    {
+        Number = logicalChannel.Number,
+        Name = logicalChannel.Name,
+        Url = resolved.Url,
+        Group = logicalChannel.Group,
+        LogoUrl = logicalChannel.LogoUrl,
+        TvgId = logicalChannel.TvgId,
+        TvgName = logicalChannel.TvgName,
+        UserAgent = logicalChannel.UserAgent,
+        Referrer = resolved.Referrer ?? logicalChannel.Referrer,
+        Kind = logicalChannel.Kind == ChannelKind.Recording ? ChannelKind.Replay : logicalChannel.Kind,
+        SourceId = logicalChannel.SourceId,
+        SourceName = logicalChannel.SourceName,
+        CatchupMode = logicalChannel.CatchupMode,
+        CatchupSource = logicalChannel.CatchupSource,
+        CatchupDays = logicalChannel.CatchupDays,
+        CatchupCorrectionMinutes = logicalChannel.CatchupCorrectionMinutes,
+        DurationMilliseconds = logicalChannel.DurationMilliseconds,
+        ResumePositionMilliseconds = resolved.ResumePositionMilliseconds,
+        IsPlayed = logicalChannel.IsPlayed
+    };
+
+    private void CancelMediaPlaybackResolution(bool clearResume)
+    {
+        _mediaPlaybackCancellation?.Cancel();
+        _mediaPlaybackCancellation = null;
+        if (!clearResume) return;
+        _pendingMediaResumeMilliseconds = 0;
+        _mediaResumeApplied = true;
     }
 
     private void PlaySignalFeed(SignalRoute route, ChannelItem feed, ChannelPlaybackProfile? profile = null)
@@ -2615,6 +2746,11 @@ public partial class MainWindow : Window
     private void RetuneCurrentPlayback(ChannelPlaybackProfile? profile = null)
     {
         if (_currentChannel is null) return;
+        if (_currentChannel.IsProtectedMedia && _currentRecordingPath is null)
+        {
+            _ = TuneProtectedMediaAsync(_currentChannel, rememberChannel: false, profile: profile);
+            return;
+        }
         CaptureSignalTelemetry(_playback?.GetSnapshot(), persist: false);
         var route = GetSignalRoute(_currentChannel);
         if (route is not null && _currentChannel.Kind == ChannelKind.Live && _currentRecordingPath is null)
@@ -2636,6 +2772,7 @@ public partial class MainWindow : Window
     private bool TryAutomaticSignalFailover(PlaybackStatus status)
     {
         if (!status.IsTerminalFailure || _currentRecordingPath is not null || _currentChannel?.Kind != ChannelKind.Live ||
+            _currentChannel.IsProtectedMedia ||
             _activeSignalFeed is null || !_settings.SignalRouting.Enabled || !_settings.SignalRouting.AutomaticFailover)
             return false;
         var route = GetSignalRoute(_currentChannel);
@@ -2932,7 +3069,17 @@ public partial class MainWindow : Window
     private void UpdateRecordingPlayback(PlaybackSnapshot snapshot)
     {
         var isRecordingPlayback = _currentRecordingPath is not null && _currentChannel?.Kind == ChannelKind.Recording;
-        RecordingSeekPanel.Visibility = isRecordingPlayback ? Visibility.Visible : Visibility.Collapsed;
+        var isProtectedLibraryPlayback = _currentRecordingPath is null &&
+                                         _currentChannel?.IsProtectedMedia == true &&
+                                         _currentChannel.Kind != ChannelKind.Live;
+        RecordingSeekPanel.Visibility = isRecordingPlayback || isProtectedLibraryPlayback
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        if (isProtectedLibraryPlayback)
+        {
+            UpdateProtectedLibraryPlayback(snapshot);
+            return;
+        }
         if (!isRecordingPlayback) return;
 
         var length = Math.Max(0, snapshot.Length);
@@ -2962,6 +3109,35 @@ public partial class MainWindow : Window
 
         if (DateTimeOffset.UtcNow - _lastRecordingProgressSaveUtc >= TimeSpan.FromSeconds(10))
             SaveCurrentRecordingProgress(force: false, snapshot);
+    }
+
+    private void UpdateProtectedLibraryPlayback(PlaybackSnapshot snapshot)
+    {
+        var length = Math.Max(0, snapshot.Length);
+        var position = Math.Clamp(snapshot.Time, 0, Math.Max(0, length));
+        if (!_mediaResumeApplied && length > 0)
+        {
+            var resumePosition = Math.Clamp(_pendingMediaResumeMilliseconds, 0, length);
+            if (resumePosition < 30_000 || resumePosition >= length - 30_000)
+            {
+                _mediaResumeApplied = true;
+            }
+            else if (_playback?.SeekTo(resumePosition) == true)
+            {
+                _mediaResumeApplied = true;
+                position = resumePosition;
+                FooterStatusDot.Fill = LiveBrush;
+                FooterStatusText.Text = $"Resumed at {FormatPlaybackTime(position)} • {_currentChannel?.Name}";
+            }
+        }
+
+        if (!_seekingRecording)
+        {
+            PlaybackSeekSlider.Maximum = Math.Max(1, length);
+            PlaybackSeekSlider.Value = position;
+        }
+        RecordingPositionText.Text = FormatPlaybackTime(position);
+        RecordingDurationText.Text = FormatPlaybackTime(length);
     }
 
     private void SaveCurrentRecordingProgress(bool force, PlaybackSnapshot? snapshot = null)
@@ -2998,23 +3174,27 @@ public partial class MainWindow : Window
     }
 
     private void PlaybackSeekSlider_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) =>
-        _seekingRecording = _currentRecordingPath is not null;
+        _seekingRecording = HasSeekableLibraryPlayback;
 
     private void PlaybackSeekSlider_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (_currentRecordingPath is null) return;
+        if (!HasSeekableLibraryPlayback) return;
         _seekingRecording = false;
         _playback?.SeekTo((long)PlaybackSeekSlider.Value);
         RecordingPositionText.Text = FormatPlaybackTime((long)PlaybackSeekSlider.Value);
-        _lastRecordingProgressSaveUtc = DateTimeOffset.MinValue;
+        if (_currentRecordingPath is not null) _lastRecordingProgressSaveUtc = DateTimeOffset.MinValue;
     }
 
     private void PlaybackSeekSlider_KeyUp(object sender, KeyEventArgs e)
     {
-        if (_currentRecordingPath is null || e.Key is not (Key.Left or Key.Right or Key.Home or Key.End or Key.PageUp or Key.PageDown)) return;
+        if (!HasSeekableLibraryPlayback || e.Key is not (Key.Left or Key.Right or Key.Home or Key.End or Key.PageUp or Key.PageDown)) return;
         _playback?.SeekTo((long)PlaybackSeekSlider.Value);
-        _lastRecordingProgressSaveUtc = DateTimeOffset.MinValue;
+        if (_currentRecordingPath is not null) _lastRecordingProgressSaveUtc = DateTimeOffset.MinValue;
     }
+
+    private bool HasSeekableLibraryPlayback =>
+        _currentRecordingPath is not null ||
+        _currentChannel?.IsProtectedMedia == true && _currentChannel.Kind != ChannelKind.Live;
 
     private static string FormatPlaybackTime(long milliseconds)
     {
@@ -3956,7 +4136,7 @@ public partial class MainWindow : Window
     {
         SourceTabs.SelectedItem = FileSourceTab;
         ImportStatusText.Text = "Add another source";
-        ImportDetailText.Text = "Choose an M3U file, M3U URL, or Xtream login above.";
+        ImportDetailText.Text = "Choose M3U, Xtream, Plex, or Emby above.";
     }
 
     private async void SourceEnabled_Click(object sender, RoutedEventArgs e)
@@ -4037,6 +4217,42 @@ public partial class MainWindow : Window
                     source.SourceType,
                     source.SourceValue,
                     allowCachedFallback: true);
+            case "plex":
+            case "emby":
+            {
+                var hasCredential = await _mediaCenterSource.HasCredentialAsync(source.SourceType, source.SourceValue);
+                if (!hasCredential)
+                {
+                    if (source.SourceType == "plex")
+                    {
+                        PlexServerBox.Text = source.SourceValue;
+                        PlexTokenBox.Clear();
+                        SourceTabs.SelectedItem = PlexSourceTab;
+                    }
+                    else
+                    {
+                        EmbyServerBox.Text = source.SourceValue;
+                        EmbyUsernameBox.Clear();
+                        EmbyPasswordBox.Clear();
+                        SourceTabs.SelectedItem = EmbySourceTab;
+                    }
+                    ImportStatusText.Text = $"Reconnect this {source.TypeLabel} library";
+                    ImportDetailText.Text = "Enter the account details once to restore its Windows-protected playback credential.";
+                    return false;
+                }
+
+                if (source.SourceType == "plex") PlexServerBox.Text = source.SourceValue;
+                else EmbyServerBox.Text = source.SourceValue;
+                return await LoadPlaylistAsync(
+                    (progress, token) => _mediaCenterSource.LoadSavedAsync(
+                        source.SourceType,
+                        source.SourceValue,
+                        progress,
+                        token),
+                    source.SourceType,
+                    source.SourceValue,
+                    allowCachedFallback: true);
+            }
             default:
                 ImportStatusText.Text = "Unsupported saved source";
                 ImportDetailText.Text = "Remove this entry and add it again using a supported source type.";
@@ -4125,6 +4341,21 @@ public partial class MainWindow : Window
             try
             {
                 await _xtreamCredentialStore.DeleteAsync(source.SourceValue);
+            }
+            catch
+            {
+                cleanupWarning = true;
+            }
+        }
+
+        if (source.SourceType is "plex" or "emby" &&
+            !_settings.PlaylistSources.Any(item =>
+                item.SourceType == source.SourceType &&
+                PlaylistSourcePolicy.Matches(item, source.SourceType, source.SourceValue)))
+        {
+            try
+            {
+                await _mediaCenterSource.DeleteCredentialAsync(source.SourceType, source.SourceValue);
             }
             catch
             {
@@ -4395,6 +4626,80 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void LoadPlex_Click(object sender, RoutedEventArgs e)
+    {
+        if (!TryPrepareMediaCenterConnection(
+                "Plex",
+                PlexServerBox.Text,
+                PlexAllowHttpBox.IsChecked == true,
+                out var server)) return;
+
+        PlexServerBox.Text = server;
+        var accessToken = PlexTokenBox.Password;
+        var displayName = PlexNameBox.Text.Trim();
+        var loaded = await LoadPlaylistAsync(
+            (progress, token) => _mediaCenterSource.ConnectPlexAsync(
+                server,
+                accessToken,
+                displayName,
+                PlexAllowHttpBox.IsChecked == true,
+                progress,
+                token),
+            "plex",
+            server);
+        if (loaded) PlexTokenBox.Clear();
+    }
+
+    private async void LoadEmby_Click(object sender, RoutedEventArgs e)
+    {
+        if (!TryPrepareMediaCenterConnection(
+                "Emby",
+                EmbyServerBox.Text,
+                EmbyAllowHttpBox.IsChecked == true,
+                out var server)) return;
+
+        EmbyServerBox.Text = server;
+        var username = EmbyUsernameBox.Text.Trim();
+        var password = EmbyPasswordBox.Password;
+        var displayName = EmbyNameBox.Text.Trim();
+        var loaded = await LoadPlaylistAsync(
+            (progress, token) => _mediaCenterSource.ConnectEmbyAsync(
+                server,
+                username,
+                password,
+                displayName,
+                EmbyAllowHttpBox.IsChecked == true,
+                progress,
+                token),
+            "emby",
+            server);
+        if (loaded) EmbyPasswordBox.Clear();
+    }
+
+    private bool TryPrepareMediaCenterConnection(
+        string provider,
+        string serverAddress,
+        bool allowInsecureHttp,
+        out string normalizedServer)
+    {
+        try
+        {
+            normalizedServer = MediaCenterSecurity.NormalizeBaseUrl(serverAddress);
+            MediaCenterSecurity.RequireAllowedTransport(normalizedServer, allowInsecureHttp);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            normalizedServer = string.Empty;
+            ImportProgress.Visibility = Visibility.Collapsed;
+            ImportStatusText.Text = $"Check the {provider} server address";
+            ImportDetailText.Text = SafeErrorMessage(exception);
+            FooterStatusDot.Fill = ErrorBrush;
+            FooterStatusText.Text = $"{provider} connection needs attention";
+            return false;
+        }
+    }
+
     private void PlayPause_Click(object sender, RoutedEventArgs e)
     {
         if (_currentChannel is null)
@@ -4415,6 +4720,7 @@ public partial class MainWindow : Window
     {
         CaptureSignalTelemetry(_playback?.GetSnapshot(), persist: true);
         SaveCurrentRecordingProgress(force: true);
+        CancelMediaPlaybackResolution(clearResume: true);
         _playback?.Stop();
         if (_currentRecordingPath is not null) _recordingResumeApplied = false;
         _displayRefreshRate?.Restore();
@@ -7238,6 +7544,7 @@ public partial class MainWindow : Window
         Mouse.OverrideCursor = null;
         _loadCancellation?.Cancel();
         _updateCancellation?.Cancel();
+        CancelMediaPlaybackResolution(clearResume: true);
         _guideCancellation?.Cancel();
         _displayRefreshRate?.Dispose();
         VideoSurface.MediaPlayer = null;

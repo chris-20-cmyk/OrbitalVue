@@ -51,6 +51,9 @@ public sealed class PlaylistCacheStore
                 CatchupSource = channel.CatchupSource,
                 CatchupDays = channel.CatchupDays,
                 CatchupCorrectionMinutes = channel.CatchupCorrectionMinutes,
+                DurationMilliseconds = channel.DurationMilliseconds,
+                ResumePositionMilliseconds = channel.ResumePositionMilliseconds,
+                IsPlayed = channel.IsPlayed,
                 Kind = channel.Kind
             }).ToList()
         };
@@ -163,6 +166,9 @@ public sealed class PlaylistCacheStore
                     CatchupSource = channel.CatchupSource,
                     CatchupDays = channel.CatchupDays,
                     CatchupCorrectionMinutes = channel.CatchupCorrectionMinutes,
+                    DurationMilliseconds = channel.DurationMilliseconds,
+                    ResumePositionMilliseconds = channel.ResumePositionMilliseconds,
+                    IsPlayed = channel.IsPlayed,
                     Kind = channel.Kind
                 }).ToList();
                 return new CachedPlaylist(
@@ -233,6 +239,9 @@ public sealed class PlaylistCacheStore
         public string? CatchupSource { get; set; }
         public int CatchupDays { get; set; }
         public int CatchupCorrectionMinutes { get; set; }
+        public long DurationMilliseconds { get; set; }
+        public long ResumePositionMilliseconds { get; set; }
+        public bool IsPlayed { get; set; }
         public ChannelKind Kind { get; set; }
     }
 }

@@ -38,6 +38,17 @@ See [TV build and sideload instructions](platforms/tv-web/README.md) and the [te
 
 The current Apple milestone is a source and simulator foundation, not an App Store package. Physical-device installation requires Xcode signing. The public KSPlayer dependency is GPL-3.0, so binary distribution additionally requires either a GPL-compatible StreamVue release or KSPlayer's separately licensed LGPL/commercial package. App Store and TestFlight distribution also require Apple Developer Program enrollment, final artwork, privacy answers, and signed archives. See [Apple build instructions](platforms/apple/README.md) and [KSPlayer licensing gate](docs/ksplayer-licensing.md).
 
+## 5.1 protected personal libraries
+
+- Plex token and Emby account connections alongside M3U and Xtream sources on Windows, Android/Google TV, Samsung/LG TV, and the Apple foundation
+- A shared `streamvue-media://` catalog contract that stores provider, verified server identity, and item identity—but never a playable token URL
+- Public server-identity verification before credentials are sent, explicit consent for cleartext local HTTP, same-origin playback-path enforcement, and bounded provider responses
+- Platform-protected credential storage with a separate encrypted last-working catalog; passwords are exchanged for provider tokens and are not retained
+- Just-in-time Plex direct-play and Emby direct-play/direct-stream/transcode resolution, so the active native player is the only component that briefly receives a credentialed URL
+- Windows VOD resume and seek controls using server-provided playback positions, with normal source-manager refresh, offline fallback, and safe credential cleanup
+
+These integrations connect only to a server entered by the user and do not include a hosted relay, public-media discovery, or third-party content.
+
 ## 4.0 production resilience
 
 - Stable and Preview release channels with one-package last-known-good rollback if a newly installed build cannot open successfully
@@ -123,7 +134,8 @@ The current Apple milestone is a source and simulator foundation, not an App Sto
 - Multiview 2.0 with drag/drop assignment, tile swapping, and named reusable layouts
 - Large M3U/M3U8 file and URL indexing
 - Xtream-compatible live channel login
-- Automatic startup refresh for every enabled M3U file, M3U URL, and Xtream account
+- Protected Plex and Emby personal-library sources with token-free catalogs and just-in-time native playback
+- Automatic startup refresh for every enabled M3U file, M3U URL, Xtream account, Plex server, and Emby server
 - Professional Multiview workspace with 2-up, 4-up, and focused viewing layouts
 - Four persistent channel assignments with keyboard switching and one-click tile controls
 - Single-audio focus so only the chosen Multiview tile is audible at a time
@@ -219,9 +231,9 @@ CI compiles and analyzes unsigned iOS and tvOS simulator products but does not p
 ## Verification tools
 
 - `StreamVue.PlaylistProbe` validates large-list parsing and favorite-key uniqueness.
-- `StreamVue.FeatureProbe` checks update preferences, manual routes, catch-up URL expansion, channel health, interrupted sessions, background wake timers, episode-aware series rules, duplicate prevention, recovery timing, retention, timeshift policy, storage guards, transport-stream capture and playback, encrypted backup/restore, diagnostics, casting, and Multiview policies.
+- `StreamVue.FeatureProbe` checks update preferences, manual routes, catch-up URL expansion, channel health, interrupted sessions, background wake timers, episode-aware series rules, duplicate prevention, recovery timing, retention, timeshift policy, storage guards, transport-stream capture and playback, protected Plex/Emby contracts, encrypted backup/restore, diagnostics, casting, and Multiview policies.
 - `StreamVue.PlaybackProbe` checks native live playback and bounded reconnect behavior.
 
 ## Privacy
 
-StreamVue connects directly to playlist and guide providers and does not upload playlist contents or credentials. Miracast casting mirrors the rendered picture and compatible system audio rather than sending playlist addresses to the display. The last-known-good playlist cache, XMLTV cache, saved guide configuration, Xtream credentials, and StreamVue backup settings payload are protected with Windows per-user encryption. On Apple devices, URL secrets live in Keychain and cached playlists use complete file protection and are excluded from device backup. Diagnostic exports omit provider addresses, credentials, channel names, and guide titles.
+StreamVue connects directly to playlist, guide, Plex, and Emby servers and does not upload library contents or credentials. Miracast casting mirrors the rendered picture and compatible system audio rather than sending source addresses to the display. The last-known-good playlist cache, XMLTV cache, saved guide configuration, Xtream credentials, media-center tokens, and StreamVue backup settings payload are protected with Windows per-user encryption. On Apple devices, URL and media-center secrets live in Keychain and cached catalogs use complete file protection and are excluded from device backup. Diagnostic exports omit provider addresses, credentials, channel names, and guide titles.

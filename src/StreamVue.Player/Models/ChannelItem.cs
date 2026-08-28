@@ -3,6 +3,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
+using StreamVue.Player.Services;
 
 namespace StreamVue.Player.Models;
 
@@ -40,7 +41,13 @@ public sealed class ChannelItem : INotifyPropertyChanged
     public string? CatchupSource { get; init; }
     public int CatchupDays { get; init; }
     public int CatchupCorrectionMinutes { get; init; }
+    public long DurationMilliseconds { get; init; }
+    public long ResumePositionMilliseconds { get; init; }
+    public bool IsPlayed { get; init; }
     public bool HasCatchup => Kind == ChannelKind.Live && !string.IsNullOrWhiteSpace(CatchupSource);
+    public bool IsProtectedMedia => MediaCenterSecurity.IsPlaybackLocator(Url);
+    public bool CanResume => ResumePositionMilliseconds >= 30_000 &&
+                             (DurationMilliseconds <= 0 || ResumePositionMilliseconds < DurationMilliseconds - 30_000);
 
     public string? SignalRouteKey
     {

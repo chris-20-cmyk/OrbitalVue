@@ -86,6 +86,8 @@ try
     if (first.GuideMappingKey != equivalent.GuideMappingKey || first.GuideMappingKey == distinct.GuideMappingKey)
         throw new InvalidOperationException("The URL-independent guide mapping identity was not stable or unique.");
 
+    await RunMediaCenterSelfTestAsync(testRoot);
+
     var store = new AppSettingsStore(settingsPath);
     var seriesRuleId = Guid.NewGuid();
     var playlistSourceId = Guid.NewGuid();
@@ -1171,6 +1173,8 @@ try
 
     var maintenance = new StreamVueMaintenanceService(testRoot);
     var managedCachePath = Path.Combine(testRoot, "playlist-cache.v1.bin");
+    var managedMediaCredentialPath = Path.Combine(testRoot, "media-center-credentials.v1.bin");
+    var managedMediaCredentialSnapshot = await File.ReadAllBytesAsync(managedMediaCredentialPath);
     await File.WriteAllBytesAsync(managedCachePath, [1, 2, 3, 4]);
     var managedSourceCacheFiles = Directory.GetFiles(sourceCacheDirectory, "*.bin");
     var managedSourceCacheSnapshots = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
@@ -1178,7 +1182,7 @@ try
         managedSourceCacheSnapshots[Path.GetFileName(path)] = await File.ReadAllBytesAsync(path);
     var backupPath = Path.Combine(testRoot, "probe.streamvue-backup");
     var backupCount = await maintenance.CreateBackupAsync(backupPath);
-    if (backupCount != 2 + managedSourceCacheSnapshots.Count || !File.Exists(backupPath))
+    if (backupCount != 3 + managedSourceCacheSnapshots.Count || !File.Exists(backupPath))
         throw new InvalidOperationException("StreamVue backup creation did not capture the expected protected data.");
     using (var backupArchive = ZipFile.OpenRead(backupPath))
     {
@@ -1188,6 +1192,8 @@ try
         if (managedSourceCacheSnapshots.Keys.Any(name =>
                 backupArchive.GetEntry($"data/playlist-caches.v2/{name}") is null))
             throw new InvalidOperationException("The backup omitted one or more per-source playlist caches.");
+        if (backupArchive.GetEntry("data/media-center-credentials.v1.bin") is null)
+            throw new InvalidOperationException("The backup omitted the protected media-center credential vault.");
         using var protectedReader = new StreamReader(protectedSettings.Open());
         if ((await protectedReader.ReadToEndAsync()).Contains("playlist.m3u", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The backup exposed the playlist source as clear text.");
@@ -1195,6 +1201,7 @@ try
 
     await new AppSettingsStore(settingsPath).SaveAsync(new AppSettings { LastSourceType = "changed" });
     await File.WriteAllBytesAsync(managedCachePath, [9, 9]);
+    await File.WriteAllBytesAsync(managedMediaCredentialPath, [9, 9, 9]);
     foreach (var path in Directory.GetFiles(sourceCacheDirectory, "*.bin"))
         await File.WriteAllBytesAsync(path, [9, 9, 9]);
     var staleSourceCachePath = Path.Combine(sourceCacheDirectory, $"{new string('C', 64)}.bin");
@@ -1205,9 +1212,10 @@ try
     var sourceCachesRestored = managedSourceCacheSnapshots.All(snapshot =>
         File.Exists(Path.Combine(sourceCacheDirectory, snapshot.Key)) &&
         File.ReadAllBytes(Path.Combine(sourceCacheDirectory, snapshot.Key)).SequenceEqual(snapshot.Value));
-    if (restoredCount != 2 + managedSourceCacheSnapshots.Count || restoredSettings.LastChannelKey != first.StableKey ||
+    if (restoredCount != 3 + managedSourceCacheSnapshots.Count || restoredSettings.LastChannelKey != first.StableKey ||
         !restoredSettings.ResumeLastChannelOnStartup || !restoredCache.SequenceEqual(new byte[] { 1, 2, 3, 4 }) ||
-        !sourceCachesRestored || File.Exists(staleSourceCachePath) ||
+        !sourceCachesRestored || !File.ReadAllBytes(managedMediaCredentialPath).SequenceEqual(managedMediaCredentialSnapshot) ||
+        File.Exists(staleSourceCachePath) ||
         !File.Exists(Path.Combine(testRoot, "before-last-restore.streamvue-backup")))
         throw new InvalidOperationException("StreamVue backup restore or automatic rollback protection failed.");
 
@@ -1317,6 +1325,7 @@ try
     Console.WriteLine("Single-audio multiview policy: PASS");
     Console.WriteLine("Independent encrypted multi-source playlist caches: PASS");
     Console.WriteLine("Protected multi-account Xtream vault and legacy migration: PASS");
+    Console.WriteLine("Protected Plex and Emby catalog, credential, cache, and just-in-time playback contract: PASS");
     Console.WriteLine("XMLTV Now/Next, episode metadata, and call-sign matching: PASS");
     Console.WriteLine("Encrypted offline guide cache: PASS");
     Console.WriteLine("Protected multi-source guide configuration: PASS");
@@ -1351,6 +1360,152 @@ catch (Exception exception)
 finally
 {
     if (Directory.Exists(testRoot)) Directory.Delete(testRoot, recursive: true);
+}
+
+static async Task RunMediaCenterSelfTestAsync(string testRoot)
+{
+    const string plexBaseUrl = "https://plex.local:32400";
+    const string embyBaseUrl = "https://emby.local:8920";
+    const string plexToken = "plex-probe-secret-token";
+    const string embyPassword = "emby-probe-password";
+    const string embyToken = "emby-probe-secret-token";
+
+    if (MediaCenterSecurity.NormalizeBaseUrl($"{plexBaseUrl}/") != plexBaseUrl)
+        throw new InvalidOperationException("Media-center server normalization was not canonical.");
+    try
+    {
+        MediaCenterSecurity.NormalizeBaseUrl("https://user:password@plex.local:32400?token=secret");
+        throw new InvalidOperationException("A credential-bearing media-center address was accepted.");
+    }
+    catch (ArgumentException)
+    {
+    }
+    try
+    {
+        MediaCenterSecurity.RequireAllowedTransport("http://192.168.1.20:8096", allowInsecureHttp: false);
+        throw new InvalidOperationException("Unconfirmed HTTP media-center credentials were accepted.");
+    }
+    catch (ArgumentException)
+    {
+    }
+    try
+    {
+        MediaCenterSecurity.ResolveServerPath(plexBaseUrl, "https://attacker.invalid/video.mkv");
+        throw new InvalidOperationException("A cross-origin media-center playback path was accepted.");
+    }
+    catch (InvalidDataException)
+    {
+    }
+
+    var credentialPath = Path.Combine(testRoot, "media-center-credentials.v1.bin");
+    var credentialStore = new MediaCenterCredentialStore(credentialPath);
+    var handler = new MediaCenterProbeHandler(plexToken, embyPassword, embyToken);
+    using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+    var service = new MediaCenterSourceService(credentialStore, http, "streamvue-win-feature-probe");
+
+    var plex = await service.ConnectPlexAsync(
+        plexBaseUrl,
+        plexToken,
+        "Probe Plex",
+        allowInsecureHttp: false);
+    if (plex.Channels is not [var plexItem] ||
+        !plexItem.IsProtectedMedia ||
+        plexItem.Kind != ChannelKind.Movie ||
+        plexItem.ResumePositionMilliseconds != 60_000 ||
+        plexItem.Url.Contains(plexToken, StringComparison.Ordinal))
+        throw new InvalidOperationException("The Plex catalog did not produce one token-free resumable movie.");
+    var plexLocator = MediaCenterSecurity.ParsePlaybackLocator(plexItem.Url);
+    if (plexLocator.Provider != "plex" || plexLocator.ServerId != "plex-server-1" || plexLocator.ItemId != "100")
+        throw new InvalidOperationException("The Plex catalog locator was not canonical.");
+
+    var savedPlex = await credentialStore.TryLoadForSourceAsync("plex", plexBaseUrl);
+    if (savedPlex is null || savedPlex.AccessToken != plexToken)
+        throw new InvalidOperationException("The Windows-protected Plex credential did not round-trip.");
+    try
+    {
+        MediaCenterSecurity.ValidateCredential(savedPlex with
+        {
+            Binding = savedPlex.Binding with { CredentialId = "mc-plex-tampered" }
+        });
+        throw new InvalidOperationException("A media-center credential with a tampered server binding was accepted.");
+    }
+    catch (InvalidDataException)
+    {
+    }
+    var resolvedPlex = await service.ResolvePlaybackAsync(plexItem);
+    var resolvedPlexUri = new Uri(resolvedPlex.Url);
+    if (!resolvedPlexUri.Query.Contains($"X-Plex-Token={Uri.EscapeDataString(plexToken)}", StringComparison.Ordinal) ||
+        resolvedPlexUri.Query.Contains("upstream-plex-token", StringComparison.Ordinal) ||
+        resolvedPlexUri.Host != "plex.local")
+        throw new InvalidOperationException("Plex playback did not materialize only the bound credential on the original server.");
+
+    var emby = await service.ConnectEmbyAsync(
+        embyBaseUrl,
+        "feature-probe",
+        embyPassword,
+        "Probe Emby",
+        allowInsecureHttp: false);
+    if (emby.Channels is not [var embyItem] ||
+        !embyItem.IsProtectedMedia ||
+        embyItem.Kind != ChannelKind.Series ||
+        embyItem.ResumePositionMilliseconds != 90_000 ||
+        embyItem.Url.Contains(embyToken, StringComparison.Ordinal) ||
+        embyItem.Url.Contains(embyPassword, StringComparison.Ordinal))
+        throw new InvalidOperationException("The Emby catalog did not produce one token-free resumable episode.");
+    var embyLocator = MediaCenterSecurity.ParsePlaybackLocator(embyItem.Url);
+    if (embyLocator.Provider != "emby" || embyLocator.ServerId != "emby-server-1" || embyLocator.ItemId != "200")
+        throw new InvalidOperationException("The Emby catalog locator was not canonical.");
+    var resolvedEmby = await service.ResolvePlaybackAsync(embyItem);
+    var resolvedEmbyUri = new Uri(resolvedEmby.Url);
+    if (!resolvedEmbyUri.Query.Contains($"api_key={Uri.EscapeDataString(embyToken)}", StringComparison.Ordinal) ||
+        resolvedEmbyUri.Query.Contains("upstream-emby-token", StringComparison.Ordinal) ||
+        resolvedEmbyUri.Host != "emby.local")
+        throw new InvalidOperationException("Emby playback did not materialize only the bound credential on the original server.");
+
+    var plexIdentity = handler.Requests.First(request => request.Host == "plex.local" && request.Path == "/identity");
+    if (plexIdentity.Headers.ContainsKey("X-Plex-Token") || plexIdentity.Uri.Contains(plexToken, StringComparison.Ordinal))
+        throw new InvalidOperationException("The Plex token was sent before public server identity verification.");
+    var embyIdentity = handler.Requests.First(request => request.Host == "emby.local" && request.Path == "/emby/System/Info/Public");
+    if (embyIdentity.Headers.ContainsKey("X-Emby-Token") ||
+        embyIdentity.Headers.GetValueOrDefault("X-Emby-Authorization")?.Contains("Token=", StringComparison.OrdinalIgnoreCase) == true)
+        throw new InvalidOperationException("The Emby token was sent before public server identity verification.");
+    if (!handler.Requests.Any(request => request.Headers.GetValueOrDefault("X-Plex-Token") == plexToken) ||
+        !handler.Requests.Any(request => request.Headers.GetValueOrDefault("X-Emby-Token") == embyToken))
+        throw new InvalidOperationException("Protected media-center catalog requests did not carry their bound credentials.");
+
+    var serializedCatalogs = JsonSerializer.Serialize(new[] { plex, emby });
+    if (serializedCatalogs.Contains(plexToken, StringComparison.Ordinal) ||
+        serializedCatalogs.Contains(embyToken, StringComparison.Ordinal) ||
+        serializedCatalogs.Contains(embyPassword, StringComparison.Ordinal))
+        throw new InvalidOperationException("A media-center secret leaked into the playlist model.");
+
+    var cacheDirectory = Path.Combine(testRoot, "media-center-playlist-caches");
+    var cache = new PlaylistCacheStore(Path.Combine(testRoot, "media-center-legacy-cache.bin"), cacheDirectory);
+    await cache.SaveAsync("plex", plexBaseUrl, plex);
+    await cache.SaveAsync("emby", embyBaseUrl, emby);
+    var cachedPlex = await cache.TryLoadAsync("plex", plexBaseUrl);
+    var cachedEmby = await cache.TryLoadAsync("emby", embyBaseUrl);
+    if (cachedPlex?.Playlist.Channels is not [var cachedPlexItem] || !cachedPlexItem.IsProtectedMedia ||
+        cachedEmby?.Playlist.Channels is not [var cachedEmbyItem] || !cachedEmbyItem.IsProtectedMedia ||
+        cachedPlexItem.ResumePositionMilliseconds != 60_000 || cachedEmbyItem.ResumePositionMilliseconds != 90_000)
+        throw new InvalidOperationException("Protected media-center cache metadata did not round-trip.");
+
+    var protectedFiles = Directory.EnumerateFiles(cacheDirectory, "*", SearchOption.AllDirectories)
+        .Append(credentialPath)
+        .ToList();
+    foreach (var protectedFile in protectedFiles)
+    {
+        var protectedText = Encoding.UTF8.GetString(await File.ReadAllBytesAsync(protectedFile));
+        if (protectedText.Contains(plexToken, StringComparison.Ordinal) ||
+            protectedText.Contains(embyToken, StringComparison.Ordinal) ||
+            protectedText.Contains(embyPassword, StringComparison.Ordinal))
+            throw new InvalidOperationException("A media-center secret was written in clear text.");
+    }
+
+    var reloadedPlex = await service.LoadSavedAsync("plex", plexBaseUrl);
+    var reloadedEmby = await service.LoadSavedAsync("emby", embyBaseUrl);
+    if (reloadedPlex.Channels.Count != 1 || reloadedEmby.Channels.Count != 1)
+        throw new InvalidOperationException("Saved media-center credentials could not refresh their catalogs.");
 }
 
 static async Task<int> RunDvrSelfTestAsync()
@@ -1498,4 +1653,142 @@ static async Task WriteProbeWaveAsync(string path, TimeSpan duration)
         writer.Write(value);
     }
     await stream.FlushAsync();
+}
+
+sealed record MediaCenterProbeRequest(
+    string Method,
+    string Uri,
+    string Host,
+    string Path,
+    IReadOnlyDictionary<string, string> Headers,
+    string? Body);
+
+sealed class MediaCenterProbeHandler(
+    string plexToken,
+    string embyPassword,
+    string embyToken) : HttpMessageHandler
+{
+    public List<MediaCenterProbeRequest> Requests { get; } = [];
+
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        var uri = request.RequestUri ?? throw new InvalidOperationException("The media-center probe received no URI.");
+        var headers = request.Headers
+            .ToDictionary(pair => pair.Key, pair => string.Join(",", pair.Value), StringComparer.OrdinalIgnoreCase);
+        if (request.Content is not null)
+        {
+            foreach (var pair in request.Content.Headers)
+                headers[pair.Key] = string.Join(",", pair.Value);
+        }
+        var body = request.Content is null
+            ? null
+            : await request.Content.ReadAsStringAsync(cancellationToken);
+        Requests.Add(new MediaCenterProbeRequest(
+            request.Method.Method,
+            uri.ToString(),
+            uri.Host,
+            uri.AbsolutePath,
+            headers,
+            body));
+
+        string? json = uri.Host switch
+        {
+            "plex.local" => PlexResponse(request, uri, headers),
+            "emby.local" => EmbyResponse(request, uri, headers, body),
+            _ => null
+        };
+        if (json is null)
+        {
+            return new HttpResponseMessage(System.Net.HttpStatusCode.NotFound)
+            {
+                Content = new StringContent("{\"error\":\"probe route not found\"}", Encoding.UTF8, "application/json")
+            };
+        }
+        return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+    }
+
+    private string? PlexResponse(
+        HttpRequestMessage request,
+        Uri uri,
+        IReadOnlyDictionary<string, string> headers)
+    {
+        if (request.Method == HttpMethod.Get && uri.AbsolutePath == "/identity")
+        {
+            if (headers.ContainsKey("X-Plex-Token"))
+                throw new InvalidOperationException("The Plex identity probe received a token.");
+            return """
+                   {"MediaContainer":{"machineIdentifier":"plex-server-1","friendlyName":"Probe Plex Server","version":"1.42.0"}}
+                   """;
+        }
+        RequireHeader(headers, "X-Plex-Token", plexToken);
+        return uri.AbsolutePath switch
+        {
+            "/library/sections" => """
+                                   {"MediaContainer":{"Directory":[{"key":"1","title":"Movies","type":"movie"}]}}
+                                   """,
+            "/library/sections/1/all" => """
+                                         {"MediaContainer":{"totalSize":1,"Metadata":[{"ratingKey":"100","title":"Probe Movie","type":"movie","duration":7200000,"viewOffset":60000,"viewCount":0}]}}
+                                         """,
+            "/library/metadata/100" => """
+                                       {"MediaContainer":{"Metadata":[{"Media":[{"Part":[{"key":"/library/parts/part-1/file.mkv?X-Plex-Token=upstream-plex-token"}]}]}]}}
+                                       """,
+            _ => null
+        };
+    }
+
+    private string? EmbyResponse(
+        HttpRequestMessage request,
+        Uri uri,
+        IReadOnlyDictionary<string, string> headers,
+        string? body)
+    {
+        if (request.Method == HttpMethod.Get && uri.AbsolutePath == "/emby/System/Info/Public")
+        {
+            if (headers.ContainsKey("X-Emby-Token") ||
+                headers.GetValueOrDefault("X-Emby-Authorization")?.Contains("Token=", StringComparison.OrdinalIgnoreCase) == true)
+                throw new InvalidOperationException("The Emby identity probe received a token.");
+            return """
+                   {"Id":"emby-server-1","ServerName":"Probe Emby Server","Version":"4.9.0"}
+                   """;
+        }
+        if (request.Method == HttpMethod.Post && uri.AbsolutePath == "/emby/Users/AuthenticateByName")
+        {
+            if (headers.ContainsKey("X-Emby-Token") || body?.Contains(embyPassword, StringComparison.Ordinal) != true)
+                throw new InvalidOperationException("The Emby authentication request was malformed.");
+            return JsonSerializer.Serialize(new
+            {
+                AccessToken = embyToken,
+                ServerId = "emby-server-1",
+                User = new { Id = "user-1", Name = "Feature Probe" }
+            });
+        }
+        RequireHeader(headers, "X-Emby-Token", embyToken);
+        return uri.AbsolutePath switch
+        {
+            "/emby/Users/user-1/Views" => """
+                                           {"Items":[{"Id":"library-1","Name":"Shows","CollectionType":"tvshows"}]}
+                                           """,
+            "/emby/Users/user-1/Items" => """
+                                           {"TotalRecordCount":1,"Items":[{"Id":"200","Name":"Probe Episode","Type":"Episode","SeriesName":"Probe Series","ParentIndexNumber":1,"IndexNumber":2,"RunTimeTicks":27000000000,"UserData":{"PlaybackPositionTicks":900000000,"Played":false}}]}
+                                           """,
+            "/emby/Items/200/PlaybackInfo" => """
+                                                {"PlaySessionId":"play-session-1","MediaSources":[{"Id":"source-200","Container":"mkv","SupportsDirectPlay":true,"SupportsDirectStream":true,"SupportsTranscoding":true,"DirectStreamUrl":"/Videos/200/stream.mkv?api_key=upstream-emby-token","RequiredHttpHeaders":{"Referer":"https://emby.local/player"}}]}
+                                                """,
+            _ => null
+        };
+    }
+
+    private static void RequireHeader(
+        IReadOnlyDictionary<string, string> headers,
+        string name,
+        string expected)
+    {
+        if (!headers.TryGetValue(name, out var actual) || actual != expected)
+            throw new InvalidOperationException($"The media-center probe expected the {name} credential header.");
+    }
 }

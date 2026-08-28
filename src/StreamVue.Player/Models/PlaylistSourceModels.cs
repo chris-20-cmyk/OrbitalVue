@@ -23,6 +23,8 @@ public sealed class PlaylistSourceDefinition
     {
         "url" => "M3U URL",
         "xtream" => "XTREAM",
+        "plex" => "PLEX",
+        "emby" => "EMBY",
         _ => "M3U FILE"
     };
 

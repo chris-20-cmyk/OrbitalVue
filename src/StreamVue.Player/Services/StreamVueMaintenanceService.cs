@@ -34,7 +34,8 @@ public sealed class StreamVueMaintenanceService
         "epg-cache.v1.bin",
         "guide-source.v1.bin",
         "epg-mappings.v1.bin",
-        "xtream-credentials.v1.bin"
+        "xtream-credentials.v1.bin",
+        "media-center-credentials.v1.bin"
     ];
 
     private static readonly string[] KnownDataDirectories =

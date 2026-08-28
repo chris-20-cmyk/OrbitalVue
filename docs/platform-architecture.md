@@ -17,6 +17,20 @@ StreamVue is a player and personal source manager. It does not bundle, sell, dis
 
 The UI and playback engine remain native to each device family. Only the catalog semantics and synthetic fixtures are portable. This avoids forcing desktop assumptions onto televisions and avoids shipping a browser-based video engine where a native decoder is available.
 
+## Protected personal media centers
+
+Plex and Emby use the versioned `contracts/media-center-contract-v1.schema.json` boundary. A cached catalog contains only a canonical `streamvue-media://{provider}/{serverId}/{itemId}` locator plus non-secret presentation and resume metadata. Provider tokens, passwords, and credentialed playback URLs are forbidden from that contract.
+
+Each client follows the same security sequence:
+
+1. Normalize the user-entered HTTP or HTTPS base address and require explicit consent before cleartext HTTP credentials are used.
+2. Read the provider's public identity endpoint without a token.
+3. Bind the protected credential to the provider, normalized origin, and verified server ID.
+4. Fetch and cache a token-free catalog in platform-private storage.
+5. Resolve a playable provider URL only when the user selects an item, strip any credential query supplied by catalog metadata, reject cross-origin paths, and inject the locally protected token at the final playback boundary.
+
+Windows protects media-center credentials with current-user DPAPI and plays the resolved URL through LibVLC. Android uses its platform-protected credential store and Media3. Apple stores secrets in Keychain and hands the short-lived plan to KSPlayer or AVKit. Samsung and LG use the shared contract and capability-gate playback when the television API cannot safely express a provider requirement. No platform routes personal-library traffic through a StreamVue proxy.
+
 ## Android 5.0 foundation
 
 The first Android milestone is one adaptive application package for touch devices and Android TV. It targets stable API 36, compiles against the Android 37.1 API surface required by its AndroidX dependencies, uses Media3 1.11, and declares both normal launcher and Leanback launcher entry points. TV navigation uses remote-focusable controls and a room-scale layout rather than stretching the phone screen.
