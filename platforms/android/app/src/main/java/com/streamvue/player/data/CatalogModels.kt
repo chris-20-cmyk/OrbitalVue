@@ -51,7 +51,12 @@ data class ParsedPlaylist(
 
 enum class SourceType(val storedValue: String) {
     File("file"),
-    Url("url");
+    Url("url"),
+    Plex("plex"),
+    Emby("emby");
+
+    val isMediaCenter: Boolean
+        get() = this == Plex || this == Emby
 
     companion object {
         fun fromStored(value: String?): SourceType? = entries.firstOrNull { it.storedValue == value }

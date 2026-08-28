@@ -81,6 +81,7 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer.rtsp)
     implementation(libs.androidx.media3.ui)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.gson)
 
     testImplementation(libs.junit)
     debugImplementation(libs.androidx.compose.ui.tooling)
