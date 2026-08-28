@@ -64,7 +64,7 @@ fun rememberStreamPlayer(
     val signalCallback = rememberUpdatedState(onSignal)
     if (channel == null) return null
 
-    val player = remember(channel.id, channel.streamUri, channel.requestHeaders) {
+    val player = remember(channel.id, channel.streamUri, channel.requestHeaders, channel.startPositionMs) {
         val userAgent = channel.requestHeaders["User-Agent"]
             ?: "StreamVue Android/${BuildConfig.VERSION_NAME}"
         val otherHeaders = channel.requestHeaders.filterKeys { !it.equals("User-Agent", ignoreCase = true) }
@@ -113,6 +113,7 @@ fun rememberStreamPlayer(
                         )
                         .build()
                 )
+                channel.startPositionMs?.takeIf { it > 0 }?.let { position -> seekTo(position) }
                 playWhenReady = true
                 prepare()
             }

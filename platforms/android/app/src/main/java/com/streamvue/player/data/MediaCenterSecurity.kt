@@ -181,11 +181,11 @@ internal object MediaCenterUrlPolicy {
     }
 
     private fun queryName(part: String): String = runCatching {
-        URLDecoder.decode(part.substringBefore('='), StandardCharsets.UTF_8)
+        URLDecoder.decode(part.substringBefore('='), StandardCharsets.UTF_8.name())
     }.getOrElse { "" }
 
     private fun encodeQuery(value: String): String = java.net.URLEncoder
-        .encode(value, StandardCharsets.UTF_8)
+        .encode(value, StandardCharsets.UTF_8.name())
         .replace("+", "%20")
 
     private fun isSafePath(value: String): Boolean {

@@ -25,6 +25,7 @@ data class Channel(
     val tvgId: String? = null,
     val tvgName: String? = null,
     val requestHeaders: Map<String, String> = emptyMap(),
+    val startPositionMs: Long? = null,
     val kind: ChannelKind = ChannelKind.Live,
     val sourceId: String,
     val sourceName: String,

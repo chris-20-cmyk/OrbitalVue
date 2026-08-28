@@ -1,18 +1,22 @@
 package com.streamvue.player
 
 import android.app.Application
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.streamvue.player.data.Catalog
 import com.streamvue.player.data.Channel
 import com.streamvue.player.data.LoadedCatalog
+import com.streamvue.player.data.MediaCenterRepository
 import com.streamvue.player.data.PlaylistRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.net.URI
 import java.util.Locale
 
 data class GroupSummary(val name: String, val count: Int)
@@ -28,18 +32,29 @@ data class AppUiState(
     val visibleChannels: List<Channel> = emptyList(),
     val sections: List<ChannelSection> = emptyList(),
     val selectedChannel: Channel? = null,
+    val playbackChannel: Channel? = null,
+    val isResolvingPlayback: Boolean = false,
     val notice: String? = null,
     val error: String? = null
-)
+) {
+    val isMediaCenterSource: Boolean
+        get() = catalog?.source?.type?.isMediaCenter == true
+}
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = PlaylistRepository(application)
+    private val mediaCenterRepository = MediaCenterRepository(application)
+    private val sourcePreferences = application.getSharedPreferences(
+        "streamvue-active-source-v1",
+        Context.MODE_PRIVATE
+    )
     private val mutableState = MutableStateFlow(AppUiState())
+    private var playbackResolutionJob: Job? = null
     val state: StateFlow<AppUiState> = mutableState.asStateFlow()
 
     init {
         viewModelScope.launch {
-            runCatching { repository.loadSaved() }
+            runCatching { loadPreferredSource() }
                 .onSuccess { loaded ->
                     if (loaded == null) {
                         mutableState.update { it.copy(isLoading = false, loadingLabel = "") }
@@ -52,16 +67,58 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun importDocument(uri: Uri) {
-        launchLoad("Reading playlist…") { repository.importDocument(uri) }
+        launchLoad("Reading playlist…", ActiveSource.Playlist) { repository.importDocument(uri) }
     }
 
     fun importUrl(value: String) {
-        launchLoad("Connecting securely…") { repository.importUrl(value) }
+        launchLoad("Connecting securely…", ActiveSource.Playlist) { repository.importUrl(value) }
+    }
+
+    fun connectPlex(
+        serverAddress: String,
+        token: String,
+        displayName: String?,
+        allowInsecureHttp: Boolean
+    ) {
+        launchLoad("Connecting to Plex…", ActiveSource.MediaCenter) {
+            mediaCenterRepository.connectPlex(
+                serverAddress = serverAddress,
+                token = token,
+                displayName = displayName,
+                allowInsecureHttp = allowInsecureHttp
+            )
+        }
+    }
+
+    fun connectEmby(
+        serverAddress: String,
+        username: String,
+        password: String,
+        displayName: String?,
+        allowInsecureHttp: Boolean
+    ) {
+        launchLoad("Connecting to Emby…", ActiveSource.MediaCenter) {
+            mediaCenterRepository.connectEmby(
+                serverAddress = serverAddress,
+                username = username,
+                password = password,
+                displayName = displayName,
+                allowInsecureHttp = allowInsecureHttp
+            )
+        }
     }
 
     fun refresh() {
-        launchLoad("Refreshing channels…") {
-            repository.refreshCurrent() ?: error("Connect a playlist before refreshing.")
+        val source = if (mutableState.value.catalog?.source?.type?.isMediaCenter == true) {
+            ActiveSource.MediaCenter
+        } else {
+            ActiveSource.Playlist
+        }
+        launchLoad("Refreshing library…", source) {
+            when (source) {
+                ActiveSource.Playlist -> repository.refreshCurrent()
+                ActiveSource.MediaCenter -> mediaCenterRepository.refreshCurrent()
+            } ?: error("Connect a source before refreshing.")
         }
     }
 
@@ -88,7 +145,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectChannel(channel: Channel) {
-        mutableState.update { it.copy(selectedChannel = channel, error = null) }
+        playbackResolutionJob?.cancel()
+        if (!channel.isProtectedMediaLocator) {
+            mutableState.update {
+                it.copy(
+                    selectedChannel = channel,
+                    playbackChannel = channel,
+                    isResolvingPlayback = false,
+                    error = null
+                )
+            }
+            return
+        }
+        mutableState.update {
+            it.copy(
+                selectedChannel = channel,
+                playbackChannel = null,
+                isResolvingPlayback = true,
+                error = null
+            )
+        }
+        playbackResolutionJob = viewModelScope.launch {
+            runCatching { mediaCenterRepository.resolvePlayback(channel) }
+                .onSuccess { playable ->
+                    mutableState.update { current ->
+                        if (current.selectedChannel?.id != channel.id) current
+                        else current.copy(playbackChannel = playable, isResolvingPlayback = false)
+                    }
+                }
+                .onFailure { error ->
+                    if (mutableState.value.selectedChannel?.id == channel.id) showFailure(error)
+                }
+        }
     }
 
     fun dismissNotice() {
@@ -99,11 +187,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         mutableState.update { it.copy(error = null) }
     }
 
-    private fun launchLoad(label: String, operation: suspend () -> LoadedCatalog) {
+    private fun launchLoad(
+        label: String,
+        source: ActiveSource,
+        operation: suspend () -> LoadedCatalog
+    ) {
         viewModelScope.launch {
             mutableState.update { it.copy(isLoading = true, loadingLabel = label, error = null) }
             runCatching { operation() }
-                .onSuccess(::applyLoaded)
+                .onSuccess { loaded ->
+                    activeSource = source
+                    applyLoaded(loaded)
+                }
                 .onFailure(::showFailure)
         }
     }
@@ -131,9 +226,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             visibleChannels = browse.channels,
             sections = browse.sections,
             selectedChannel = selectedChannel,
+            playbackChannel = selectedChannel?.takeUnless { it.isProtectedMediaLocator },
+            isResolvingPlayback = false,
             notice = loaded.notice,
             error = null
         )
+        selectedChannel?.takeIf { it.isProtectedMediaLocator }?.let(::selectChannel)
     }
 
     private fun showFailure(error: Throwable) {
@@ -141,6 +239,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(
                 isLoading = false,
                 loadingLabel = "",
+                isResolvingPlayback = false,
                 error = error.message ?: "StreamVue could not load that source."
             )
         }
@@ -165,4 +264,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val channels: List<Channel>,
         val sections: List<ChannelSection>
     )
+
+    private suspend fun loadPreferredSource(): LoadedCatalog? {
+        val preferred = activeSource
+        loadSource(preferred)?.let { return it }
+        val alternate = if (preferred == ActiveSource.Playlist) {
+            ActiveSource.MediaCenter
+        } else {
+            ActiveSource.Playlist
+        }
+        return loadSource(alternate)?.also { activeSource = alternate }
+    }
+
+    private suspend fun loadSource(source: ActiveSource): LoadedCatalog? = when (source) {
+        ActiveSource.Playlist -> repository.loadSaved()
+        ActiveSource.MediaCenter -> mediaCenterRepository.loadSaved()
+    }
+
+    private var activeSource: ActiveSource
+        get() = ActiveSource.fromStored(sourcePreferences.getString(KEY_ACTIVE_SOURCE, null))
+        set(value) {
+            sourcePreferences.edit().putString(KEY_ACTIVE_SOURCE, value.storedValue).apply()
+        }
+
+    private enum class ActiveSource(val storedValue: String) {
+        Playlist("playlist"),
+        MediaCenter("media-center");
+
+        companion object {
+            fun fromStored(value: String?): ActiveSource = entries.firstOrNull {
+                it.storedValue == value
+            } ?: Playlist
+        }
+    }
+
+    private val Channel.isProtectedMediaLocator: Boolean
+        get() = runCatching {
+            URI(streamUri).scheme?.equals("streamvue-media", true) == true
+        }.getOrDefault(false)
+
+    private companion object {
+        const val KEY_ACTIVE_SOURCE = "active_source"
+    }
 }

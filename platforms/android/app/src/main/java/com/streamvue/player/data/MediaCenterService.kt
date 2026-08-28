@@ -696,7 +696,7 @@ internal class MediaCenterService(
             .take(48)
 
     private fun pathComponent(value: String): String = URLEncoder
-        .encode(value, StandardCharsets.UTF_8)
+        .encode(value, StandardCharsets.UTF_8.name())
         .replace("+", "%20")
 
     private fun safeContainer(value: String?): String = value

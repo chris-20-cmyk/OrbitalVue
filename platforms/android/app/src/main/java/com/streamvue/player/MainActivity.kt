@@ -49,6 +49,8 @@ class MainActivity : ComponentActivity() {
                         )
                     },
                     onImportUrl = viewModel::importUrl,
+                    onConnectPlex = viewModel::connectPlex,
+                    onConnectEmby = viewModel::connectEmby,
                     onRefresh = viewModel::refresh,
                     onSelectGroup = viewModel::selectGroup,
                     onQueryChanged = viewModel::updateQuery,

@@ -109,7 +109,11 @@ class MediaCenterRepository internal constructor(
         val item = snapshot.items.firstOrNull { it.id == locator.itemId }
             ?: error("This media item is no longer available in the protected library snapshot.")
         val plan = service.playbackPlan(snapshot.connection, item)
-        channel.copy(streamUri = plan.url, requestHeaders = plan.requestHeaders)
+        channel.copy(
+            streamUri = plan.url,
+            requestHeaders = plan.requestHeaders,
+            startPositionMs = plan.resumePositionMs.takeIf { it > 0 }
+        )
     }
 
     suspend fun removeSource() = withContext(Dispatchers.IO) {
