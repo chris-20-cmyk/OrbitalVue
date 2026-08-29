@@ -44,6 +44,7 @@ jobs:
           if ($missing.Count -gt 0) {
             throw "Missing required repository variables: $($missing -join ', ')"
           }
+          node tools/verify-cross-platform-release-contract.mjs
           node tools/verify-premium-store-readiness.mjs `
             --require-ready windows `
             --expect-product-id windows $env:WINDOWS_PREMIUM_PRODUCT_ID `

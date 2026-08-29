@@ -55,6 +55,7 @@ jobs:
           node tools/stamp-samsung-package-version.mjs \
             --version "$SAMSUNG_PACKAGE_VERSION" \
             --validate-only
+          node tools/verify-cross-platform-release-contract.mjs
           node tools/verify-premium-store-readiness.mjs \
             --require-ready samsung \
             --expect-product-id samsung "$SAMSUNG_PREMIUM_PRODUCT_ID" \

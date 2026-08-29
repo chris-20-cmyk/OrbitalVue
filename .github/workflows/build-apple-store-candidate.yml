@@ -54,6 +54,7 @@ jobs:
             echo 'The App Store build string must contain one to three numeric components.' >&2
             exit 1
           fi
+          node tools/verify-cross-platform-release-contract.mjs
           node tools/verify-premium-store-readiness.mjs \
             --require-ready apple \
             --expect-product-id apple "$APPLE_PREMIUM_PRODUCT_ID" \

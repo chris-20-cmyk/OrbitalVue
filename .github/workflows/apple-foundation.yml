@@ -11,6 +11,7 @@ on:
       - "contracts/**"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-cross-platform-release-contract.mjs"
       - "tools/verify-apple-brand-assets.mjs"
       - "tools/verify-apple-distribution-readiness.mjs"
       - ".github/workflows/apple-foundation.yml"
@@ -20,6 +21,7 @@ on:
       - "contracts/**"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-cross-platform-release-contract.mjs"
       - "tools/verify-apple-brand-assets.mjs"
       - "tools/verify-apple-distribution-readiness.mjs"
       - ".github/workflows/apple-foundation.yml"
@@ -38,6 +40,7 @@ jobs:
         run: |
           node contracts/validate-contract.mjs
           node tools/verify-premium-store-readiness.mjs
+          node tools/verify-cross-platform-release-contract.mjs
           node tools/verify-apple-brand-assets.mjs
           node tools/verify-apple-distribution-readiness.mjs
 

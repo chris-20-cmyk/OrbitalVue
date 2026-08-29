@@ -14,6 +14,7 @@ on:
       - "packaging/windows-msix/**"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-cross-platform-release-contract.mjs"
       - ".github/workflows/windows-msix-foundation.yml"
   pull_request:
     paths:
@@ -24,6 +25,7 @@ on:
       - "packaging/windows-msix/**"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-cross-platform-release-contract.mjs"
       - ".github/workflows/windows-msix-foundation.yml"
 
 permissions:
@@ -43,8 +45,10 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Validate the locked premium manifest
-        run: node tools/verify-premium-store-readiness.mjs
+      - name: Validate the locked premium and release contracts
+        run: |
+          node tools/verify-premium-store-readiness.mjs
+          node tools/verify-cross-platform-release-contract.mjs
 
       - name: Restore the isolated Store dependency graph
         shell: pwsh

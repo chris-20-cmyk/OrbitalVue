@@ -2,6 +2,10 @@
 
 StreamVue 5.0 begins the move from a Windows-only player to one shared product family. This preview adds native Android/Google TV foundations plus dedicated Samsung Tizen and LG webOS television clients while preserving the proven Windows 4.0 application.
 
+- One machine-checked release contract now locks all five application identities, native entitlement providers, manual candidate triggers, Store modes, and artifact types
+- Foundation and candidate workflows reject cross-platform release drift before signing material or vendor submission becomes relevant
+- A dedicated lightweight CI gate reruns the full release contract whenever a seller manifest, candidate workflow, app identity, billing boundary, or reviewed store asset changes
+
 ## Android and Google TV
 
 - Native Kotlin and Jetpack Compose application for touch, D-pad, and ten-foot television use

@@ -53,7 +53,7 @@ The Apple milestone is a source/simulator foundation plus a locked signed-candid
 
 These integrations connect only to a server entered by the user and do not include a hosted relay, public-media discovery, or third-party content.
 
-The intended store product is a one-time lifetime unlock, not a subscription. Store product IDs and native receipt providers are intentionally unconfigured until they are created in each seller console. See [premium access and store readiness](docs/premium-entitlements.md).
+The intended store product is a one-time lifetime unlock, not a subscription. Store product IDs and native receipt providers are intentionally unconfigured until they are created in each seller console. See [premium access and store readiness](docs/premium-entitlements.md) and the [cross-platform release-control matrix](docs/cross-platform-release-control.md).
 
 ## 4.0 production resilience
 

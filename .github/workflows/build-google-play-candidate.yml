@@ -61,6 +61,7 @@ jobs:
             printf 'Missing required Google Play repository variables: %s\n' "${missing[*]}" >&2
             exit 1
           fi
+          node tools/verify-cross-platform-release-contract.mjs
           node tools/verify-premium-store-readiness.mjs \
             --require-ready android \
             --expect-product-id android "$ANDROID_PREMIUM_PRODUCT_ID" \

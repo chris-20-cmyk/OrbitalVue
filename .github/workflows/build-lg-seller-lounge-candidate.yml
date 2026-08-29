@@ -37,6 +37,7 @@ jobs:
           node tools/stamp-lg-package-version.mjs \
             --version "$LG_PACKAGE_VERSION" \
             --validate-only
+          node tools/verify-cross-platform-release-contract.mjs
           node tools/verify-lg-distribution-readiness.mjs \
             --require-ready \
             --expect-app-id "$LG_APP_ID"

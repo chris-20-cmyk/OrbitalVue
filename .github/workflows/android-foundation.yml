@@ -11,6 +11,7 @@ on:
       - "contracts/**"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-cross-platform-release-contract.mjs"
       - ".github/workflows/android-foundation.yml"
   pull_request:
     paths:
@@ -18,6 +19,7 @@ on:
       - "contracts/**"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-cross-platform-release-contract.mjs"
       - ".github/workflows/android-foundation.yml"
 
 permissions:
@@ -34,6 +36,7 @@ jobs:
         run: |
           node contracts/validate-contract.mjs
           node tools/verify-premium-store-readiness.mjs
+          node tools/verify-cross-platform-release-contract.mjs
 
   android:
     name: Android and Google TV
