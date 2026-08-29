@@ -161,6 +161,14 @@ jobs:
       - name: Build and verify locked Apple Store configurations
         shell: bash
         run: |
+          cp platforms/apple/Package.store.swift platforms/apple/Package.swift
+          if grep -Fq 'github.com/kingslay/KSPlayer' platforms/apple/Package.swift; then
+            echo 'The Apple Store package graph still contains the public GPL KSPlayer dependency.' >&2
+            exit 1
+          fi
+          rm -rf platforms/apple/StreamVueApple.xcodeproj
+          (cd platforms/apple && xcodegen generate --spec project.yml)
+          swift test --package-path platforms/apple --parallel
           xcodebuild \
             -quiet \
             -jobs 2 \
@@ -193,9 +201,21 @@ jobs:
           test "$(plutil -extract StreamVueDistributionMode raw -o - artifacts/apple-derived-data/store-tvos/Build/Products/Store-appletvsimulator/StreamVueTV.app/Info.plist)" = "store"
           test "$(plutil -extract CFBundleIdentifier raw -o - artifacts/apple-derived-data/store-ios/Build/Products/Store-iphonesimulator/StreamVue.app/Info.plist)" = "com.streamvue.player"
           test "$(plutil -extract CFBundleIdentifier raw -o - artifacts/apple-derived-data/store-tvos/Build/Products/Store-appletvsimulator/StreamVueTV.app/Info.plist)" = "com.streamvue.player"
+          resolved='platforms/apple/StreamVueApple.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved'
+          if [[ -f "$resolved" ]] && grep -Eiq 'ksplayer|kingslay' "$resolved"; then
+            echo 'The AVKit-only Store graph unexpectedly resolved KSPlayer.' >&2
+            exit 1
+          fi
+          if find \
+            artifacts/apple-derived-data/store-ios/Build/Products/Store-iphonesimulator/StreamVue.app \
+            artifacts/apple-derived-data/store-tvos/Build/Products/Store-appletvsimulator/StreamVueTV.app \
+            -iname '*ksplayer*' -print | grep -q .; then
+            echo 'An AVKit-only Store product contains a KSPlayer-named bundle artifact.' >&2
+            exit 1
+          fi
 
       - name: Verify simulator products without distributing them
         run: |
           test -d artifacts/apple-derived-data/ios/Build/Products/Debug-iphonesimulator/StreamVue.app
           test -d artifacts/apple-derived-data/tvos/Build/Products/Debug-appletvsimulator/StreamVueTV.app
-          echo "KSPlayer-enabled binaries stay inside CI until StreamVue selects a compatible distribution license."
+          echo "Personal simulator products include pinned KSPlayer; Store simulator products are AVKit-only and remain inside CI."

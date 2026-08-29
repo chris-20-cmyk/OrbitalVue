@@ -20,7 +20,7 @@ The lightweight **Cross-platform Store release contract** CI workflow runs the s
 | --- | --- | --- | --- |
 | Windows | unsigned MSIX for Partner Center | locked | reserve the package identity, create the durable add-on, fill the public manifest/variables, and test Store license changes |
 | Android / Google TV | upload-key-signed AAB | locked | finish Play registration/testing, create the one-time product and verifier, register the upload certificate, and complete Play review data |
-| iPhone / iPad / Apple TV | Apple-distribution-signed IPA set | locked | choose a legitimate KSPlayer/AVKit distribution path, enroll, create the shared non-consumable, supply profiles/certificate, and complete App Store review data |
+| iPhone / iPad / Apple TV | Apple-distribution-signed AVKit-only IPA set | locked | complete App Store terms/privacy review, enroll, create the shared non-consumable, supply profiles/certificate, and finish device/review evidence; personal builds retain KSPlayer |
 | Samsung TV | author/Partner-distributor-signed WGT | locked | finish Seller Office/DPI setup, preserve the author identity, deploy the verifier, and test Checkout on real TVs |
 | LG webOS TV | webOS IPK plus 400×400 store icon | free app; Plex/Emby locked | finish Seller Lounge account/terms, listing assets, UX scenario, mandatory checklist, privacy review, and real-TV testing |
 

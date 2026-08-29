@@ -120,4 +120,4 @@ A code-signing certificate proves who produced a binary; a software license stat
 - MIT or Apache-2.0: permissive open source and potentially eligible for free OSS signing, but others may reuse the code under the license terms.
 - A custom source-available license: more control, but not OSI-approved and generally not eligible for free OSS-signing programs.
 
-No source-license choice has been made automatically in this repository. This choice is now also a hard Apple distribution gate because the default KSPlayer 2.3.4 package is GPL-3.0; see [KSPlayer licensing](ksplayer-licensing.md).
+No source-license choice has been made automatically in this repository. Personal Apple builds use the public GPL-3.0 KSPlayer 2.3.4 package and are not public distribution artifacts. The selected Apple Store graph is AVKit-only and omits KSPlayer; adding KSPlayer to a public binary would still require an explicit GPL-compatible or separately licensed decision. See [KSPlayer licensing](ksplayer-licensing.md).

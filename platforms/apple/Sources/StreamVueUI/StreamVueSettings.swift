@@ -8,6 +8,14 @@ public enum PlaybackEnginePreference: String, CaseIterable, Identifiable, Sendab
 
     public var id: String { rawValue }
 
+    public static var availableCases: [Self] {
+        #if canImport(KSPlayer)
+        [.ksPlayer, .avKit]
+        #else
+        [.avKit]
+        #endif
+    }
+
     public var label: String {
         switch self {
         case .ksPlayer: "KSPlayer (Metal)"
@@ -187,9 +195,14 @@ public final class StreamVueSettings {
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        playbackEngine = PlaybackEnginePreference(
+        let savedPlaybackEngine = PlaybackEnginePreference(
             rawValue: defaults.string(forKey: Keys.playbackEngine) ?? ""
-        ) ?? .ksPlayer
+        )
+        #if canImport(KSPlayer)
+        playbackEngine = savedPlaybackEngine ?? .ksPlayer
+        #else
+        playbackEngine = .avKit
+        #endif
         fallbackPlaybackEngine = defaults.object(forKey: Keys.fallbackPlaybackEngine) as? Bool ?? true
         aspectMode = VideoAspectMode(rawValue: defaults.string(forKey: Keys.aspectMode) ?? "") ?? .automatic
         bufferPreference = BufferPreference(rawValue: defaults.string(forKey: Keys.bufferPreference) ?? "") ?? .automatic

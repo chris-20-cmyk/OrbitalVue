@@ -4,8 +4,10 @@
   "ksPlayer": {
     "dependency": "kingslay/KSPlayer",
     "version": "2.3.4",
-    "packageSource": "public-gpl",
-    "distributionPath": "unresolved",
+    "personalPackageSource": "public-gpl",
+    "storePackageSource": "absent",
+    "storePackageManifest": "platforms/apple/Package.store.swift",
+    "distributionPath": "avkit-only",
     "appStoreTermsReviewed": false,
     "ready": false
   }

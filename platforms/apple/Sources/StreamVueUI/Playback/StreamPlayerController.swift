@@ -1,10 +1,13 @@
 #if os(iOS) || os(tvOS)
 import AVFoundation
 import Foundation
+#if canImport(KSPlayer)
 @preconcurrency import KSPlayer
+#endif
 import Observation
 import StreamVueCore
 
+#if canImport(KSPlayer)
 @MainActor
 private enum KSPlayerCompatibility {
     /// KSPlayer 2.3 exposes engine selection and display-link cadence as process-wide
@@ -15,6 +18,7 @@ private enum KSPlayerCompatibility {
         KSOptions.preferredFrame = adaptiveFrameRate
     }
 }
+#endif
 
 public enum PlaybackPhase: Equatable, Sendable {
     case idle
@@ -62,10 +66,12 @@ public final class StreamPlayerController {
     public private(set) var telemetry = PlaybackTelemetry()
     public private(set) var isExternalPlaybackActive = false
     public private(set) var reasonForWaiting: String?
-    public private(set) var ksLayer: KSPlayerLayer?
     public private(set) var surfaceOwner: StreamPlayerSurfaceRole = .inline
     public private(set) var surfaceGeneration = 0
+    #if canImport(KSPlayer)
+    public private(set) var ksLayer: KSPlayerLayer?
     let ksVideoView = StreamVueKSVideoView()
+    #endif
 
     private var settings: StreamVueSettings?
     private var playerObservations: [NSKeyValueObservation] = []
@@ -80,6 +86,7 @@ public final class StreamPlayerController {
         player.automaticallyWaitsToMinimizeStalling = true
         player.actionAtItemEnd = .pause
         installPlayerObservations()
+        #if canImport(KSPlayer)
         ksVideoView.onState = { [weak self] layer, state in
             self?.handleKSState(layer: layer, state: state)
         }
@@ -92,12 +99,14 @@ public final class StreamPlayerController {
         ksVideoView.onBuffer = { [weak self] layer, count, consumeTime in
             self?.handleKSBuffer(layer: layer, count: count, consumeTime: consumeTime)
         }
+        #endif
     }
 
     public func configure(settings: StreamVueSettings) {
         self.settings = settings
         player.allowsExternalPlayback = settings.allowsExternalPlayback
         player.currentItem?.preferredForwardBufferDuration = settings.bufferPreference.preferredForwardDuration
+        #if canImport(KSPlayer)
         ksLayer?.player.allowsExternalPlayback = settings.allowsExternalPlayback
         ksLayer?.options.canStartPictureInPictureAutomaticallyFromInline = settings.allowsPictureInPicture
         ksVideoView.allowsStreamVuePictureInPicture = settings.allowsPictureInPicture
@@ -105,6 +114,7 @@ public final class StreamPlayerController {
         ksVideoView.streamVueSubtitleFontSize = CGFloat(settings.ksSubtitleFontSize)
         ksVideoView.refreshStreamVueSubtitleStyle()
         applyKSAspectMode(settings.aspectMode)
+        #endif
     }
 
     public func tune(to channel: CatalogChannel, settings: StreamVueSettings) {
@@ -117,7 +127,11 @@ public final class StreamPlayerController {
 
         switch settings.playbackEngine {
         case .ksPlayer:
+            #if canImport(KSPlayer)
             prepareKSPlayer(channel: channel, settings: settings)
+            #else
+            prepareNativePlayer(channel: channel, settings: settings)
+            #endif
         case .avKit:
             prepareNativePlayer(channel: channel, settings: settings)
         }
@@ -176,6 +190,7 @@ public final class StreamPlayerController {
         }
     }
 
+    #if canImport(KSPlayer)
     private func prepareKSPlayer(channel: CatalogChannel, settings: StreamVueSettings) {
         activeEngine = .ksPlayer
         guard let url = URL(string: channel.stream.uri),
@@ -241,18 +256,25 @@ public final class StreamPlayerController {
             ksVideoView.play()
         }
     }
+    #endif
 
     public func play() {
         playbackRequested = true
         activateAudioSession()
         switch activeEngine {
         case .ksPlayer:
+            #if canImport(KSPlayer)
             guard let ksLayer else { return }
             if !ksLayer.player.isPlaying {
                 phase = .preparing
                 startupBeganAt = .now
             }
             ksVideoView.play()
+            #else
+            guard player.currentItem != nil else { return }
+            player.play()
+            updatePhase()
+            #endif
         case .avKit:
             guard player.currentItem != nil else { return }
             if player.timeControlStatus != .playing {
@@ -268,7 +290,12 @@ public final class StreamPlayerController {
         playbackRequested = false
         switch activeEngine {
         case .ksPlayer:
+            #if canImport(KSPlayer)
             ksVideoView.pause()
+            #else
+            player.pause()
+            updatePhase()
+            #endif
         case .avKit:
             player.pause()
             updatePhase()
@@ -285,10 +312,12 @@ public final class StreamPlayerController {
         player.pause()
         player.replaceCurrentItem(with: nil)
         clearItemObservations()
+        #if canImport(KSPlayer)
         ksLayer?.delegate = nil
         ksVideoView.playerLayer = nil
         ksLayer?.stop()
         ksLayer = nil
+        #endif
         surfaceGeneration += 1
         if clearChannel { channel = nil }
         phase = .idle
@@ -309,6 +338,7 @@ public final class StreamPlayerController {
     }
 
     public func useAVKitForExternalPlayback() {
+        #if canImport(KSPlayer)
         guard activeEngine == .ksPlayer, let channel, let settings else { return }
         let shouldContinuePlaying = playbackRequested
         didFallbackForCurrentChannel = true
@@ -322,9 +352,11 @@ public final class StreamPlayerController {
             settings: settings,
             autoPlayOverride: shouldContinuePlaying
         )
+        #endif
     }
 
     public func applyKSAspectMode(_ mode: VideoAspectMode) {
+        #if canImport(KSPlayer)
         guard let ksLayer else { return }
         switch mode {
         case .fill:
@@ -334,6 +366,9 @@ public final class StreamPlayerController {
         default:
             ksLayer.player.contentMode = .scaleAspectFit
         }
+        #else
+        _ = mode
+        #endif
     }
 
     private func installPlayerObservations() {
@@ -434,6 +469,7 @@ public final class StreamPlayerController {
         reasonForWaiting = nil
     }
 
+    #if canImport(KSPlayer)
     private func handleKSFailure() {
         guard activeEngine == .ksPlayer else { return }
         if let channel,
@@ -455,9 +491,11 @@ public final class StreamPlayerController {
             fail("KSPlayer could not open this stream, and no compatible fallback engine succeeded.")
         }
     }
+    #endif
 
     private func handleNativeFailure(_ message: String) {
         guard activeEngine == .avKit else { return }
+        #if canImport(KSPlayer)
         if let channel,
            let settings,
            settings.fallbackPlaybackEngine,
@@ -470,8 +508,12 @@ public final class StreamPlayerController {
         } else {
             fail(message)
         }
+        #else
+        fail(message)
+        #endif
     }
 
+    #if canImport(KSPlayer)
     private func recordStartupIfNeeded() {
         guard telemetry.startupMilliseconds == nil, let startupBeganAt else { return }
         let duration = startupBeganAt.duration(to: .now)
@@ -548,6 +590,7 @@ public final class StreamPlayerController {
             }
         }
     }
+    #endif
 
     private func activateAudioSession() {
         do {

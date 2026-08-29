@@ -91,6 +91,11 @@ jobs:
           node tools/verify-apple-brand-assets.mjs
           cd platforms/apple
           test "$(grep -c "PRODUCT_BUNDLE_IDENTIFIER: $APPLE_BUNDLE_ID" project.yml)" = "2"
+          cp Package.store.swift Package.swift
+          if grep -Fq 'github.com/kingslay/KSPlayer' Package.swift; then
+            echo 'The Apple Store package graph still contains the public GPL KSPlayer dependency.' >&2
+            exit 1
+          fi
           xcodegen generate --spec project.yml
           swift test --parallel
           plutil -lint Resources/PrivacyInfo.xcprivacy
@@ -106,7 +111,7 @@ jobs:
           const resolved = JSON.parse(fs.readFileSync(process.env.PACKAGE_RESOLVED_PATH, 'utf8'));
           const distribution = JSON.parse(fs.readFileSync('../../store/apple-distribution.json', 'utf8'));
           const pin = resolved.pins?.find(({ identity }) => identity === 'ksplayer');
-          if (distribution.ksPlayer.packageSource === 'absent') {
+          if (distribution.ksPlayer.storePackageSource === 'absent') {
             if (pin) throw new Error('AVKit-only resolution unexpectedly contains KSPlayer.');
           } else if (!pin || pin.state?.version !== distribution.ksPlayer.version) {
             throw new Error('Resolved KSPlayer version does not match the distribution manifest.');

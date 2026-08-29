@@ -1,10 +1,15 @@
 #if os(iOS) || os(tvOS)
+#if canImport(KSPlayer)
 import CoreMedia
+#endif
 import Foundation
+#if canImport(KSPlayer)
 @preconcurrency import KSPlayer
+#endif
 import SwiftUI
 import UIKit
 
+#if canImport(KSPlayer)
 final class StreamVueKSOptions: KSOptions {
     private let adaptiveFrameRate: Bool
     private let preferredAudioLanguage: PreferredAudioLanguage
@@ -152,6 +157,7 @@ final class StreamVueKSVideoView: VideoPlayerView {
         return desiredAliases.contains(normalizedCandidate)
     }
 }
+#endif
 
 public enum StreamPlayerSurfaceRole: Equatable, Sendable {
     case inline
@@ -180,6 +186,7 @@ public struct StreamPlayerSurface: View {
         Group {
             switch controller.activeEngine {
             case .ksPlayer:
+                #if canImport(KSPlayer)
                 if controller.ksLayer != nil, controller.surfaceOwner == role {
                     KSPlayerMetalSurface(
                         playerView: controller.ksVideoView,
@@ -189,24 +196,33 @@ public struct StreamPlayerSurface: View {
                 } else {
                     Color.black
                 }
+                #else
+                nativeSurface
+                #endif
             case .avKit:
-                if controller.surfaceOwner == role {
-                    NativePlayerSurface(
-                        player: controller.player,
-                        aspectMode: aspectMode,
-                        allowsPictureInPicture: allowsPictureInPicture
-                    )
-                } else {
-                    Color.black
-                }
+                nativeSurface
             }
         }
         .background(Color.black)
         .onAppear { controller.claimSurface(role) }
         .onDisappear { controller.releaseSurface(role) }
     }
+
+    @ViewBuilder
+    private var nativeSurface: some View {
+        if controller.surfaceOwner == role {
+            NativePlayerSurface(
+                player: controller.player,
+                aspectMode: aspectMode,
+                allowsPictureInPicture: allowsPictureInPicture
+            )
+        } else {
+            Color.black
+        }
+    }
 }
 
+#if canImport(KSPlayer)
 private struct KSPlayerMetalSurface: View {
     let playerView: StreamVueKSVideoView
     let aspectMode: VideoAspectMode
@@ -287,4 +303,5 @@ private final class PlayerHostView: UIView {
         }
     }
 }
+#endif
 #endif

@@ -98,6 +98,8 @@ const expectedPlatforms = {
       "--require-ready apple",
       "--expect-verification-provider apple storekit2-verified-transactions",
       "tools/verify-apple-distribution-readiness.mjs",
+      "Package.store.swift",
+      "storePackageSource",
       "-configuration Store"
     ]
   },

@@ -11,6 +11,10 @@ const packageManifest = await readFile(
   join(repositoryRoot, "platforms", "apple", "Package.swift"),
   "utf8"
 );
+const storePackageManifest = await readFile(
+  join(repositoryRoot, "platforms", "apple", "Package.store.swift"),
+  "utf8"
+);
 const appleSourceFiles = [
   join(repositoryRoot, "platforms", "apple", "Sources", "StreamVueUI", "Playback", "KSPlayerSurface.swift"),
   join(repositoryRoot, "platforms", "apple", "Sources", "StreamVueUI", "Playback", "StreamPlayerController.swift")
@@ -34,7 +38,9 @@ exactKeys(
   [
     "dependency",
     "version",
-    "packageSource",
+    "personalPackageSource",
+    "storePackageSource",
+    "storePackageManifest",
     "distributionPath",
     "appStoreTermsReviewed",
     "ready"
@@ -48,8 +54,14 @@ if (!/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(manifest.bundleId) || manifest.b
 }
 if (manifest.ksPlayer.dependency !== "kingslay/KSPlayer") fail("unexpected KSPlayer dependency");
 if (!/^\d+\.\d+\.\d+$/.test(manifest.ksPlayer.version)) fail("KSPlayer version is invalid");
-if (!["public-gpl", "licensed", "absent"].includes(manifest.ksPlayer.packageSource)) {
-  fail("unknown KSPlayer packageSource");
+if (!["public-gpl", "licensed", "absent"].includes(manifest.ksPlayer.personalPackageSource)) {
+  fail("unknown KSPlayer personalPackageSource");
+}
+if (!["public-gpl", "licensed", "absent"].includes(manifest.ksPlayer.storePackageSource)) {
+  fail("unknown KSPlayer storePackageSource");
+}
+if (manifest.ksPlayer.storePackageManifest !== "platforms/apple/Package.store.swift") {
+  fail("unexpected Apple Store package manifest");
 }
 if (!["unresolved", "gpl-source", "separately-licensed", "avkit-only"].includes(manifest.ksPlayer.distributionPath)) {
   fail("unknown KSPlayer distributionPath");
@@ -61,22 +73,22 @@ if (typeof manifest.ksPlayer.appStoreTermsReviewed !== "boolean" || typeof manif
 const publicPackageURL = "https://github.com/kingslay/KSPlayer.git";
 const usesPublicPackage = packageManifest.includes(publicPackageURL);
 const exactVersion = packageManifest.includes(`exact: "${manifest.ksPlayer.version}"`);
-if (manifest.ksPlayer.packageSource === "public-gpl" && (!usesPublicPackage || !exactVersion)) {
+if (manifest.ksPlayer.personalPackageSource === "public-gpl" && (!usesPublicPackage || !exactVersion)) {
   fail("the public GPL package source/version does not match Package.swift");
 }
-if (manifest.ksPlayer.packageSource !== "public-gpl" && usesPublicPackage) {
+if (manifest.ksPlayer.personalPackageSource !== "public-gpl" && usesPublicPackage) {
   fail("Package.swift still references the public GPL package");
 }
 if (manifest.ksPlayer.distributionPath === "unresolved" && manifest.ksPlayer.ready) {
   fail("an unresolved license path cannot be ready");
 }
-if (manifest.ksPlayer.distributionPath === "gpl-source" && manifest.ksPlayer.packageSource !== "public-gpl") {
+if (manifest.ksPlayer.distributionPath === "gpl-source" && manifest.ksPlayer.storePackageSource !== "public-gpl") {
   fail("GPL source distribution must use the declared public package");
 }
-if (manifest.ksPlayer.distributionPath === "separately-licensed" && manifest.ksPlayer.packageSource !== "licensed") {
+if (manifest.ksPlayer.distributionPath === "separately-licensed" && manifest.ksPlayer.storePackageSource !== "licensed") {
   fail("separately licensed distribution must use the licensed package source");
 }
-if (manifest.ksPlayer.distributionPath === "avkit-only" && manifest.ksPlayer.packageSource !== "absent") {
+if (manifest.ksPlayer.distributionPath === "avkit-only" && manifest.ksPlayer.storePackageSource !== "absent") {
   fail("AVKit-only distribution must remove the KSPlayer package");
 }
 if (manifest.ksPlayer.ready && !manifest.ksPlayer.appStoreTermsReviewed) {
@@ -101,10 +113,16 @@ if (manifest.ksPlayer.ready && manifest.ksPlayer.distributionPath === "separatel
 }
 
 if (manifest.ksPlayer.distributionPath === "avkit-only") {
-  if (/\bKSPlayer\b/.test(packageManifest)) fail("AVKit-only Package.swift still declares KSPlayer");
+  if (storePackageManifest.includes(publicPackageURL)
+    || /\.product\s*\(\s*name:\s*"KSPlayer"/.test(storePackageManifest)) {
+    fail("AVKit-only Store package manifest still declares KSPlayer");
+  }
   for (const sourceFile of appleSourceFiles) {
     const source = await readFile(sourceFile, "utf8");
-    if (/\bimport\s+KSPlayer\b/.test(source)) fail("AVKit-only source still imports KSPlayer");
+    if (/^\s*@preconcurrency\s+import\s+KSPlayer\s*$/m.test(source)
+      && !/#if canImport\(KSPlayer\)[\s\S]*?@preconcurrency\s+import\s+KSPlayer[\s\S]*?#endif/.test(source)) {
+      fail("KSPlayer imports must stay behind the optional package boundary");
+    }
   }
 }
 
@@ -122,13 +140,13 @@ if (expectedBundleIndex >= 0) {
 
 if (process.argv.includes("--require-ready")) {
   if (!manifest.ksPlayer.ready) {
-    fail("KSPlayer distribution is intentionally locked; choose and verify a legitimate release path first");
+    fail("Apple distribution is intentionally locked; complete the owner/App Store terms review for the selected package path first");
   }
   console.log(`Apple distribution is ready through ${manifest.ksPlayer.distributionPath}.`);
 } else {
   console.log(
     manifest.ksPlayer.ready
       ? `Apple distribution manifest is ready through ${manifest.ksPlayer.distributionPath}.`
-      : "Apple distribution manifest is valid and KSPlayer binary distribution remains locked by design."
+      : `Apple distribution manifest is valid; ${manifest.ksPlayer.distributionPath} is selected and Store release remains locked pending owner review.`
   );
 }

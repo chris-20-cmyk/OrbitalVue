@@ -16,7 +16,7 @@ struct PlaybackSettingsView: View {
             Form {
                 Section("Primary video player") {
                     Picker("Primary video player", selection: $settings.playbackEngine) {
-                        ForEach(PlaybackEnginePreference.allCases) { engine in
+                        ForEach(PlaybackEnginePreference.availableCases) { engine in
                             Text(engine.label).tag(engine)
                         }
                     }
@@ -48,6 +48,7 @@ struct PlaybackSettingsView: View {
                     #endif
                 }
 
+                #if canImport(KSPlayer)
                 if settings.playbackEngine == .ksPlayer {
                     Section("KSPlayer (Metal)") {
                         IntegerAdjustmentRow(
@@ -122,6 +123,15 @@ struct PlaybackSettingsView: View {
                         }
                     }
                 }
+                #else
+                Section("AVKit buffering") {
+                    Picker("Buffer strategy", selection: $settings.bufferPreference) {
+                        ForEach(BufferPreference.allCases) { preference in
+                            Text(preference.label).tag(preference)
+                        }
+                    }
+                }
+                #endif
 
                 Section("Apple playback system") {
                     CapabilityRow(

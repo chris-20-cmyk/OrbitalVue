@@ -182,7 +182,7 @@ if (inventory.platforms.lg.declarations.sellerLoungePrivacyDisclosureReviewed
   !== lgDistribution.privacyDisclosureReviewed) {
   fail("LG privacy review must agree with the Seller Lounge distribution manifest");
 }
-if (appleDistribution.ksPlayer.packageSource !== "absent"
+if (appleDistribution.ksPlayer.storePackageSource !== "absent"
   && inventory.platforms.apple.ready
   && !inventory.platforms.apple.declarations.ksPlayerDataPracticesReviewed) {
   fail("Apple cannot be privacy-ready until the selected KSPlayer distribution is reviewed");
