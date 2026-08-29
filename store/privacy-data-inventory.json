@@ -1,0 +1,156 @@
+{
+  "contractVersion": "1.0",
+  "status": "draft-unpublished",
+  "technicalReviewDate": "2026-08-29",
+  "privacyContact": null,
+  "policyEffectiveDate": null,
+  "policyOwnerApproved": false,
+  "globalPractices": {
+    "automaticTelemetryEnabled": false,
+    "advertisingEnabled": false,
+    "crossAppTrackingEnabled": false,
+    "dataSaleEnabled": false,
+    "developerAccountSystemEnabled": false
+  },
+  "dataFlows": [
+    {
+      "id": "provider-connections",
+      "data": [
+        "playlist-address-or-file",
+        "provider-server-address",
+        "provider-username",
+        "provider-password-during-authentication",
+        "provider-access-token",
+        "user-supplied-request-headers"
+      ],
+      "purpose": "app-functionality",
+      "storage": "on-device; media-center and account credentials use platform protection or session-only fallback; playlist locations use app-private storage with platform-dependent protection",
+      "transmittedTo": [
+        "user-selected-iptv-plex-or-emby-provider"
+      ],
+      "developerAccess": "none",
+      "availability": "active"
+    },
+    {
+      "id": "catalog-and-preferences",
+      "data": [
+        "channel-and-guide-metadata",
+        "plex-or-emby-library-metadata",
+        "favorites-recents-and-resume-state",
+        "playback-and-interface-preferences"
+      ],
+      "purpose": "app-functionality-and-personalization",
+      "storage": "on-device",
+      "transmittedTo": [],
+      "developerAccess": "none",
+      "availability": "active"
+    },
+    {
+      "id": "provider-client-identity",
+      "data": [
+        "random-app-installation-client-identifier"
+      ],
+      "purpose": "identify-the-player-to-the-user-selected-media-server",
+      "storage": "on-device",
+      "transmittedTo": [
+        "user-selected-plex-or-emby-provider"
+      ],
+      "developerAccess": "none",
+      "availability": "active-when-personal-media-centers-are-unlocked"
+    },
+    {
+      "id": "premium-purchase-verification",
+      "data": [
+        "store-product-identifier",
+        "android-package-name-and-purchase-token",
+        "samsung-checkout-customer-identifier-and-service-country",
+        "store-entitlement-result"
+      ],
+      "purpose": "purchase-and-entitlement-verification",
+      "storage": "store-controlled plus minimal on-device entitlement state",
+      "transmittedTo": [
+        "platform-store-service",
+        "future-streamvue-android-or-samsung-verifier"
+      ],
+      "developerAccess": "future-verifier-only-for-android-or-samsung",
+      "availability": "store-builds-only-and-currently-release-locked"
+    },
+    {
+      "id": "diagnostics",
+      "data": [
+        "local-crash-details",
+        "app-runtime-and-operating-system",
+        "catalog-counts-and-hashed-channel-identity",
+        "playback-state-and-preferences"
+      ],
+      "purpose": "troubleshooting",
+      "storage": "on-device; Windows export is created only at the user's request",
+      "transmittedTo": [],
+      "developerAccess": "only-if-the-user-chooses-to-share-an-export",
+      "availability": "windows-local-only"
+    }
+  ],
+  "platforms": {
+    "windows": {
+      "applicationId": null,
+      "privacyPolicyUrl": null,
+      "supportUrl": null,
+      "declarations": {
+        "microsoftStorePrivacyDisclosureReviewed": false,
+        "localCrashAndDiagnosticsDisclosureReviewed": false,
+        "thirdPartyDataPracticesReviewed": false,
+        "retentionAndDeletionReviewed": false
+      },
+      "ready": false
+    },
+    "android": {
+      "applicationId": "com.streamvue.player",
+      "privacyPolicyUrl": null,
+      "supportUrl": null,
+      "declarations": {
+        "googlePlayDataSafetyFormReviewed": false,
+        "sdkDataPracticesReviewed": false,
+        "purchaseVerifierRetentionDocumented": false,
+        "retentionAndDeletionReviewed": false
+      },
+      "ready": false
+    },
+    "apple": {
+      "applicationId": "com.streamvue.player",
+      "privacyPolicyUrl": null,
+      "supportUrl": null,
+      "declarations": {
+        "appStorePrivacyAnswersReviewed": false,
+        "tvOSPrivacyPolicyTextReviewed": false,
+        "requiredReasonApiReviewCompleted": false,
+        "ksPlayerDataPracticesReviewed": false,
+        "retentionAndDeletionReviewed": false
+      },
+      "ready": false
+    },
+    "samsung": {
+      "applicationId": "SvTvPlayer.StreamVue",
+      "privacyPolicyUrl": null,
+      "supportUrl": null,
+      "declarations": {
+        "sellerOfficePrivacyDisclosureReviewed": false,
+        "samsungCheckoutDataPracticesReviewed": false,
+        "purchaseVerifierRetentionDocumented": false,
+        "retentionAndDeletionReviewed": false
+      },
+      "ready": false
+    },
+    "lg": {
+      "applicationId": "com.streamvue.player.tv",
+      "privacyPolicyUrl": null,
+      "supportUrl": null,
+      "declarations": {
+        "sellerLoungePrivacyDisclosureReviewed": false,
+        "webOsSecureStorageReviewed": false,
+        "premiumLockDisclosureReviewed": false,
+        "retentionAndDeletionReviewed": false
+      },
+      "ready": false
+    }
+  }
+}

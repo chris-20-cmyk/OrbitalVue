@@ -46,6 +46,7 @@ const expectedPlatforms = {
     premiumReleasePolicy: "requires-verified-product",
     verificationProvider: "microsoft-store-license",
     requiredFragments: [
+      "node tools/verify-privacy-readiness.mjs --require-ready windows",
       "--require-ready windows",
       "--expect-verification-provider windows microsoft-store-license",
       "-p:StreamVueDistributionMode=Store",
@@ -60,6 +61,7 @@ const expectedPlatforms = {
     premiumReleasePolicy: "requires-verified-product",
     verificationProvider: "google-play-developer-api",
     requiredFragments: [
+      "node tools/verify-privacy-readiness.mjs --require-ready android",
       "--require-ready android",
       "--expect-verification-provider android google-play-developer-api",
       "-PstreamVueDistributionMode=store",
@@ -74,6 +76,7 @@ const expectedPlatforms = {
     premiumReleasePolicy: "requires-verified-product-and-license",
     verificationProvider: "storekit2-verified-transactions",
     requiredFragments: [
+      "node tools/verify-privacy-readiness.mjs --require-ready apple",
       "--require-ready apple",
       "--expect-verification-provider apple storekit2-verified-transactions",
       "tools/verify-apple-distribution-readiness.mjs",
@@ -88,6 +91,7 @@ const expectedPlatforms = {
     premiumReleasePolicy: "requires-verified-product",
     verificationProvider: "samsung-dpi-purchase-history",
     requiredFragments: [
+      "node tools/verify-privacy-readiness.mjs --require-ready samsung",
       "--require-ready samsung",
       "--expect-verification-provider samsung samsung-dpi-purchase-history",
       "tools/verify-samsung-distribution-readiness.mjs",
@@ -102,6 +106,7 @@ const expectedPlatforms = {
     premiumReleasePolicy: "locked-free-app",
     verificationProvider: null,
     requiredFragments: [
+      "node tools/verify-privacy-readiness.mjs --require-ready lg",
       "tools/verify-lg-distribution-readiness.mjs",
       "--expect-app-id \"$LG_APP_ID\"",
       "VITE_STREAMVUE_DISTRIBUTION_MODE: store",
@@ -224,7 +229,7 @@ if (!windowsWorkflow.includes("vars.STREAMVUE_WINDOWS_IDENTITY_NAME")
   fail("Windows candidate must receive its exact reserved identity from Partner Center");
 }
 const lgWorkflow = await readText(expectedPlatforms.lg.candidateWorkflow);
-if (lgWorkflow.includes("--require-ready lg")
+if (/verify-premium-store-readiness\.mjs[\s\\]*--require-ready lg/.test(lgWorkflow)
   || lgWorkflow.includes("VITE_STREAMVUE_LG_PRODUCT_ID")) {
   fail("LG free candidate must not claim an unimplemented premium product");
 }

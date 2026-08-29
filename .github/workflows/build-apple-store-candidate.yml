@@ -55,6 +55,7 @@ jobs:
             exit 1
           fi
           node tools/verify-cross-platform-release-contract.mjs
+          node tools/verify-privacy-readiness.mjs --require-ready apple
           node tools/verify-premium-store-readiness.mjs \
             --require-ready apple \
             --expect-product-id apple "$APPLE_PREMIUM_PRODUCT_ID" \
