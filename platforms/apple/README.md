@@ -25,6 +25,8 @@ xcodebuild -project StreamVueApple.xcodeproj -scheme StreamVueTV -destination 'g
 
 The Xcode project is generated and ignored. `project.yml`, the Swift package, and the locked CI workflow remain the authoritative build inputs.
 
+Both app targets intentionally use `com.streamvue.player`. Apple requires an added tvOS platform to share the iOS app's bundle ID when the platforms belong to one App Store Connect record, and this lets the same non-consumable purchase serve iPhone, iPad, and Apple TV. A Personal Team may substitute its own available identifier for local device testing, but a Store candidate must use the exact shared ID recorded in `store/apple-distribution.json`.
+
 ## Selectable playback engines
 
 KSPlayer's KSMEPlayer is the default engine. It combines FFmpeg demuxing, Metal rendering, VideoToolbox hardware decode, request-header support, adaptive frame presentation, deinterlacing, broader containers, embedded tracks, and text/image subtitles. StreamVue owns the player chrome and keeps one KSPlayer surface alive while moving between inline and true fullscreen presentation. Users can choose AVKit as primary or allow automatic fallback in either direction.
@@ -53,6 +55,17 @@ Because IPTV providers are user-selected and some still expose only HTTP endpoin
 
 `PrivacyInfo.xcprivacy` declares no tracking or collected data and documents the settings-only UserDefaults access reason. Store privacy answers must still match the final shipping feature set.
 
+The Apple TV target includes an opaque back plate, two transparent parallax layers, 400×240 and 1280×768 icon stacks, and standard plus wide Top Shelf artwork at both scale factors. `node tools/verify-apple-brand-assets.mjs` checks the role declarations, filenames, PNG dimensions, and alpha-channel boundaries before either Apple workflow reaches Xcode.
+
 ## Signing and distribution
 
-CI compiles and analyzes unsigned simulator products without an Apple Developer Program membership, but does not publish them while the KSPlayer licensing gate is unresolved. Installing a personal build on an iPhone, iPad, or Apple TV requires Xcode signing with either a free Personal Team or paid Apple Developer Program team. App Store and TestFlight distribution require both a compatible KSPlayer/StreamVue software license and the paid Apple membership plus final App Store assets/provisioning.
+CI compiles and analyzes unsigned simulator products without an Apple Developer Program membership, but does not publish them while the KSPlayer licensing gate is unresolved. Installing a personal build on an iPhone, iPad, or Apple TV requires Xcode signing with either a free Personal Team or paid Apple Developer Program team. App Store and TestFlight distribution require both a compatible KSPlayer/StreamVue software license and the paid Apple membership plus final App Store metadata and provisioning.
+
+The manual **Build Apple Store candidates** workflow is the only signed Store archive lane. It remains fail-closed until both `store/premium-products.json` and `store/apple-distribution.json` are explicitly ready. Before running it, create the shared iOS/tvOS app record and non-consumable in App Store Connect, create an Apple Distribution certificate plus separate App Store provisioning profiles for iOS and tvOS, then configure these GitHub repository values:
+
+- Variables: `STREAMVUE_APPLE_BUNDLE_ID`, `STREAMVUE_APPLE_TEAM_ID`, and `STREAMVUE_APPLE_PREMIUM_PRODUCT_ID`
+- Secrets: `STREAMVUE_APPLE_DISTRIBUTION_CERTIFICATE_BASE64`, `STREAMVUE_APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD`, `STREAMVUE_APPLE_IOS_APP_STORE_PROFILE_BASE64`, and `STREAMVUE_APPLE_TVOS_APP_STORE_PROFILE_BASE64`
+
+The workflow resolves and tests dependencies before importing signing material, records the exact Swift package graph, validates both profiles and the distribution identity, builds two signed Store archives with the same bundle/product/version, exports audited IPAs, removes the temporary keychain and profiles, and uploads only a 30-day workflow artifact. It never uploads to App Store Connect automatically. Apple requires a new build number for every upload; the operator must confirm that history in App Store Connect.
+
+The certificate and profiles should be base64-encoded as single-line secret values. Keep their original files and passwords in a separate encrypted backup; never commit them. See Apple's [distribution guide](https://developer.apple.com/documentation/xcode/distributing-your-app-for-beta-testing-and-releases), [App Store profile instructions](https://developer.apple.com/help/account/provisioning-profiles/create-an-app-store-provisioning-profile), and [build upload guide](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds/).

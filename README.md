@@ -34,9 +34,9 @@ See [TV build and sideload instructions](platforms/tv-web/README.md) and the [te
 - KSPlayer 2.3.4 as the default Metal/FFmpeg engine, with hardware decoding, adaptive frame cadence, deinterlacing, configurable buffering/subtitle size, request headers, and transparent AVKit fallback
 - Direct AVFoundation/AVKit fallback with system-managed hardware decoding, compatible spatial audio/Atmos paths, Picture in Picture, AirPlay, and Apple TV display matching
 - Keychain-protected URL secrets, complete file protection for the cached playlist, launch refresh, and last-working-copy recovery
-- Xcode 26.6 CI that tests the shared Swift catalog and analyzes both app targets without publishing a license-incompatible binary
+- Xcode 26.6 CI that tests the shared Swift catalog, validates Apple TV layered artwork, and analyzes both app targets without publishing a license-incompatible binary
 
-The current Apple milestone is a source and simulator foundation, not an App Store package. Physical-device installation requires Xcode signing. The public KSPlayer dependency is GPL-3.0, so binary distribution additionally requires either a GPL-compatible StreamVue release or KSPlayer's separately licensed LGPL/commercial package. App Store and TestFlight distribution also require Apple Developer Program enrollment, final artwork, privacy answers, and signed archives. See [Apple build instructions](platforms/apple/README.md) and [KSPlayer licensing gate](docs/ksplayer-licensing.md).
+The Apple milestone is a source/simulator foundation plus a locked signed-candidate lane, not a published App Store package. Physical-device installation requires Xcode signing. The public KSPlayer dependency is GPL-3.0, so binary distribution additionally requires a verified GPL-compatible, separately licensed, or AVKit-only route. App Store and TestFlight distribution also require Apple Developer Program enrollment, privacy answers, and signed archives. The candidate lane uses one bundle ID and StoreKit product across iOS and tvOS, validates protected signing material, and stops before upload. See [Apple build instructions](platforms/apple/README.md) and [KSPlayer licensing gate](docs/ksplayer-licensing.md).
 
 ## 5.1 protected personal libraries
 
@@ -234,7 +234,7 @@ xcodebuild -project StreamVueApple.xcodeproj -scheme StreamVue -destination 'gen
 xcodebuild -project StreamVueApple.xcodeproj -scheme StreamVueTV -destination 'generic/platform=tvOS Simulator' CODE_SIGNING_ALLOWED=NO build
 ```
 
-CI compiles and analyzes unsigned iOS and tvOS simulator products but does not publish the KSPlayer-enabled binaries until StreamVue's software-license path is selected. These simulator products are not IPA files and cannot be installed on physical devices.
+CI compiles and analyzes unsigned iOS and tvOS simulator products but does not publish the KSPlayer-enabled binaries until StreamVue's software-license path is selected. These simulator products are not IPA files and cannot be installed on physical devices. A separate manual candidate workflow can create signed iOS/tvOS IPAs only after the premium, license, bundle, profile, and certificate gates all pass; it deliberately does not upload them.
 
 ## Verification tools
 

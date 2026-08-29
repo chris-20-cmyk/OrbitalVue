@@ -99,11 +99,13 @@ Each store adapter must:
 node tools/verify-premium-store-readiness.mjs
 ```
 
-A future store workflow must also run `node tools/verify-premium-store-readiness.mjs --require-ready <platform>`. That command intentionally fails today for every platform, preventing an unconfigured paid feature from being represented as purchasable.
+Every store candidate workflow must also run `node tools/verify-premium-store-readiness.mjs --require-ready <platform>` with the exact product and approved verification provider. That command intentionally fails for every currently unconfigured platform, preventing a paid feature from being represented as purchasable.
 
 Foundation CI exercises both modes. Direct-install test packages remain personal builds, while unsigned Google Play, Samsung, LG, and synthetic Windows MSIX artifacts are explicitly named as locked/layout-only and compile with media centers unavailable. They are verification artifacts, not sellable products.
 
 The Windows candidate workflow cannot produce a Partner Center artifact until `--require-ready windows` passes, the exact durable-add-on ID matches, and `verificationProvider` is `microsoft-store-license`. The Google Play candidate workflow likewise requires `--require-ready android`, an exact product-ID match, `verificationProvider` equal to `google-play-developer-api`, the production HTTPS verifier, and an upload certificate whose SHA-256 fingerprint matches the registered GitHub variable. Its signing key is supplied only through protected secrets and is never part of an artifact.
+
+The Apple candidate requires `--require-ready apple`, the exact shared StoreKit product, and `verificationProvider` equal to `storekit2-verified-transactions`. It separately requires the KSPlayer distribution decision to be ready, one bundle ID across iOS/tvOS, protected Apple Distribution signing material, and platform-specific App Store profiles. It exports reviewable IPAs but does not upload them or claim that App Store review has passed.
 
 Current adapters use StoreKit 2 on Apple, Google Play Billing on Android/Google TV, the Microsoft Store licensing API for a future MSIX release, and Samsung Checkout plus a server-side DPI verifier on Samsung TV. LG intentionally remains unavailable until a reviewed third-party billing provider and verifier are selected. No local preference or build flag may stand in for proof of purchase. Direct-download Windows builds stay personal/included.
 

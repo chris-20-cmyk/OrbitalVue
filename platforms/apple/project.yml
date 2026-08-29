@@ -92,9 +92,10 @@ targets:
         product: StreamVueUI
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.streamvue.player.tv
+        PRODUCT_BUNDLE_IDENTIFIER: com.streamvue.player
         PRODUCT_NAME: StreamVueTV
         CODE_SIGN_ENTITLEMENTS: Apps/tvOS/StreamVueTV.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: App Icon
     info:
       path: Generated/StreamVueTV-Info.plist
       properties:

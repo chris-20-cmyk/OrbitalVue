@@ -11,6 +11,8 @@ on:
       - "contracts/**"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-apple-brand-assets.mjs"
+      - "tools/verify-apple-distribution-readiness.mjs"
       - ".github/workflows/apple-foundation.yml"
   pull_request:
     paths:
@@ -18,6 +20,8 @@ on:
       - "contracts/**"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-apple-brand-assets.mjs"
+      - "tools/verify-apple-distribution-readiness.mjs"
       - ".github/workflows/apple-foundation.yml"
 
 permissions:
@@ -34,6 +38,8 @@ jobs:
         run: |
           node contracts/validate-contract.mjs
           node tools/verify-premium-store-readiness.mjs
+          node tools/verify-apple-brand-assets.mjs
+          node tools/verify-apple-distribution-readiness.mjs
 
   apple:
     name: iPhone, iPad, and Apple TV
@@ -62,7 +68,9 @@ jobs:
 
       - name: Generate the Xcode project
         working-directory: platforms/apple
-        run: xcodegen generate --spec project.yml
+        run: |
+          test "$(grep -c 'PRODUCT_BUNDLE_IDENTIFIER: com.streamvue.player' project.yml)" = "2"
+          xcodegen generate --spec project.yml
 
       - name: Test the shared Swift catalog and source layer
         run: swift test --package-path platforms/apple --parallel
@@ -70,9 +78,10 @@ jobs:
       - name: Validate the privacy manifest
         run: plutil -lint platforms/apple/Resources/PrivacyInfo.xcprivacy
 
-      - name: Validate the iOS app icon master
+      - name: Validate the Apple artwork
         shell: bash
         run: |
+          node tools/verify-apple-brand-assets.mjs
           ICON="platforms/apple/Apps/iOS/Assets.xcassets/AppIcon.appiconset/StreamVue-AppIcon-1024.png"
           test "$(sips -g pixelWidth "$ICON" | awk '/pixelWidth/ {print $2}')" = "1024"
           test "$(sips -g pixelHeight "$ICON" | awk '/pixelHeight/ {print $2}')" = "1024"
@@ -179,6 +188,8 @@ jobs:
             build
           test "$(plutil -extract StreamVueDistributionMode raw -o - artifacts/apple-derived-data/store-ios/Build/Products/Store-iphonesimulator/StreamVue.app/Info.plist)" = "store"
           test "$(plutil -extract StreamVueDistributionMode raw -o - artifacts/apple-derived-data/store-tvos/Build/Products/Store-appletvsimulator/StreamVueTV.app/Info.plist)" = "store"
+          test "$(plutil -extract CFBundleIdentifier raw -o - artifacts/apple-derived-data/store-ios/Build/Products/Store-iphonesimulator/StreamVue.app/Info.plist)" = "com.streamvue.player"
+          test "$(plutil -extract CFBundleIdentifier raw -o - artifacts/apple-derived-data/store-tvos/Build/Products/Store-appletvsimulator/StreamVueTV.app/Info.plist)" = "com.streamvue.player"
 
       - name: Verify simulator products without distributing them
         run: |

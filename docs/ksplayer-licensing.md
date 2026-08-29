@@ -16,3 +16,5 @@ There are three legitimate release paths:
 3. Ship an AVKit-only Apple build that does not link or embed KSPlayer.
 
 Code signing and software licensing are separate. A free Xcode Personal Team can sign a personal device build, while Apple Developer Program membership governs TestFlight/App Store signing. Neither one grants a KSPlayer distribution license.
+
+`store/apple-distribution.json` is the machine-readable decision record. `node tools/verify-apple-distribution-readiness.mjs` validates the pinned package and declared route in normal CI; its `--require-ready` mode is mandatory in the signed candidate workflow. The current `public-gpl` plus `unresolved` state is deliberately not distributable. Marking it ready without the corresponding package/source change, written terms review, and license evidence causes verification to fail.
