@@ -1,0 +1,46 @@
+name: Build public site candidate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  site-candidate:
+    name: Owner-approved GitHub Pages artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out StreamVue
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 11.19.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install the locked workspace
+        run: pnpm install --frozen-lockfile
+
+      - name: Require owner approval and verified live-site contract
+        run: node tools/verify-public-site-readiness.mjs --require-ready
+
+      - name: Build the static site
+        run: pnpm site:build
+
+      - name: Upload the manual Pages candidate
+        uses: actions/upload-artifact@v7
+        with:
+          name: streamvue-public-site-candidate
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            artifacts/public-site/
+            store/public-site-readiness.json

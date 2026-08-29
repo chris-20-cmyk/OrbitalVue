@@ -47,13 +47,14 @@ function titleCasePath(value) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-const [pkg, release, premium, privacy, listing, accessibility, apple, samsung, lg] = await Promise.all([
+const [pkg, release, premium, privacy, listing, accessibility, publicSite, apple, samsung, lg] = await Promise.all([
   json("package.json"),
   json("store/cross-platform-release.json"),
   json("store/premium-products.json"),
   json("store/privacy-data-inventory.json"),
   json("store/store-listing.json"),
   json("store/accessibility-readiness.json"),
+  json("store/public-site-readiness.json"),
   json("store/apple-distribution.json"),
   json("store/samsung-distribution.json"),
   json("store/lg-distribution.json")
@@ -74,6 +75,13 @@ const accessibilityShared = incomplete({
   baseline: accessibility.baseline,
   sharedReview: accessibility.sharedReview
 }, "accessibility.shared");
+const publicSiteShared = incomplete({
+  canonicalBaseUrl: publicSite.canonicalBaseUrl,
+  urls: publicSite.urls,
+  owner: publicSite.owner,
+  pages: publicSite.pages,
+  deployment: publicSite.deployment
+}, "publicSite");
 
 const reportPlatforms = {};
 for (const platform of platforms) {
@@ -94,6 +102,7 @@ for (const platform of platforms) {
     accessibility.platforms[platform].ready,
     [...accessibilityShared, ...incomplete(accessibility.platforms[platform], "accessibility.platform")]
   );
+  const publicSiteGate = gate(publicSite.ready, publicSiteShared);
 
   let distributionGate = { ready: true, blockers: [], note: "Candidate workflow and public application identity are structurally configured." };
   if (platform === "windows" && release.platforms.windows.applicationId === null) {
@@ -113,6 +122,7 @@ for (const platform of platforms) {
     privacy: privacyGate,
     listing: listingGate,
     accessibility: accessibilityGate,
+    publicSite: publicSiteGate,
     distribution: distributionGate
   };
   reportPlatforms[platform] = {

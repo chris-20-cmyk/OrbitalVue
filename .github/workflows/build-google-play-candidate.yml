@@ -63,6 +63,7 @@ jobs:
           fi
           node tools/verify-cross-platform-release-contract.mjs
           node tools/verify-privacy-readiness.mjs --require-ready android
+          node tools/verify-public-site-readiness.mjs --require-ready
           node tools/verify-store-listing-readiness.mjs --require-ready android
           node tools/verify-accessibility-readiness.mjs --require-ready android
           node tools/verify-premium-store-readiness.mjs \
@@ -181,4 +182,5 @@ jobs:
             artifacts/google-play/
             store/store-listing.json
             store/accessibility-readiness.json
+            store/public-site-readiness.json
             store/listing-assets/android/**

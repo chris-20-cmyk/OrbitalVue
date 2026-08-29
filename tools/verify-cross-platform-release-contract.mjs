@@ -47,6 +47,8 @@ const expectedPlatforms = {
     verificationProvider: "microsoft-store-license",
     requiredFragments: [
       "node tools/verify-privacy-readiness.mjs --require-ready windows",
+      "node tools/verify-public-site-readiness.mjs --require-ready",
+      "store/public-site-readiness.json",
       "node tools/verify-store-listing-readiness.mjs --require-ready windows",
       "store/store-listing.json",
       "node tools/verify-accessibility-readiness.mjs --require-ready windows",
@@ -66,6 +68,8 @@ const expectedPlatforms = {
     verificationProvider: "google-play-developer-api",
     requiredFragments: [
       "node tools/verify-privacy-readiness.mjs --require-ready android",
+      "node tools/verify-public-site-readiness.mjs --require-ready",
+      "store/public-site-readiness.json",
       "node tools/verify-store-listing-readiness.mjs --require-ready android",
       "store/store-listing.json",
       "node tools/verify-accessibility-readiness.mjs --require-ready android",
@@ -85,6 +89,8 @@ const expectedPlatforms = {
     verificationProvider: "storekit2-verified-transactions",
     requiredFragments: [
       "node tools/verify-privacy-readiness.mjs --require-ready apple",
+      "node tools/verify-public-site-readiness.mjs --require-ready",
+      "store/public-site-readiness.json",
       "node tools/verify-store-listing-readiness.mjs --require-ready apple",
       "store/store-listing.json",
       "node tools/verify-accessibility-readiness.mjs --require-ready apple",
@@ -104,6 +110,8 @@ const expectedPlatforms = {
     verificationProvider: "samsung-dpi-purchase-history",
     requiredFragments: [
       "node tools/verify-privacy-readiness.mjs --require-ready samsung",
+      "node tools/verify-public-site-readiness.mjs --require-ready",
+      "store/public-site-readiness.json",
       "node tools/verify-store-listing-readiness.mjs --require-ready samsung",
       "store/store-listing.json",
       "node tools/verify-accessibility-readiness.mjs --require-ready samsung",
@@ -123,6 +131,8 @@ const expectedPlatforms = {
     verificationProvider: null,
     requiredFragments: [
       "node tools/verify-privacy-readiness.mjs --require-ready lg",
+      "node tools/verify-public-site-readiness.mjs --require-ready",
+      "store/public-site-readiness.json",
       "node tools/verify-store-listing-readiness.mjs --require-ready lg",
       "store/store-listing.json",
       "node tools/verify-accessibility-readiness.mjs --require-ready lg",
@@ -263,6 +273,27 @@ for (const fragment of [
   if (!releaseContractWorkflow.includes(fragment)) {
     fail(`release contract workflow is missing readiness report fragment: ${fragment}`);
   }
+}
+
+const publicSiteWorkflow = await readText(".github/workflows/build-public-site-candidate.yml");
+if (JSON.stringify(topLevelChildKeys(publicSiteWorkflow, "on")) !== JSON.stringify(["workflow_dispatch"])) {
+  fail("public site candidate must have workflow_dispatch as its only trigger");
+}
+if (JSON.stringify(topLevelChildKeys(publicSiteWorkflow, "permissions")) !== JSON.stringify(["contents"])
+  || !/^ {2}contents:\s*read\s*$/m.test(publicSiteWorkflow)) {
+  fail("public site candidate must use read-only repository contents permission");
+}
+for (const fragment of [
+  "node tools/verify-public-site-readiness.mjs --require-ready",
+  "pnpm site:build",
+  "actions/upload-artifact@v7",
+  "artifacts/public-site/",
+  "store/public-site-readiness.json"
+]) {
+  if (!publicSiteWorkflow.includes(fragment)) fail(`public site candidate is missing release control: ${fragment}`);
+}
+for (const forbidden of ["actions/deploy-pages", "pages: write", "id-token: write", "gh-pages"]) {
+  if (publicSiteWorkflow.includes(forbidden)) fail(`public site candidate must stop before deployment: ${forbidden}`);
 }
 
 console.log(

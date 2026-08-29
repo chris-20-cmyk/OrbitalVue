@@ -39,6 +39,7 @@ jobs:
             --validate-only
           node tools/verify-cross-platform-release-contract.mjs
           node tools/verify-privacy-readiness.mjs --require-ready lg
+          node tools/verify-public-site-readiness.mjs --require-ready
           node tools/verify-store-listing-readiness.mjs --require-ready lg
           node tools/verify-accessibility-readiness.mjs --require-ready lg
           node tools/verify-lg-distribution-readiness.mjs \
@@ -212,4 +213,5 @@ jobs:
             artifacts/lg-webos/
             store/store-listing.json
             store/accessibility-readiness.json
+            store/public-site-readiness.json
             store/listing-assets/lg/**

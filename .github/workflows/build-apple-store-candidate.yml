@@ -56,6 +56,7 @@ jobs:
           fi
           node tools/verify-cross-platform-release-contract.mjs
           node tools/verify-privacy-readiness.mjs --require-ready apple
+          node tools/verify-public-site-readiness.mjs --require-ready
           node tools/verify-store-listing-readiness.mjs --require-ready apple
           node tools/verify-accessibility-readiness.mjs --require-ready apple
           node tools/verify-premium-store-readiness.mjs \
@@ -423,4 +424,5 @@ jobs:
             artifacts/apple-store/SHA256SUMS.txt
             store/store-listing.json
             store/accessibility-readiness.json
+            store/public-site-readiness.json
             store/listing-assets/apple/**

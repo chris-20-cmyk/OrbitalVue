@@ -12,12 +12,15 @@ on:
       - ".github/workflows/build-apple-store-candidate.yml"
       - ".github/workflows/build-samsung-store-candidate.yml"
       - ".github/workflows/build-lg-seller-lounge-candidate.yml"
+      - ".github/workflows/build-public-site-candidate.yml"
       - ".github/workflows/release-contract.yml"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
       - "tools/verify-privacy-readiness.mjs"
       - "tools/verify-store-listing-readiness.mjs"
       - "tools/verify-accessibility-readiness.mjs"
+      - "tools/verify-public-site-readiness.mjs"
+      - "site/**"
       - "tools/generate-release-readiness-report.mjs"
       - "tools/verify-apple-brand-assets.mjs"
       - "tools/verify-apple-distribution-readiness.mjs"
@@ -48,12 +51,15 @@ on:
       - ".github/workflows/build-apple-store-candidate.yml"
       - ".github/workflows/build-samsung-store-candidate.yml"
       - ".github/workflows/build-lg-seller-lounge-candidate.yml"
+      - ".github/workflows/build-public-site-candidate.yml"
       - ".github/workflows/release-contract.yml"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
       - "tools/verify-privacy-readiness.mjs"
       - "tools/verify-store-listing-readiness.mjs"
       - "tools/verify-accessibility-readiness.mjs"
+      - "tools/verify-public-site-readiness.mjs"
+      - "site/**"
       - "tools/generate-release-readiness-report.mjs"
       - "tools/verify-apple-brand-assets.mjs"
       - "tools/verify-apple-distribution-readiness.mjs"
@@ -101,6 +107,7 @@ jobs:
           node tools/verify-privacy-readiness.mjs
           node tools/verify-store-listing-readiness.mjs
           node tools/verify-accessibility-readiness.mjs
+          node tools/verify-public-site-readiness.mjs
           node tools/verify-apple-brand-assets.mjs
           node tools/verify-apple-distribution-readiness.mjs
           node tools/verify-samsung-distribution-readiness.mjs

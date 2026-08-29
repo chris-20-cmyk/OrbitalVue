@@ -236,6 +236,18 @@ xcodebuild -project StreamVueApple.xcodeproj -scheme StreamVueTV -destination 'g
 
 CI compiles and analyzes unsigned iOS and tvOS simulator products but does not publish the KSPlayer-enabled binaries until StreamVue's software-license path is selected. These simulator products are not IPA files and cannot be installed on physical devices. A separate manual candidate workflow can create signed iOS/tvOS IPAs only after the premium, license, bundle, profile, and certificate gates all pass; it deliberately does not upload them.
 
+### Privacy and support site
+
+```powershell
+pnpm site:check
+pnpm site:dev
+pnpm site:build
+```
+
+The static site in `site/` provides the StreamVue overview, plain-language privacy policy, and support guidance needed by every Store lane. It is intentionally marked as a draft. The manual **Build public site candidate** workflow stops at an artifact and remains locked until `store/public-site-readiness.json` contains verified owner approval, a monitored privacy contact, reviewed copy, canonical HTTPS URLs, and a verified live deployment. Every Store candidate also requires this shared site gate.
+
+The visual source concepts and the implementation comparison are recorded in [the public-site fidelity ledger](docs/design/streamvue-support-site-fidelity.md).
+
 ## Verification tools
 
 - `StreamVue.PlaylistProbe` validates large-list parsing and favorite-key uniqueness.
