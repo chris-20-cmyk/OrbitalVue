@@ -67,3 +67,16 @@ if (requireReadyIndex >= 0) {
     `Premium readiness manifest is valid: ${ready.length} ready; locked by design: ${locked.join(", ")}.`
   );
 }
+
+const expectProductIndex = process.argv.indexOf("--expect-product-id");
+if (expectProductIndex >= 0) {
+  const requested = process.argv[expectProductIndex + 1];
+  const expectedProductId = process.argv[expectProductIndex + 2];
+  if (!expectedPlatforms.includes(requested) || !expectedProductId) {
+    fail(`--expect-product-id expects a platform (${expectedPlatforms.join(", ")}) and product ID`);
+  }
+  if (manifest.platforms[requested].productId !== expectedProductId) {
+    fail(`${requested}.productId does not exactly match the release build input`);
+  }
+  console.log(`${requested} release product ID exactly matches the readiness manifest.`);
+}

@@ -16,7 +16,7 @@ The repository defaults to the personal mode so current private builds remain fu
 
 | Platform | Store-mode build switch | Result today |
 | --- | --- | --- |
-| Windows | `-p:StreamVueDistributionMode=Store` | Compiles locked; an MSIX Store build can verify a configured durable add-on |
+| Windows | `-p:StreamVueDistributionMode=Store` | MSIX lane compiles locked; a package with exact Partner Center identity can verify a configured durable add-on |
 | Android / Google TV | `-PstreamVueDistributionMode=store` | Compiles with Plex/Emby locked |
 | Samsung television shell | `VITE_STREAMVUE_DISTRIBUTION_MODE=store` | Compiles locked; Samsung Checkout becomes available only with the exact seller IDs and HTTPS verifier below |
 | LG television shell | `VITE_STREAMVUE_DISTRIBUTION_MODE=store` | Remains explicitly locked because LG no longer provides native TV billing |
@@ -37,7 +37,9 @@ The Windows Store build uses `Windows.Services.Store`, not a local preference or
 
 StreamVue finds the matching `StoreProduct.InAppOfferToken`, displays the Microsoft Store title and localized price, launches the Store-owned purchase dialog on the WPF UI thread, and rebuilds access from the exact matching entry in `StoreAppLicense.AddOnLicenses`. A successful dialog result alone never unlocks the feature. `StoreContext.OfflineLicensesChanged` triggers another license query, so a removed entitlement stops protected media-center playback and locks credential actions.
 
-The purchase surface intentionally remains unavailable for an unpackaged EXE, an elevated process, an app without an exact product ID, or an add-on that is not associated with the current package. The public Store route therefore still needs a Partner Center product plus the planned MSIX packaging lane. Direct-download/Velopack builds remain personal and include Plex/Emby without a purchase.
+The purchase surface intentionally remains unavailable for an unpackaged EXE, an elevated process, an app without an exact product ID, or an add-on that is not associated with the current package. `tools/build-windows-msix.ps1` now creates and independently inspects the x64 MSIX using the exact package identity, publisher, publisher display name, version, and add-on ID copied from Partner Center. It refuses placeholders in the real candidate workflow, removes Velopack from the Store dependency graph, and emits an unsigned `.msix` for Partner Center; Microsoft signs accepted Store submissions. Direct-download/Velopack builds remain personal and include Plex/Emby without a purchase.
+
+Microsoft Store owns updates for the MSIX lane. The Store build does not initialize Velopack, compile its runtime package, contact GitHub Releases, expose release-channel/rollback controls, or download a parallel installer. Its in-app update panel instead explains that Store settings control signed automatic updates. The personal Windows build retains Stable/Preview checks and failed-launch rollback.
 
 ### Android and Google TV
 
@@ -99,7 +101,7 @@ node tools/verify-premium-store-readiness.mjs
 
 A future store workflow must also run `node tools/verify-premium-store-readiness.mjs --require-ready <platform>`. That command intentionally fails today for every platform, preventing an unconfigured paid feature from being represented as purchasable.
 
-Foundation CI exercises both modes. Direct-install test packages remain personal builds, while unsigned Google Play, Samsung, and LG artifacts are explicitly named `store-locked` and compile with media centers unavailable. They are verification artifacts, not sellable products; a future store-publish job must pass the platform-specific `--require-ready` gate first.
+Foundation CI exercises both modes. Direct-install test packages remain personal builds, while unsigned Google Play, Samsung, LG, and synthetic Windows MSIX artifacts are explicitly named as locked/layout-only and compile with media centers unavailable. They are verification artifacts, not sellable products. The Windows candidate workflow cannot produce a Partner Center artifact until `--require-ready windows` passes and its repository-variable product ID exactly matches `store/premium-products.json`.
 
 Current adapters use StoreKit 2 on Apple, Google Play Billing on Android/Google TV, the Microsoft Store licensing API for a future MSIX release, and Samsung Checkout plus a server-side DPI verifier on Samsung TV. LG intentionally remains unavailable until a reviewed third-party billing provider and verifier are selected. No local preference or build flag may stand in for proof of purchase. Direct-download Windows builds stay personal/included.
 

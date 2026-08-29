@@ -1809,7 +1809,7 @@
                     <Grid Margin="28,24,28,18">
                         <StackPanel>
                             <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="StreamVue update" />
-                            <TextBlock Margin="0,6,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Text="Install the newest release without uninstalling your current version." />
+                            <TextBlock x:Name="UpdateSubtitleText" Margin="0,6,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Text="Install the newest release without uninstalling your current version." />
                         </StackPanel>
                         <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseUpdate_Click">
                             <TextBlock FontSize="18" Text="×" />
@@ -1845,7 +1845,7 @@
                                 </Grid>
                             </Border>
 
-                            <Border Margin="0,14,0,0" Padding="17,15" CornerRadius="14" Background="#0D131D" BorderBrush="#273247" BorderThickness="1">
+                            <Border x:Name="UpdateOptionsPanel" Margin="0,14,0,0" Padding="17,15" CornerRadius="14" Background="#0D131D" BorderBrush="#273247" BorderThickness="1">
                                 <StackPanel>
                                     <Grid>
                                         <StackPanel>
@@ -1868,14 +1868,14 @@
                             </Border>
 
                             <Border Margin="0,14,0,2" Padding="15,12" CornerRadius="12" Background="#101C24" BorderBrush="#24414A" BorderThickness="1">
-                                <TextBlock Foreground="#90A8AF" FontSize="10.5" LineHeight="16" Text="Every update is verified before installation. Rollback protection keeps one local last-known-good package until the new version proves it can run." TextWrapping="Wrap" />
+                                <TextBlock x:Name="UpdateProtectionNote" Foreground="#90A8AF" FontSize="10.5" LineHeight="16" Text="Every update is verified before installation. Rollback protection keeps one local last-known-good package until the new version proves it can run." TextWrapping="Wrap" />
                             </Border>
                         </StackPanel>
                     </ScrollViewer>
 
                     <Border Grid.Row="2" Margin="0,18,0,0" Padding="28,16" Background="#0D131D" BorderBrush="#273247" BorderThickness="0,1,0,0">
                         <Grid>
-                            <TextBlock VerticalAlignment="Center" Foreground="#65748A" FontSize="9.5" Text="IN-PLACE WINDOWS UPDATE" />
+                            <TextBlock x:Name="UpdateFooterLabel" VerticalAlignment="Center" Foreground="#65748A" FontSize="9.5" Text="IN-PLACE WINDOWS UPDATE" />
                             <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                                 <Button x:Name="UpdateCloseButton" Margin="0,0,10,0" Style="{StaticResource SecondaryButton}" Click="CloseUpdate_Click" Content="Close" />
                                 <Button x:Name="UpdateActionButton" Style="{StaticResource PrimaryButton}" Click="UpdateAction_Click" Content="Check for updates" />

@@ -20,9 +20,31 @@ No paid certificate is needed to continue building StreamVue 5.1. The generated 
 
 ### 1. Microsoft Store MSIX — recommended free path
 
-Microsoft's current onboarding flow at [storedeveloper.microsoft.com](https://storedeveloper.microsoft.com/) has no registration fee. An MSIX submitted through the Store does not need a CA-trusted certificate: after certification, Microsoft re-signs it and provides trusted installation and Store-managed updates. StreamVue's current Velopack EXE remains useful for personal preview releases, but a separate MSIX packaging lane is needed for this route. See Microsoft's [publishing guide](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/publish-first-app) and [Store overview](https://learn.microsoft.com/en-us/windows/apps/publish/get-started).
+Microsoft's current onboarding flow at [storedeveloper.microsoft.com](https://storedeveloper.microsoft.com/) has no registration fee. An MSIX submitted through the Store does not need a CA-trusted certificate: after certification, Microsoft signs it and provides trusted installation and Store-managed updates. StreamVue's Velopack EXE remains the personal/direct-download lane; the repository now includes a separate, reproducible MSIX packaging lane for Partner Center. See Microsoft's [publishing guide](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/publish-first-app), [Store overview](https://learn.microsoft.com/en-us/windows/apps/publish/get-started), and [MSIX upload formats](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/upload-app-packages).
 
-The source now includes the Microsoft Store durable-add-on adapter. A Store package must define the Partner Center product ID with `-p:StreamVueDistributionMode=Store -p:StreamVuePremiumProductId=<exact product ID>`. Purchase UI remains fail-closed until the executable is running with the final MSIX package identity; the existing direct-download/Velopack build does not impersonate Store ownership.
+The source includes the Microsoft Store durable-add-on adapter and package builder. A Store package must use the exact package Identity Name, Publisher, Publisher display name, and durable add-on Product ID copied from Partner Center. Purchase UI remains fail-closed until the executable is running with that final MSIX package identity; the existing direct-download/Velopack build does not impersonate Store ownership.
+
+The Store candidate is built with:
+
+```powershell
+.\tools\build-windows-msix.ps1 `
+  -IdentityName '<Partner Center package identity name>' `
+  -Publisher '<Partner Center CN= publisher>' `
+  -PublisherDisplayName '<Partner Center publisher display name>' `
+  -Version '5.1.0.0' `
+  -PremiumProductId '<durable add-on product ID>'
+```
+
+The script targets `Windows.Desktop` 10.0.19041 or later as a medium-integrity packaged classic app with `runFullTrust`, creates exact 50/44/150-pixel Store assets, strips unused x86 VLC files and symbols, and reopens the finished package to verify its identity, payload, architecture, Store audit, and lack of Velopack files. Its output is unsigned by design: Partner Center accepts `.msix` and Microsoft signs the certified submission. The synthetic CI package uses unmistakable test identity values and is not a Store candidate.
+
+After the real package identity and durable add-on exist, set these public GitHub repository variables and update the Windows entry in `store/premium-products.json` before running **Build Windows Store candidate**:
+
+- `STREAMVUE_WINDOWS_IDENTITY_NAME`
+- `STREAMVUE_WINDOWS_PUBLISHER`
+- `STREAMVUE_WINDOWS_PUBLISHER_DISPLAY_NAME`
+- `STREAMVUE_WINDOWS_PREMIUM_PRODUCT_ID`
+
+The workflow fails unless Windows is explicitly marked ready and the build input product ID exactly matches the readiness manifest. It produces an unsigned `.msix` plus SHA-256 checksum for manual Partner Center upload; it does not publish, enroll, or make a purchase claim automatically.
 
 ### 2. SignPath Foundation — free if StreamVue becomes open source
 

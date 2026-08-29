@@ -52,6 +52,12 @@ RTMP is preserved in the portable catalog for Windows compatibility but is not c
 
 Before public store submission, each client must pass its native remote/touch accessibility checks, use store-specific artwork, publish a privacy policy, explain that playlists are user supplied, and test with licensed streams owned by the tester. Signing and paid enrollment do not block source development, simulator/emulator verification, or platform-provided free personal-device workflows; physical-device requirements remain platform-specific.
 
+### Windows package and update boundary
+
+Windows has two deliberately separate distribution graphs. Personal/direct-download builds include Velopack, Stable/Preview GitHub release checks, in-place installation, and failed-launch rollback. Microsoft Store builds compile without Velopack and run under an x64 `Windows.Desktop` MSIX identity; the Store signs, installs, and updates them. The in-app update surface reports that Store-managed state instead of contacting GitHub or offering a second installer.
+
+`packaging/windows-msix/AppxManifest.template.xml` declares the WPF process as a `packagedClassicApp` at `mediumIL` with `runFullTrust`. `tools/build-windows-msix.ps1` injects only exact non-secret Partner Center identifiers, writes a package audit, and invokes the Windows SDK MakeAppx tool. `tools/verify-windows-msix.ps1` then unpacks the result and independently verifies identity, Windows target, execution model, assets, premium product ID, and absence of Velopack. The public candidate workflow is fail-closed behind the Windows premium-readiness entry; foundation CI uses an obviously synthetic, non-publishable identity.
+
 ## Apple 5.1 foundation
 
 `platforms/apple` contains a dependency-free `StreamVueCore` module and a `StreamVueUI` module that integrates the pinned KSPlayer package. XcodeGen creates separate `StreamVue` iPhone/iPad and `StreamVueTV` Apple TV application targets from the committed `project.yml`, keeping generated Xcode project state out of source control.

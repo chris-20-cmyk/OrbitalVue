@@ -1,4 +1,6 @@
+#if !STREAMVUE_STORE_BUILD
 using Velopack;
+#endif
 using StreamVue.Player.Services;
 
 namespace StreamVue.Player;
@@ -8,7 +10,7 @@ public static class Program
     [STAThread]
     public static void Main(string[] args)
     {
-#if !STREAMVUE_QA_BUILD
+#if !STREAMVUE_QA_BUILD && !STREAMVUE_STORE_BUILD
         VelopackApp.Build().Run();
 #endif
 

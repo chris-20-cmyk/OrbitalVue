@@ -53,7 +53,9 @@ jobs:
         run: |
           node tools/verify-premium-store-readiness.mjs
           dotnet build StreamVue.Native.slnx -c Release --no-restore
+          dotnet restore src/StreamVue.Player/StreamVue.Player.csproj -p:StreamVueDistributionMode=Store
           dotnet build src/StreamVue.Player/StreamVue.Player.csproj -c Release --no-restore -p:StreamVueDistributionMode=Store
+          dotnet restore src/StreamVue.Player/StreamVue.Player.csproj -p:StreamVueDistributionMode=Personal
           dotnet build src/StreamVue.Player/StreamVue.Player.csproj -c Release --no-restore -p:StreamVueDistributionMode=Personal
           dotnet run --project tools/StreamVue.FeatureProbe/StreamVue.FeatureProbe.csproj -c Release --no-build
           dotnet run --project tools/StreamVue.PlaylistProbe/StreamVue.PlaylistProbe.csproj -c Release --no-build -- --routing-scale 70000

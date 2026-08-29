@@ -5451,11 +5451,17 @@ public partial class MainWindow : Window
     private async void OpenUpdate_Click(object sender, RoutedEventArgs e)
     {
         OpenUpdateModal();
+        if (_appUpdateService.IsStoreManaged) return;
         await CheckForUpdatesAsync();
     }
 
     private async Task CheckForUpdatesOnStartupAsync()
     {
+        if (_appUpdateService.IsStoreManaged)
+        {
+            SetUpdateNavigationCurrent();
+            return;
+        }
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(3));
@@ -5476,10 +5482,12 @@ public partial class MainWindow : Window
 
     private void SetUpdateNavigationCurrent()
     {
-        UpdateNavigationText.Text = "UPDATE";
+        UpdateNavigationText.Text = _appUpdateService.IsStoreManaged ? "UPDATES" : "UPDATE";
         UpdateNavigationButton.ClearValue(BackgroundProperty);
         UpdateNavigationButton.ClearValue(BorderBrushProperty);
-        UpdateNavigationButton.ToolTip = "Check for a new StreamVue version";
+        UpdateNavigationButton.ToolTip = _appUpdateService.IsStoreManaged
+            ? "Updates are managed by Microsoft Store"
+            : "Check for a new StreamVue version";
     }
 
     private void OpenUpdateModal()
@@ -5489,14 +5497,27 @@ public partial class MainWindow : Window
         CurrentVersionText.Text = _appUpdateService.CurrentVersion;
         UpdateStateBadge.Background = new SolidColorBrush(Color.FromRgb(23, 54, 47));
         UpdateStateBadgeText.Foreground = LiveBrush;
-        UpdateStateBadgeText.Text = "READY";
-        UpdateStatusText.Text = "Ready to check for a new version";
-        UpdateDetailText.Text = $"Checking the {UpdateChannelLabel} channel. Your playlists and settings stay on this PC.";
+        UpdateStateBadgeText.Text = _appUpdateService.IsStoreManaged ? "STORE" : "READY";
+        UpdateStatusText.Text = _appUpdateService.IsStoreManaged
+            ? "Updates are managed by Microsoft Store"
+            : "Ready to check for a new version";
+        UpdateDetailText.Text = _appUpdateService.IsStoreManaged
+            ? "Microsoft Store installs signed StreamVue updates automatically according to your Store settings. No separate StreamVue download is required."
+            : $"Checking the {UpdateChannelLabel} channel. Your playlists and settings stay on this PC.";
+        UpdateSubtitleText.Text = _appUpdateService.IsStoreManaged
+            ? "Microsoft Store keeps this installation current."
+            : "Install the newest release without uninstalling your current version.";
         UpdateProgress.Visibility = Visibility.Collapsed;
         UpdateProgress.IsIndeterminate = false;
         UpdateProgress.Value = 0;
-        UpdateActionButton.Content = "Check for updates";
-        UpdateActionButton.IsEnabled = true;
+        UpdateOptionsPanel.Visibility = _appUpdateService.IsStoreManaged ? Visibility.Collapsed : Visibility.Visible;
+        UpdateProtectionNote.Text = _appUpdateService.IsStoreManaged
+            ? "Microsoft Store verifies, signs, installs, and updates this package. Your playlists and settings remain private on this PC."
+            : "Every update is verified before installation. Rollback protection keeps one local last-known-good package until the new version proves it can run.";
+        UpdateFooterLabel.Text = _appUpdateService.IsStoreManaged ? "MICROSOFT STORE UPDATE" : "IN-PLACE WINDOWS UPDATE";
+        UpdateActionButton.Visibility = _appUpdateService.IsStoreManaged ? Visibility.Collapsed : Visibility.Visible;
+        UpdateActionButton.Content = _appUpdateService.IsStoreManaged ? "Managed by Store" : "Check for updates";
+        UpdateActionButton.IsEnabled = !_appUpdateService.IsStoreManaged;
         ShowModal(UpdateOverlay);
     }
 
@@ -5555,6 +5576,15 @@ public partial class MainWindow : Window
                     UpdateStatusText.Text = "Install StreamVue once to enable updates";
                     UpdateDetailText.Text = "This copy is running directly from a build folder. The installed release can update itself from this screen without uninstalling first.";
                     UpdateActionButton.Content = "Check again";
+                    break;
+                case AppUpdateState.StoreManaged:
+                    SetUpdateNavigationCurrent();
+                    UpdateStateBadge.Background = new SolidColorBrush(Color.FromRgb(27, 41, 60));
+                    UpdateStateBadgeText.Foreground = new SolidColorBrush(Color.FromRgb(170, 182, 200));
+                    UpdateStateBadgeText.Text = "STORE";
+                    UpdateStatusText.Text = "Updates are managed by Microsoft Store";
+                    UpdateDetailText.Text = "Microsoft Store installs signed StreamVue updates automatically according to your Store settings. No separate StreamVue download is required.";
+                    UpdateActionButton.Content = "Managed by Store";
                     break;
             }
         }
@@ -5634,7 +5664,7 @@ public partial class MainWindow : Window
     private void SetUpdateBusy(bool busy)
     {
         _updateBusy = busy;
-        UpdateActionButton.IsEnabled = !busy;
+        UpdateActionButton.IsEnabled = !busy && !_appUpdateService.IsStoreManaged;
         UpdateCloseButton.IsEnabled = !busy;
         UpdateNavigationButton.IsEnabled = !busy;
     }

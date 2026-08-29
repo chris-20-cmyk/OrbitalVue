@@ -2,9 +2,11 @@ using System.Reflection;
 using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
+#if !STREAMVUE_STORE_BUILD
 using Velopack;
 using Velopack.Locators;
 using Velopack.Sources;
+#endif
 
 namespace StreamVue.Player.Services;
 
@@ -12,7 +14,8 @@ public enum AppUpdateState
 {
     Available,
     Current,
-    DeveloperBuild
+    DeveloperBuild,
+    StoreManaged
 }
 
 public sealed record AppUpdateCheckResult(AppUpdateState State, string CurrentVersion, string? AvailableVersion = null);
@@ -25,21 +28,44 @@ public sealed class AppUpdateService
     // local feed testing possible without changing the production application.
     public const string RepositoryUrl = "https://github.com/chris-20-cmyk/StreamVue";
 
+#if !STREAMVUE_STORE_BUILD
     private UpdateManager? _manager;
     private UpdateInfo? _availableUpdate;
+#endif
     private readonly SemaphoreSlim _checkGate = new(1, 1);
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private readonly string _recoveryDirectory;
 
     public string CurrentVersion { get; } = ReadCurrentVersion();
+    public bool IsStoreManaged { get; }
 
-    public bool HasAvailableUpdate => _availableUpdate is not null;
+    public bool HasAvailableUpdate
+    {
+        get
+        {
+#if STREAMVUE_STORE_BUILD
+            return false;
+#else
+            return !IsStoreManaged && _availableUpdate is not null;
+#endif
+        }
+    }
 
-    public void ClearAvailableUpdate() => _availableUpdate = null;
+    public void ClearAvailableUpdate()
+    {
+#if !STREAMVUE_STORE_BUILD
+        _availableUpdate = null;
+#endif
+    }
 
-    public AppUpdateService(string? recoveryDirectory = null)
+    public AppUpdateService(string? recoveryDirectory = null, bool? storeManagedOverride = null)
     {
         _recoveryDirectory = recoveryDirectory ?? StreamVueDataPaths.Resolve("update-recovery");
+#if STREAMVUE_STORE_BUILD
+        IsStoreManaged = true;
+#else
+        IsStoreManaged = storeManagedOverride ?? false;
+#endif
     }
 
     public async Task<AppUpdateCheckResult> CheckAsync(AppUpdateChannel channel = AppUpdateChannel.Preview)
@@ -47,10 +73,17 @@ public sealed class AppUpdateService
         await _checkGate.WaitAsync();
         try
         {
+#if STREAMVUE_STORE_BUILD
+            return new AppUpdateCheckResult(AppUpdateState.StoreManaged, CurrentVersion);
+#else
+            _manager = null;
+            _availableUpdate = null;
+            if (IsStoreManaged)
+                return new AppUpdateCheckResult(AppUpdateState.StoreManaged, CurrentVersion);
+
             var repositoryUrl = Environment.GetEnvironmentVariable("STREAMVUE_UPDATE_REPOSITORY") ?? RepositoryUrl;
             var source = new GithubSource(repositoryUrl, null, prerelease: channel == AppUpdateChannel.Preview);
             _manager = new UpdateManager(source);
-            _availableUpdate = null;
 
             if (!_manager.IsInstalled)
                 return new AppUpdateCheckResult(AppUpdateState.DeveloperBuild, CurrentVersion);
@@ -63,6 +96,7 @@ public sealed class AppUpdateService
                 AppUpdateState.Available,
                 CurrentVersion,
                 _availableUpdate.TargetFullRelease.Version.ToString());
+#endif
         }
         finally
         {
@@ -75,6 +109,12 @@ public sealed class AppUpdateService
         bool automaticRollback = true,
         CancellationToken cancellationToken = default)
     {
+#if STREAMVUE_STORE_BUILD
+        await Task.CompletedTask;
+        throw new InvalidOperationException("Microsoft Store installs are updated by Microsoft Store.");
+#else
+        if (IsStoreManaged)
+            throw new InvalidOperationException("Microsoft Store installs are updated by Microsoft Store.");
         if (_manager is null || _availableUpdate is null)
             throw new InvalidOperationException("Check for an update before downloading it.");
 
@@ -97,6 +137,7 @@ public sealed class AppUpdateService
             if (!string.IsNullOrWhiteSpace(healthToken)) CancelPendingRollback(healthToken);
             throw;
         }
+#endif
     }
 
     public async Task ConfirmHealthyLaunchAsync(string healthToken)
@@ -143,6 +184,7 @@ public sealed class AppUpdateService
         }
     }
 
+#if !STREAMVUE_STORE_BUILD
     private async Task<string?> PrepareRollbackAsync(
         UpdateManager manager,
         UpdateInfo update,
@@ -222,6 +264,7 @@ public sealed class AppUpdateService
             TryDelete(GetPendingPath());
         TryDelete(GetWatchdogPath(healthToken));
     }
+#endif
 
     private async Task<PendingRollback?> ReadPendingAsync()
     {

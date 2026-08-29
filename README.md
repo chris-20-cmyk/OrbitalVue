@@ -48,6 +48,7 @@ The current Apple milestone is a source and simulator foundation, not an App Sto
 - Windows VOD resume and seek controls using server-provided playback positions, with normal source-manager refresh, offline fallback, and safe credential cleanup
 - A cross-platform premium-access boundary: personal builds include Plex/Emby, while store builds collect no credentials and make no media-server requests until a native one-time purchase is verified
 - Native one-time purchase foundations: StoreKit 2 on iOS/tvOS, Google Play Billing 9.1.0 on Android/Google TV, a Microsoft Store durable-license adapter on Windows, and Samsung Checkout with a protected DPI verifier, including localized pricing, Buy/Restore actions, live entitlement changes, and fail-closed verification. LG is explicitly unavailable until its required third-party billing route is contracted and verified.
+- Reproducible x64 Windows MSIX packaging with exact Partner Center identity injection, Store-owned updates, no Velopack runtime in Store packages, exact tile assets, independent package inspection, and a readiness-gated candidate workflow.
 
 These integrations connect only to a server entered by the user and do not include a hosted relay, public-media discovery, or third-party content.
 
@@ -198,6 +199,8 @@ dotnet build StreamVue.Native.slnx -c Release --no-restore
 ```
 
 The application targets Windows x64 and the current .NET 10 LTS release.
+
+The personal build uses Velopack and GitHub Releases for in-app updates. The Microsoft Store lane uses an unsigned MSIX that Partner Center signs and updates; run `tools/build-windows-msix.ps1` with the exact identity and durable add-on values from Partner Center. See [distribution and signing choices](docs/distribution-and-signing.md) and [premium access readiness](docs/premium-entitlements.md).
 
 ### Android and Google TV
 

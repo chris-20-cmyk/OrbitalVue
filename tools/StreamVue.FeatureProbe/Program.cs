@@ -944,6 +944,19 @@ try
 
     if (!Uri.TryCreate(AppUpdateService.RepositoryUrl, UriKind.Absolute, out var updateRepository) || updateRepository.Scheme != Uri.UriSchemeHttps)
         throw new InvalidOperationException("The public update repository URL is not a valid HTTPS address.");
+    var storeManagedUpdates = new AppUpdateService(Path.Combine(testRoot, "store-updates"), storeManagedOverride: true);
+    var storeManagedResult = await storeManagedUpdates.CheckAsync();
+    if (!storeManagedUpdates.IsStoreManaged || storeManagedUpdates.HasAvailableUpdate ||
+        storeManagedResult.State != AppUpdateState.StoreManaged)
+        throw new InvalidOperationException("Microsoft Store update isolation failed.");
+    try
+    {
+        await storeManagedUpdates.DownloadAndRestartAsync(_ => { });
+        throw new InvalidOperationException("Microsoft Store update isolation accepted a Velopack download.");
+    }
+    catch (InvalidOperationException exception) when (exception.Message == "Microsoft Store installs are updated by Microsoft Store.")
+    {
+    }
 
     var recordingStart = new DateTimeOffset(2026, 8, 22, 20, 15, 0, TimeSpan.Zero);
     var recordingFileName = DvrRecordingService.CreateRecordingFileName("US: CON? Sports", "Final / Highlights", recordingStart);
@@ -1353,6 +1366,7 @@ try
     Console.WriteLine("Privacy-filtered diagnostics bundle: PASS");
     Console.WriteLine("Nearby unpaired wireless-display casting: PASS");
     Console.WriteLine("Public update channel configuration: PASS");
+    Console.WriteLine("Microsoft Store-managed update isolation: PASS");
     Console.WriteLine("Stable/Preview update and automatic rollback preferences: PASS");
     return 0;
 }
