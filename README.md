@@ -9,7 +9,7 @@ StreamVue is a native IPTV player. The Windows 4.0 preview uses .NET, WPF, LibVL
 - Native Media3 HLS, progressive MPEG-TS/MP4, and RTSP playback with per-channel request headers
 - Hardware-backed MediaCodec decoding, decoder fallback, seamless frame-rate hints, six aspect modes, and immersive full screen
 - A versioned portable catalog contract and synthetic conformance fixtures shared with Samsung Tizen, LG webOS, and Apple clients
-- Repeatable cloud builds that produce a personal-test APK and an unsigned Google Play AAB without requiring a paid certificate
+- Repeatable cloud builds that produce a personal-test APK, an explicitly locked unsigned foundation AAB, and a readiness-gated upload-key-signed Google Play candidate without requiring a paid certificate
 
 The Android Studio project lives in `platforms/android`; the shared contract lives in `contracts`. StreamVue does not ship or discover channels. Users connect sources they are authorized to use.
 
@@ -49,6 +49,7 @@ The current Apple milestone is a source and simulator foundation, not an App Sto
 - A cross-platform premium-access boundary: personal builds include Plex/Emby, while store builds collect no credentials and make no media-server requests until a native one-time purchase is verified
 - Native one-time purchase foundations: StoreKit 2 on iOS/tvOS, Google Play Billing 9.1.0 on Android/Google TV, a Microsoft Store durable-license adapter on Windows, and Samsung Checkout with a protected DPI verifier, including localized pricing, Buy/Restore actions, live entitlement changes, and fail-closed verification. LG is explicitly unavailable until its required third-party billing route is contracted and verified.
 - Reproducible x64 Windows MSIX packaging with exact Partner Center identity injection, Store-owned updates, no Velopack runtime in Store packages, exact tile assets, independent package inspection, and a readiness-gated candidate workflow.
+- A protected Google Play upload-key lane with explicit versioning, exact product/verifier readiness, registered-certificate fingerprint checks, and a signed AAB/checksum artifact for manual Play Console upload.
 
 These integrations connect only to a server entered by the user and do not include a hosted relay, public-media discovery, or third-party content.
 
@@ -208,7 +209,7 @@ The personal build uses Velopack and GitHub Releases for in-app updates. The Mic
 .\platforms\android\gradlew.bat -p platforms\android testDebugUnitTest lintDebug assembleDebug bundleRelease
 ```
 
-This produces a personal-test APK and a Google Play AAB. No paid certificate is required for the development build.
+This produces a personal-test APK and an unsigned, locked Google Play foundation AAB. No paid certificate is required for development. The separate manual **Build Google Play candidate** workflow uses a protected self-generated upload key and cannot run until the real Play product, verifier, and readiness manifest agree; see the [Android upload-signing instructions](platforms/android/README.md).
 
 ### Samsung Tizen and LG webOS
 

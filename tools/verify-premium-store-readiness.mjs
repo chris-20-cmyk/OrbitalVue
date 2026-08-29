@@ -80,3 +80,16 @@ if (expectProductIndex >= 0) {
   }
   console.log(`${requested} release product ID exactly matches the readiness manifest.`);
 }
+
+const expectProviderIndex = process.argv.indexOf("--expect-verification-provider");
+if (expectProviderIndex >= 0) {
+  const requested = process.argv[expectProviderIndex + 1];
+  const expectedProvider = process.argv[expectProviderIndex + 2];
+  if (!expectedPlatforms.includes(requested) || !expectedProvider) {
+    fail(`--expect-verification-provider expects a platform (${expectedPlatforms.join(", ")}) and provider`);
+  }
+  if (manifest.platforms[requested].verificationProvider !== expectedProvider) {
+    fail(`${requested}.verificationProvider does not exactly match the release requirement`);
+  }
+  console.log(`${requested} release verification provider exactly matches the readiness manifest.`);
+}

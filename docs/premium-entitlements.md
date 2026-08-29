@@ -17,7 +17,7 @@ The repository defaults to the personal mode so current private builds remain fu
 | Platform | Store-mode build switch | Result today |
 | --- | --- | --- |
 | Windows | `-p:StreamVueDistributionMode=Store` | MSIX lane compiles locked; a package with exact Partner Center identity can verify a configured durable add-on |
-| Android / Google TV | `-PstreamVueDistributionMode=store` | Compiles with Plex/Emby locked |
+| Android / Google TV | `-PstreamVueDistributionMode=store` | Compiles locked by default; a signed candidate is possible only after exact Play product/verifier readiness |
 | Samsung television shell | `VITE_STREAMVUE_DISTRIBUTION_MODE=store` | Compiles locked; Samsung Checkout becomes available only with the exact seller IDs and HTTPS verifier below |
 | LG television shell | `VITE_STREAMVUE_DISTRIBUTION_MODE=store` | Remains explicitly locked because LG no longer provides native TV billing |
 | Apple | Xcode configuration `Store` (injects `StreamVueDistributionMode=store` into the app Info.plist) | Compiles with Plex/Emby locked |
@@ -101,7 +101,9 @@ node tools/verify-premium-store-readiness.mjs
 
 A future store workflow must also run `node tools/verify-premium-store-readiness.mjs --require-ready <platform>`. That command intentionally fails today for every platform, preventing an unconfigured paid feature from being represented as purchasable.
 
-Foundation CI exercises both modes. Direct-install test packages remain personal builds, while unsigned Google Play, Samsung, LG, and synthetic Windows MSIX artifacts are explicitly named as locked/layout-only and compile with media centers unavailable. They are verification artifacts, not sellable products. The Windows candidate workflow cannot produce a Partner Center artifact until `--require-ready windows` passes and its repository-variable product ID exactly matches `store/premium-products.json`.
+Foundation CI exercises both modes. Direct-install test packages remain personal builds, while unsigned Google Play, Samsung, LG, and synthetic Windows MSIX artifacts are explicitly named as locked/layout-only and compile with media centers unavailable. They are verification artifacts, not sellable products.
+
+The Windows candidate workflow cannot produce a Partner Center artifact until `--require-ready windows` passes, the exact durable-add-on ID matches, and `verificationProvider` is `microsoft-store-license`. The Google Play candidate workflow likewise requires `--require-ready android`, an exact product-ID match, `verificationProvider` equal to `google-play-developer-api`, the production HTTPS verifier, and an upload certificate whose SHA-256 fingerprint matches the registered GitHub variable. Its signing key is supplied only through protected secrets and is never part of an artifact.
 
 Current adapters use StoreKit 2 on Apple, Google Play Billing on Android/Google TV, the Microsoft Store licensing API for a future MSIX release, and Samsung Checkout plus a server-side DPI verifier on Samsung TV. LG intentionally remains unavailable until a reviewed third-party billing provider and verifier are selected. No local preference or build flag may stand in for proof of purchase. Direct-download Windows builds stay personal/included.
 

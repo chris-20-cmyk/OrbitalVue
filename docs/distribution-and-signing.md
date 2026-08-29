@@ -14,7 +14,7 @@ StreamVue can be built and tested on Windows, Android, Android TV, Google TV, Sa
 | LG webOS TV | Free LG developer account and Developer Mode testing | LG Seller Lounge enrollment and review; confirm any seller terms during enrollment |
 | iPhone / iPad / Apple TV | Free Apple Account with short-lived personal provisioning | Apple Developer Program: US$99 per membership year; no one-time App Store option |
 
-No paid certificate is needed to continue building StreamVue 5.1. The generated Android debug APK installs on personal devices after Android's normal sideload confirmation. The generated AAB is intentionally unsigned so Google Play can apply the account's upload and app-signing setup later. Apple CI compiles unsigned simulator products but does not publish KSPlayer-enabled binaries until the separate software-license gate is resolved; physical Apple devices require Xcode signing with either a free Personal Team or a paid team.
+No paid certificate is needed to continue building StreamVue 5.1. The generated Android debug APK installs on personal devices after Android's normal sideload confirmation. Foundation CI deliberately emits an unsigned, locked AAB; the separate Google Play candidate workflow signs a publishable AAB with a protected, self-generated upload key after the real product and verifier pass readiness. Google then applies the Play-managed app-signing key to delivered APKs. Apple CI compiles unsigned simulator products but does not publish KSPlayer-enabled binaries until the separate software-license gate is resolved; physical Apple devices require Xcode signing with either a free Personal Team or a paid team.
 
 ## Windows choices
 
@@ -72,10 +72,15 @@ Android Studio/Gradle creates a free debug signing key automatically. A long-liv
 
 Google documents a [US$25 one-time Play Console registration fee](https://support.google.com/googleplay/android-developer/answer/6112435). Play App Signing then protects the app-signing key and delivers optimized packages. New personal accounts must also complete Google's identity, device, and testing requirements. There is no monthly developer-account fee in the documented registration path.
 
-The committed StreamVue pipeline produces:
+The committed StreamVue pipeline produces three deliberately separate outputs:
 
 - `app-debug.apk` for personal installation and device testing.
-- `app-release.aab` for later Play Console upload/signing configuration.
+- An unsigned `app-release.aab` from foundation CI with Store mode locked and no product/verifier identity. This artifact cannot be mistaken for a signed Play candidate.
+- A readiness-gated, upload-key-signed AAB from **Build Google Play candidate** for manual Play Console upload.
+
+The candidate workflow accepts an explicit positive version code (which must never be reused) and release version name. It requires an exact Play Console product ID, HTTPS Google Play Developer API verifier, protected upload keystore/password secrets, and the registered upload-certificate SHA-256 fingerprint. It verifies tests, lint, Store BuildConfig values, JAR/AAB signature, RSA key strength, certificate fingerprint, and absence of private key files before publishing only a temporary workflow artifact. It never commits a key and does not publish to a Play track.
+
+The upload key can be generated locally with `keytool` at no charge. It is not a CA-issued certificate and has no monthly fee. Google Play developer registration remains the separate US$25 one-time account fee described above. See the [Android build and upload-key instructions](../platforms/android/README.md), Google's [Play App Signing overview](https://support.google.com/googleplay/android-developer/answer/9842756), and [Android app-signing guide](https://developer.android.com/studio/publish/app-signing).
 
 ## Samsung TV
 

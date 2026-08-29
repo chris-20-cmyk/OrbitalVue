@@ -46,7 +46,8 @@ jobs:
           }
           node tools/verify-premium-store-readiness.mjs `
             --require-ready windows `
-            --expect-product-id windows $env:WINDOWS_PREMIUM_PRODUCT_ID
+            --expect-product-id windows $env:WINDOWS_PREMIUM_PRODUCT_ID `
+            --expect-verification-provider windows microsoft-store-license
 
       - name: Restore the Store dependency graph
         shell: pwsh

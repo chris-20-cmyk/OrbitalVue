@@ -33,6 +33,71 @@ if (streamVuePremiumVerificationUrl.isNotEmpty()) {
     }
 }
 
+val streamVueVersionCodeText = providers.gradleProperty("streamVueVersionCode")
+    .orElse("5000001")
+    .get()
+    .trim()
+val streamVueVersionCode = streamVueVersionCodeText.toIntOrNull()
+require(streamVueVersionCode != null && streamVueVersionCode in 1..2_100_000_000) {
+    "streamVueVersionCode must be a positive integer no greater than Google Play's 2100000000 limit."
+}
+val streamVueVersionName = providers.gradleProperty("streamVueVersionName")
+    .orElse("5.0.0-alpha.1")
+    .get()
+    .trim()
+require(Regex("^[0-9A-Za-z][0-9A-Za-z._+-]{0,99}$").matches(streamVueVersionName)) {
+    "streamVueVersionName must be a non-empty release label using letters, digits, dot, underscore, plus, or hyphen."
+}
+
+val streamVueRequireStoreSigningText = providers.gradleProperty("streamVueRequireStoreSigning")
+    .orElse("false")
+    .get()
+    .trim()
+    .lowercase()
+require(streamVueRequireStoreSigningText == "true" || streamVueRequireStoreSigningText == "false") {
+    "streamVueRequireStoreSigning must be true or false."
+}
+val streamVueRequireStoreSigning = streamVueRequireStoreSigningText == "true"
+val streamVueUploadKeystorePath = System.getenv("STREAMVUE_ANDROID_KEYSTORE_PATH")?.trim().orEmpty()
+val streamVueUploadStorePassword = System.getenv("STREAMVUE_ANDROID_KEYSTORE_PASSWORD").orEmpty()
+val streamVueUploadKeyAlias = System.getenv("STREAMVUE_ANDROID_KEY_ALIAS")?.trim().orEmpty()
+val streamVueUploadKeyPassword = System.getenv("STREAMVUE_ANDROID_KEY_PASSWORD").orEmpty()
+val streamVueSigningValues = listOf(
+    streamVueUploadKeystorePath,
+    streamVueUploadStorePassword,
+    streamVueUploadKeyAlias,
+    streamVueUploadKeyPassword
+)
+val streamVueHasAnySigningValue = streamVueSigningValues.any(String::isNotEmpty)
+val streamVueHasCompleteSigningValues = streamVueSigningValues.all(String::isNotEmpty)
+require(!streamVueHasAnySigningValue || streamVueHasCompleteSigningValues) {
+    "Android release signing is incomplete. Supply all four STREAMVUE_ANDROID_KEYSTORE_* / KEY_* environment values."
+}
+require(!streamVueHasAnySigningValue ||
+    (streamVueDistributionMode == "store" && streamVueRequireStoreSigning)) {
+    "The protected Google Play upload key may be used only for an explicitly required store candidate."
+}
+require(streamVueUploadKeyAlias.isEmpty() ||
+    (streamVueUploadKeyAlias.length <= 256 && streamVueUploadKeyAlias.none(Char::isISOControl))) {
+    "STREAMVUE_ANDROID_KEY_ALIAS is invalid."
+}
+if (streamVueHasCompleteSigningValues) {
+    require(rootProject.file(streamVueUploadKeystorePath).isFile) {
+        "STREAMVUE_ANDROID_KEYSTORE_PATH does not identify a readable keystore file."
+    }
+}
+if (streamVueRequireStoreSigning) {
+    require(streamVueDistributionMode == "store") {
+        "A required Google Play signing build must use streamVueDistributionMode=store."
+    }
+    require(streamVuePremiumProductId.isNotEmpty() && streamVuePremiumVerificationUrl.isNotEmpty()) {
+        "A signed Google Play candidate requires the exact premium product ID and HTTPS verifier URL."
+    }
+    require(streamVueHasCompleteSigningValues) {
+        "A signed Google Play candidate requires the complete upload-keystore environment configuration."
+    }
+}
+
 fun quotedBuildConfig(value: String): String =
     "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
@@ -49,8 +114,8 @@ android {
         applicationId = "com.streamvue.player"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5_000_001
-        versionName = "5.0.0-alpha.1"
+        versionCode = streamVueVersionCode
+        versionName = streamVueVersionName
         buildConfigField("String", "DISTRIBUTION_MODE", quotedBuildConfig(streamVueDistributionMode))
         buildConfigField("String", "PREMIUM_PRODUCT_ID", quotedBuildConfig(streamVuePremiumProductId))
         buildConfigField("String", "PREMIUM_VERIFICATION_URL", quotedBuildConfig(streamVuePremiumVerificationUrl))
@@ -59,10 +124,22 @@ android {
         vectorDrawables.useSupportLibrary = true
     }
 
+    val streamVueReleaseSigning = if (streamVueHasCompleteSigningValues) {
+        signingConfigs.create("streamVueRelease") {
+            storeFile = rootProject.file(streamVueUploadKeystorePath)
+            storePassword = streamVueUploadStorePassword
+            keyAlias = streamVueUploadKeyAlias
+            keyPassword = streamVueUploadKeyPassword
+        }
+    } else {
+        null
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = streamVueReleaseSigning
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

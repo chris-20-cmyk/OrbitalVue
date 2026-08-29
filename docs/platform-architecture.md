@@ -52,6 +52,12 @@ RTMP is preserved in the portable catalog for Windows compatibility but is not c
 
 Before public store submission, each client must pass its native remote/touch accessibility checks, use store-specific artwork, publish a privacy policy, explain that playlists are user supplied, and test with licensed streams owned by the tester. Signing and paid enrollment do not block source development, simulator/emulator verification, or platform-provided free personal-device workflows; physical-device requirements remain platform-specific.
 
+### Android package and signing boundary
+
+Android also has two separate release paths. Personal device testing uses the generated debug APK. Foundation CI compiles Store mode with Plex/Emby fail-closed and deliberately verifies that its AAB is unsigned. It has no product ID or verifier URL and is named as a locked verification artifact.
+
+The manual Google Play candidate workflow is the only path that accepts StreamVue's upload-key environment variables. It refuses personal mode, partial signing configuration, missing product/verifier inputs, a readiness-manifest mismatch, an unregistered upload certificate, or an invalid version input. The operator must still supply a version code that has never previously been uploaded because only Play Console has authoritative version history. The workflow runs unit tests and lint, builds the optimized release AAB, verifies the JAR signature and RSA upload certificate, rejects packaged private-key files, and emits a checksum alongside the AAB. It stops before publication so the signed candidate can be reviewed and uploaded through Play Console. Google Play App Signing remains responsible for the app-signing key used on device-delivered APKs.
+
 ### Windows package and update boundary
 
 Windows has two deliberately separate distribution graphs. Personal/direct-download builds include Velopack, Stable/Preview GitHub release checks, in-place installation, and failed-launch rollback. Microsoft Store builds compile without Velopack and run under an x64 `Windows.Desktop` MSIX identity; the Store signs, installs, and updates them. The in-app update surface reports that Store-managed state instead of contacting GitHub or offering a second installer.
