@@ -64,6 +64,7 @@ jobs:
           node tools/verify-cross-platform-release-contract.mjs
           node tools/verify-privacy-readiness.mjs --require-ready android
           node tools/verify-store-listing-readiness.mjs --require-ready android
+          node tools/verify-accessibility-readiness.mjs --require-ready android
           node tools/verify-premium-store-readiness.mjs \
             --require-ready android \
             --expect-product-id android "$ANDROID_PREMIUM_PRODUCT_ID" \
@@ -179,4 +180,5 @@ jobs:
           path: |
             artifacts/google-play/
             store/store-listing.json
+            store/accessibility-readiness.json
             store/listing-assets/android/**

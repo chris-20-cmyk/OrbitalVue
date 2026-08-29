@@ -307,6 +307,7 @@ private struct TVChannelButton: View {
     @Environment(StreamVueStore.self) private var store
     @Environment(StreamVueTheme.self) private var theme
     @Environment(\.isFocused) private var isFocused
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: action) {
@@ -340,7 +341,10 @@ private struct TVChannelButton: View {
         }
         .buttonStyle(.plain)
         .scaleEffect(isFocused ? 1.025 : 1)
-        .animation(.easeOut(duration: 0.14), value: isFocused)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isFocused)
+        .accessibilityLabel(channel.name)
+        .accessibilityValue("\(channel.kind.label)\(isSelected ? ", selected" : "")")
+        .accessibilityHint("Starts playback")
     }
 }
 #endif

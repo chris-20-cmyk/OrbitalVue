@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chooseNextIndex, type RectLike } from "../src/navigation/SpatialNavigator.js";
+import { chooseNextIndex, chooseTabIndex, type RectLike } from "../src/navigation/SpatialNavigator.js";
 
 function rect(left: number, top: number, width = 100, height = 60): RectLike {
   return { left, top, right: left + width, bottom: top + height, width, height };
@@ -20,5 +20,12 @@ describe("remote spatial navigation", () => {
   it("keeps focus at a hard boundary", () => {
     expect(chooseNextIndex(grid, 0, "up")).toBe(0);
     expect(chooseNextIndex(grid, 0, "left")).toBe(0);
+  });
+
+  it("contains forward and reverse tab focus inside the active scope", () => {
+    expect(chooseTabIndex(4, 3, false)).toBe(0);
+    expect(chooseTabIndex(4, 0, true)).toBe(3);
+    expect(chooseTabIndex(4, 1, false)).toBe(2);
+    expect(chooseTabIndex(0, -1, false)).toBe(-1);
   });
 });

@@ -169,7 +169,7 @@
                     </Grid>
 
                     <Grid Grid.Row="1" Margin="20,0,20,12">
-                        <TextBox x:Name="SearchBox" Height="42" Padding="39,10,12,10" TextChanged="SearchBox_TextChanged" />
+                        <TextBox x:Name="SearchBox" Height="42" Padding="39,10,12,10" TextChanged="SearchBox_TextChanged" AutomationProperties.Name="Search channels or groups" />
                         <TextBlock Margin="14,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" Foreground="#66758B" FontSize="17" IsHitTestVisible="False" Text="⌕" />
                         <TextBlock x:Name="SearchHint" Margin="39,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" Foreground="#5E6B7F" IsHitTestVisible="False" Text="Search channels or groups" />
                     </Grid>
@@ -190,7 +190,8 @@
                                   ScrollViewer.CanContentScroll="True"
                                   VirtualizingPanel.IsVirtualizing="True"
                                   VirtualizingPanel.VirtualizationMode="Recycling"
-                                  SelectionChanged="CategoryBox_SelectionChanged">
+                                  SelectionChanged="CategoryBox_SelectionChanged"
+                                  AutomationProperties.Name="Channel group">
                             <ComboBox.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <VirtualizingStackPanel />
@@ -212,7 +213,8 @@
                              VirtualizingPanel.VirtualizationMode="Recycling"
                              SelectionChanged="ChannelList_SelectionChanged"
                              PreviewMouseLeftButtonDown="ChannelList_PreviewMouseLeftButtonDown"
-                             PreviewMouseMove="ChannelList_PreviewMouseMove">
+                             PreviewMouseMove="ChannelList_PreviewMouseMove"
+                             AutomationProperties.Name="Channels">
                         <ListBox.GroupStyle>
                             <GroupStyle HidesIfEmpty="True">
                                 <GroupStyle.HeaderTemplate>
@@ -248,7 +250,6 @@
                                 <Setter Property="Margin" Value="0,2" />
                                 <Setter Property="Background" Value="Transparent" />
                                 <Setter Property="BorderThickness" Value="0" />
-                                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="ListBoxItem">
@@ -430,7 +431,7 @@
                                                 <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="18" FontWeight="SemiBold" Foreground="#F0F4FA" Text="Quick Tune" />
                                                 <TextBlock Margin="0,4,0,0" Foreground="#7D8DA4" FontSize="9.5" Text="Type a channel number, name, or group • Enter to tune" />
                                             </StackPanel>
-                                            <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseQuickTune_Click"><TextBlock FontSize="17" Text="×" /></Button>
+                                            <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseQuickTune_Click" ToolTip="Close Quick Tune"><TextBlock FontSize="17" Text="×" /></Button>
                                         </Grid>
                                         <TextBox x:Name="QuickTuneBox" Margin="0,15,0,10" Height="42" Padding="13,9" FontSize="13" TextChanged="QuickTuneBox_TextChanged" PreviewKeyDown="QuickTuneBox_PreviewKeyDown" />
                                         <ListBox x:Name="QuickTuneList" MaxHeight="340" Background="Transparent" BorderThickness="0" MouseDoubleClick="QuickTuneList_MouseDoubleClick" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
@@ -520,12 +521,12 @@
                             </Button>
                         </StackPanel>
                         <StackPanel Grid.Column="2" Margin="16,0" VerticalAlignment="Center">
-                            <TextBlock x:Name="PlaybackStatusText" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="IDLE" />
-                            <TextBlock x:Name="PlaybackDetailText" Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" Text="No channel selected" TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="PlaybackStatusText" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="IDLE" AutomationProperties.LiveSetting="Polite" />
+                            <TextBlock x:Name="PlaybackDetailText" Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" Text="No channel selected" TextTrimming="CharacterEllipsis" AutomationProperties.LiveSetting="Polite" />
                             <Grid x:Name="RecordingSeekPanel" Margin="0,5,0,0" Visibility="Collapsed">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <TextBlock x:Name="RecordingPositionText" VerticalAlignment="Center" Foreground="#8E9DB1" FontSize="8.5" Text="0:00" />
-                                <Slider x:Name="PlaybackSeekSlider" Grid.Column="1" Height="15" Margin="9,0" Minimum="0" Maximum="1" IsMoveToPointEnabled="True" PreviewMouseLeftButtonDown="PlaybackSeekSlider_PreviewMouseLeftButtonDown" PreviewMouseLeftButtonUp="PlaybackSeekSlider_PreviewMouseLeftButtonUp" KeyUp="PlaybackSeekSlider_KeyUp" Foreground="{StaticResource AccentBrush}" />
+                                <Slider x:Name="PlaybackSeekSlider" Grid.Column="1" Height="15" Margin="9,0" Minimum="0" Maximum="1" IsMoveToPointEnabled="True" PreviewMouseLeftButtonDown="PlaybackSeekSlider_PreviewMouseLeftButtonDown" PreviewMouseLeftButtonUp="PlaybackSeekSlider_PreviewMouseLeftButtonUp" KeyUp="PlaybackSeekSlider_KeyUp" Foreground="{StaticResource AccentBrush}" AutomationProperties.Name="Playback position" />
                                 <TextBlock x:Name="RecordingDurationText" Grid.Column="2" VerticalAlignment="Center" Foreground="#8E9DB1" FontSize="8.5" Text="0:00" />
                             </Grid>
                             <Grid x:Name="TimeshiftPanel" Margin="0,5,0,0" Visibility="Collapsed">
@@ -539,9 +540,9 @@
                             <Button Style="{StaticResource IconButton}" Click="Mute_Click" ToolTip="Mute">
                                 <TextBlock x:Name="VolumeGlyph" FontSize="17" Text="◖" />
                             </Button>
-                            <Slider x:Name="VolumeSlider" Width="94" Minimum="0" Maximum="100" Value="82" ValueChanged="VolumeSlider_ValueChanged" Foreground="{StaticResource AccentBrush}" />
+                            <Slider x:Name="VolumeSlider" Width="94" Minimum="0" Maximum="100" Value="82" ValueChanged="VolumeSlider_ValueChanged" Foreground="{StaticResource AccentBrush}" AutomationProperties.Name="Volume" />
                         </StackPanel>
-                        <ComboBox x:Name="AspectBox" Grid.Column="4" Width="92" Margin="16,0,0,0" SelectionChanged="AspectBox_SelectionChanged" ToolTip="Aspect ratio" />
+                        <ComboBox x:Name="AspectBox" Grid.Column="4" Width="92" Margin="16,0,0,0" SelectionChanged="AspectBox_SelectionChanged" ToolTip="Aspect ratio" AutomationProperties.Name="Aspect ratio" />
                     </Grid>
                 </Border>
             </Grid>
@@ -832,7 +833,7 @@
                                                     </ItemsControl.ItemContainerStyle>
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
-                                                            <Button Width="{Binding Width}" Height="64" Padding="11,8" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Click="GuideProgramme_Click" ToolTip="Watch now • right-click for reminder and recording options" FocusVisualStyle="{x:Null}">
+                                                            <Button Width="{Binding Width}" Height="64" Padding="11,8" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Click="GuideProgramme_Click" ToolTip="Watch now • right-click for reminder and recording options">
                                                                 <Button.Style>
                                                                     <Style TargetType="Button">
                                                                         <Setter Property="Foreground" Value="#DCE5F2" />
@@ -903,7 +904,7 @@
                             </Grid>
                         </Border>
                         <ListBox x:Name="GuideList" Grid.Row="1" Background="#0C111A" BorderBrush="#273246" BorderThickness="1,0,1,1" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" MouseDoubleClick="GuideList_MouseDoubleClick">
-                            <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                            <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Background" Value="Transparent" /></Style></ListBox.ItemContainerStyle>
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <Border x:Name="GuideRowCard" Padding="16,12" Background="Transparent" BorderBrush="#1C2635" BorderThickness="0,0,0,1">
@@ -1129,7 +1130,7 @@
                             <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Connect your sources" />
                             <TextBlock Margin="0,6,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Text="Connect IPTV or your personal Plex and Emby libraries. Credentials stay protected on this PC." />
                         </StackPanel>
-                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseImport_Click">
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseImport_Click" ToolTip="Close source manager">
                             <TextBlock FontSize="18" Text="×" />
                         </Button>
                     </Grid>
@@ -1191,7 +1192,6 @@
                                                 <Setter Property="Margin" Value="0,0,0,8" />
                                                 <Setter Property="Background" Value="Transparent" />
                                                 <Setter Property="BorderThickness" Value="0" />
-                                                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
                                             </Style>
                                         </ListBox.ItemContainerStyle>
                                         <ListBox.ItemTemplate>
@@ -1443,7 +1443,7 @@
                             <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Playlist health" />
                             <TextBlock Margin="0,6,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="StreamVue verifies the source at launch and protects the last working copy." />
                         </StackPanel>
-                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="ClosePlaylistHealth_Click"><TextBlock FontSize="18" Text="×" /></Button>
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="ClosePlaylistHealth_Click" ToolTip="Close playlist health center"><TextBlock FontSize="18" Text="×" /></Button>
                     </Grid>
                     <Border Margin="0,22,0,0" Padding="18" CornerRadius="14" Background="#0B111A" BorderBrush="#28364A" BorderThickness="1">
                         <Grid>
@@ -1488,7 +1488,7 @@
                             </StackPanel>
                             <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Find missing guide data, artwork gaps, weak feeds, duplicate routes, and replay-ready channels." />
                         </StackPanel>
-                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseChannelHealth_Click"><TextBlock FontSize="18" Text="×" /></Button>
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseChannelHealth_Click" ToolTip="Close channel health center"><TextBlock FontSize="18" Text="×" /></Button>
                     </Grid>
                     <Grid Grid.Row="1" Margin="24,0,24,0">
                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
@@ -1513,7 +1513,7 @@
                             </ComboBox>
                         </Grid>
                         <ListBox x:Name="ChannelHealthList" Grid.Row="2" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
-                            <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,8" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                            <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,8" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style></ListBox.ItemContainerStyle>
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <Border x:Name="HealthCard" Padding="14,12" CornerRadius="12" Background="#0D131D" BorderBrush="#273247" BorderThickness="1">
@@ -1553,7 +1553,7 @@
                             <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="StreamVue settings" />
                             <TextBlock Margin="0,6,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Text="Tune playback, convenience, recovery, and private support tools for this PC." />
                         </StackPanel>
-                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseSettings_Click">
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseSettings_Click" ToolTip="Close playback settings">
                             <TextBlock FontSize="18" Text="×" />
                         </Button>
                     </Grid>
@@ -1811,7 +1811,7 @@
                             <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="StreamVue update" />
                             <TextBlock x:Name="UpdateSubtitleText" Margin="0,6,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Text="Install the newest release without uninstalling your current version." />
                         </StackPanel>
-                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseUpdate_Click">
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseUpdate_Click" ToolTip="Close update window">
                             <TextBlock FontSize="18" Text="×" />
                         </Button>
                     </Grid>
@@ -2154,7 +2154,7 @@
                                 <Grid>
                                     <TextBlock x:Name="DvrSeriesRuleEmptyText" Margin="18" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#66758B" FontSize="10.5" Text="No recurring series rules" />
                                     <ListBox x:Name="DvrSeriesRuleList" MaxHeight="150" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style></ListBox.ItemContainerStyle>
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
                                                 <Border Padding="15,11" BorderBrush="#202B3B" BorderThickness="0,0,0,1">
@@ -2210,7 +2210,7 @@
                                 <Grid>
                                     <TextBlock x:Name="DvrScheduleEmptyText" Margin="18" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#66758B" FontSize="10.5" Text="No scheduled recordings" />
                                     <ListBox x:Name="DvrScheduleList" MaxHeight="220" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style></ListBox.ItemContainerStyle>
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
                                                 <Border Padding="15,12" BorderBrush="#202B3B" BorderThickness="0,0,0,1">
@@ -2254,7 +2254,7 @@
                                 <Grid>
                                     <TextBlock x:Name="DvrLibraryEmptyText" Margin="18" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#66758B" FontSize="10.5" Text="Recordings will appear here" />
                                     <ListBox x:Name="DvrLibraryList" MaxHeight="190" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style></ListBox.ItemContainerStyle>
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
                                                 <Border Padding="15,11" BorderBrush="#202B3B" BorderThickness="0,0,0,1">
@@ -2319,7 +2319,7 @@
                             </StackPanel>
                             <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="One channel, every available provider feed, ranked from real playback history." />
                         </StackPanel>
-                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseSignalRouting_Click"><TextBlock FontSize="18" Text="×" /></Button>
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseSignalRouting_Click" ToolTip="Close signal routing"><TextBlock FontSize="18" Text="×" /></Button>
                     </Grid>
 
                     <Grid Grid.Row="1" Margin="24,0">
@@ -2360,7 +2360,7 @@
                             </Border>
 
                             <ListBox x:Name="SignalRouteList" Grid.Row="2" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
-                                <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,9" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                                <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,9" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style></ListBox.ItemContainerStyle>
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <Border x:Name="SignalFeedCard" Padding="16,14" CornerRadius="14" Background="#0D131D" BorderBrush="#273247" BorderThickness="1">
@@ -2440,7 +2440,7 @@
                             </StackPanel>
                             <TextBlock x:Name="MappingStatusText" Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Match playlist channels to XMLTV listings that have different names." />
                         </StackPanel>
-                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseMapping_Click"><TextBlock FontSize="18" Text="×" /></Button>
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseMapping_Click" ToolTip="Close guide mapping"><TextBlock FontSize="18" Text="×" /></Button>
                     </Grid>
 
                     <Grid Grid.Row="1" Margin="24,0,24,0">
@@ -2453,7 +2453,7 @@
                                     <StackPanel><TextBlock Foreground="#DCE5F2" FontSize="11" FontWeight="SemiBold" Text="Playlist channels needing attention" /><TextBlock Margin="0,4,0,0" Foreground="#6E7D92" FontSize="9" Text="Temporary game feeds are excluded automatically." /></StackPanel>
                                 </Border>
                                 <ListBox x:Name="MappingChannelList" Grid.Row="1" Background="Transparent" BorderThickness="0" SelectionChanged="MappingChannelList_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
-                                    <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                                    <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style></ListBox.ItemContainerStyle>
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <Border x:Name="MappingChannelCard" Padding="13,11" Background="Transparent" BorderBrush="#202B3B" BorderThickness="0,0,0,1">
@@ -2478,7 +2478,7 @@
                                     <TextBlock x:Name="MappingSearchHint" Margin="35,0,0,0" VerticalAlignment="Center" Foreground="#56667C" FontSize="9.5" IsHitTestVisible="False" Text="Search XMLTV channel names or IDs" />
                                 </Grid>
                                 <ListBox x:Name="MappingCandidateList" Grid.Row="2" Margin="14,0,14,14" Background="#0A1018" BorderBrush="#243044" BorderThickness="1" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
-                                    <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                                    <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style></ListBox.ItemContainerStyle>
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <Border x:Name="CandidateCard" Padding="13,9" Background="Transparent" BorderBrush="#1D2736" BorderThickness="0,0,0,1"><StackPanel><TextBlock Foreground="#DCE4EF" FontSize="10.5" FontWeight="SemiBold" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" /><TextBlock Margin="0,3,0,0" Foreground="#66758B" FontSize="8.5" Text="{Binding ChannelId}" TextTrimming="CharacterEllipsis" /></StackPanel></Border>

@@ -64,6 +64,9 @@ struct SourceStatusPill: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(theme.border, lineWidth: 1)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(usedCachedFallback ? "Offline source copy" : "Source ready")
+        .accessibilityValue(source.name)
     }
 }
 
@@ -105,13 +108,17 @@ struct ChannelRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(channel.name)
+            .accessibilityValue("\(channel.group), \(channel.kind.label)\(isSelected ? ", selected" : "")")
+            .accessibilityHint("Starts playback")
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
             Button(action: onFavorite) {
                 Image(systemName: isFavorite ? "star.fill" : "star")
                     .foregroundStyle(isFavorite ? theme.warning : theme.muted)
                     .frame(width: 38, height: 38)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(isFavorite ? "Remove from favorites" : "Add to favorites")
+            .accessibilityLabel(isFavorite ? "Remove \(channel.name) from favorites" : "Add \(channel.name) to favorites")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -144,6 +151,7 @@ struct ChannelMonogram: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(theme.border, lineWidth: 1)
         }
+        .accessibilityHidden(true)
     }
 }
 
@@ -156,6 +164,7 @@ struct NoticeBanner: View {
         HStack(spacing: 12) {
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(theme.accent)
+                .accessibilityHidden(true)
             Text(message)
                 .font(.subheadline.weight(.medium))
                 .lineLimit(2)
@@ -165,6 +174,7 @@ struct NoticeBanner: View {
                     .font(.caption.weight(.bold))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss notification")
         }
         .foregroundStyle(theme.text)
         .padding(.horizontal, 16)

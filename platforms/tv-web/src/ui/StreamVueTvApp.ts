@@ -49,6 +49,7 @@ export class StreamVueTvApp {
   private aspectIndex = 0;
   private hideChromeTimer: number | null = null;
   private noticeTimer: number | null = null;
+  private modalReturnFocusSelector: string | null = null;
   private playbackRequestSerial = 0;
   private startupComplete = false;
 
@@ -175,7 +176,7 @@ export class StreamVueTvApp {
         </nav>
         <section class="channel-pane" aria-label="${escapeAttribute(this.selectedGroup)}">
           <div class="pane-heading"><h2>${escapeHtml(mediaCenter && this.selectedGroup === ALL_GROUPS ? "All Media" : this.selectedGroup)}</h2><span>${channels.length.toLocaleString()}</span></div>
-          <div class="channel-list" role="list">
+          <div class="channel-list">
             ${channelWindow.items.length > 0
               ? this.channelRows(channelWindow.items, channelWindow.start, selected?.id ?? null)
               : `<div class="empty-list"><strong>No ${mediaCenter ? "media" : "channels"} here yet</strong><span>Add a favorite or choose another group.</span></div>`}
@@ -261,7 +262,7 @@ export class StreamVueTvApp {
 
   private sourceFormTemplate(): string {
     if (this.sourceMode === "playlist") {
-      return `<div class="source-form" role="tabpanel">
+      return `<div id="source-panel-playlist" class="source-form" role="tabpanel" aria-labelledby="source-tab-playlist">
         <label class="field-label" for="source-url">M3U playlist URL</label>
         <input id="source-url" class="tv-input" data-focusable="true" data-autofocus="true" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://provider.example/playlist.m3u" />
         <div class="source-form-actions">
@@ -272,7 +273,7 @@ export class StreamVueTvApp {
     }
     const provider = this.sourceMode === "plex" ? "Plex" : "Emby";
     if (!this.premium.access.canUseMediaCenters) {
-      return `<div class="source-form" role="tabpanel">
+      return `<div id="source-panel-${this.sourceMode}" class="source-form" role="tabpanel" aria-labelledby="source-tab-${this.sourceMode}">
         <p class="premium-copy"><strong>${provider} • ${escapeHtml(this.premium.access.badgeText)}</strong><span>${escapeHtml(this.premium.message)}</span></p>
         ${this.premium.productTitle || this.premium.localizedPrice
           ? `<p class="premium-offer"><strong>${escapeHtml(this.premium.productTitle ?? "One-time premium unlock")}</strong>${this.premium.localizedPrice ? `<span>${escapeHtml(this.premium.localizedPrice)}</span>` : ""}</p>`
@@ -284,7 +285,7 @@ export class StreamVueTvApp {
     const providerFields = this.sourceMode === "plex"
       ? `<label class="field-label" for="plex-access">Plex server token</label><input id="plex-access" class="tv-input" type="password" data-focusable="true" autocomplete="off" spellcheck="false" placeholder="Paste the token for this server" />`
       : `<div class="source-field-grid"><div><label class="field-label" for="emby-user">Emby username</label><input id="emby-user" class="tv-input" data-focusable="true" autocomplete="off" spellcheck="false" /></div><div><label class="field-label" for="emby-password">Emby password</label><input id="emby-password" class="tv-input" type="password" data-focusable="true" autocomplete="off" /></div></div>`;
-    return `<div class="source-form" role="tabpanel">
+    return `<div id="source-panel-${this.sourceMode}" class="source-form" role="tabpanel" aria-labelledby="source-tab-${this.sourceMode}">
       <p class="premium-copy"><strong>${provider} • ${escapeHtml(this.premium.access.badgeText)}</strong><span>Credentials are verified against one server before protected requests begin. ${escapeHtml(this.premium.access.explanation)}</span></p>
       <label class="field-label" for="media-server">Server address</label>
       <input id="media-server" class="tv-input" data-focusable="true" data-autofocus="true" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://media-server.example:port" />
@@ -350,7 +351,7 @@ export class StreamVueTvApp {
     const aspect = ASPECT_MODES[this.aspectIndex] ?? "Auto";
     return `<main class="player-screen" data-player-state="${this.playbackSignal.state}">
       <section id="player-surface" class="player-surface" aria-label="Playing ${escapeAttribute(channel.name)}">
-        <video id="html-player" playsinline></video>
+        <video id="html-player" playsinline aria-label="Video playback for ${escapeAttribute(channel.name)}"></video>
         <object id="samsung-player" type="application/avplayer" hidden></object>
       </section>
       <div class="player-shade"></div>
@@ -358,11 +359,11 @@ export class StreamVueTvApp {
         <div><h1>${escapeHtml(channel.name)}</h1><p><i></i>${escapeHtml(channel.group)}</p></div>
         <span class="engine-label" data-role="engine">Native television player</span>
       </header>
-      <div class="buffering-indicator" data-role="buffering" hidden><span></span><strong>Buffering</strong></div>
-      <div class="player-message" data-role="player-message" hidden></div>
+      <div class="buffering-indicator" data-role="buffering" role="status" aria-live="polite" aria-atomic="true" hidden><span></span><strong>Buffering</strong></div>
+      <div class="player-message" data-role="player-message" role="status" aria-live="polite" aria-atomic="true" hidden></div>
       <footer class="player-controls player-chrome">
         <button class="button player-control" data-action="toggle-playback" data-focusable="true">${icon("play")}<span>Play / pause</span></button>
-        <button class="button player-control" data-action="cycle-aspect" data-focusable="true"><span>Aspect: <b data-role="aspect">${aspect}</b></span></button>
+        <button class="button player-control" data-action="cycle-aspect" data-focusable="true" aria-label="Change aspect ratio. Current ratio ${aspect}"><span>Aspect: <b data-role="aspect">${aspect}</b></span></button>
         <button class="button player-control" data-action="close-player" data-focusable="true">${icon("back")}<span>Back to channels</span></button>
       </footer>
     </main>`;
@@ -623,6 +624,10 @@ export class StreamVueTvApp {
   }
 
   private openModal(modal: Exclude<Modal, null>): void {
+    if (!this.modal) {
+      const action = (document.activeElement as Element | null)?.closest<HTMLElement>("[data-action]")?.dataset.action;
+      this.modalReturnFocusSelector = action ? `[data-action='${cssEscape(action)}']` : null;
+    }
     this.modal = modal;
     this.error = null;
     this.render();
@@ -665,11 +670,13 @@ export class StreamVueTvApp {
   }
 
   private closeModal(): void {
+    const returnFocusSelector = this.modalReturnFocusSelector;
     this.modal = null;
+    this.modalReturnFocusSelector = null;
     this.error = null;
     this.render();
     this.navigator.setScope(this.root);
-    this.focusAfterRender();
+    this.focusAfterRender(returnFocusSelector ?? undefined);
   }
 
   private cycleAspect(): void {
@@ -678,6 +685,8 @@ export class StreamVueTvApp {
     this.player?.setAspect(aspect);
     const label = this.root.querySelector<HTMLElement>("[data-role='aspect']");
     if (label) label.textContent = aspect;
+    const button = this.root.querySelector<HTMLElement>("[data-action='cycle-aspect']");
+    button?.setAttribute("aria-label", `Change aspect ratio. Current ratio ${aspect}`);
     this.showPlayerChrome();
   }
 
@@ -849,7 +858,9 @@ export class StreamVueTvApp {
     const channel = this.selectedChannel();
     if (!channel) return;
     this.root.querySelectorAll<HTMLElement>(".channel-row").forEach((row) => {
-      row.classList.toggle("is-selected", row.dataset.channelId === channel.id);
+      const selected = row.dataset.channelId === channel.id;
+      row.classList.toggle("is-selected", selected);
+      row.setAttribute("aria-current", String(selected));
     });
     const detail = this.root.querySelector<HTMLElement>("[data-role='details']");
     if (detail) detail.innerHTML = this.detailTemplate(channel);
@@ -953,11 +964,11 @@ function groupButton(group: string, active: boolean, count: number, mediaCenter:
           : /sport/i.test(group) ? "sports"
             : "folder";
   const label = mediaCenter && group === ALL_GROUPS ? "All Media" : group;
-  return `<button class="group-button${active ? " is-active" : ""}" data-action="select-group" data-group="${escapeAttribute(group)}" data-focusable="true">${icon(iconName)}<span>${escapeHtml(label)}</span><small>${count.toLocaleString()}</small></button>`;
+  return `<button class="group-button${active ? " is-active" : ""}" data-action="select-group" data-group="${escapeAttribute(group)}" data-focusable="true" aria-pressed="${active}">${icon(iconName)}<span>${escapeHtml(label)}</span><small>${count.toLocaleString()}</small></button>`;
 }
 
 function sourceTab(mode: SourceMode, label: string, active: SourceMode): string {
-  return `<button class="source-tab${mode === active ? " is-active" : ""}" role="tab" aria-selected="${mode === active}" data-action="select-source-mode" data-source-mode="${mode}" data-focusable="true">${escapeHtml(label)}</button>`;
+  return `<button id="source-tab-${mode}" class="source-tab${mode === active ? " is-active" : ""}" role="tab" aria-selected="${mode === active}" aria-controls="source-panel-${mode}" data-action="select-source-mode" data-source-mode="${mode}" data-focusable="true">${escapeHtml(label)}</button>`;
 }
 
 function sourceMode(value: string | undefined): SourceMode {
@@ -977,7 +988,7 @@ function mediaKindLabel(channel: CatalogChannel): string {
 function channelButton(channel: CatalogChannel, selected: boolean, favorite: boolean): string {
   const initials = channelInitials(channel.name);
   const logo = safeImageUrl(channel.guide?.logoUri);
-  return `<button class="channel-row${selected ? " is-selected" : ""}" data-action="select-channel" data-channel-id="${escapeAttribute(channel.id)}" data-focusable="true"${selected ? " data-autofocus='true'" : ""} role="listitem">
+  return `<button class="channel-row${selected ? " is-selected" : ""}" data-action="select-channel" data-channel-id="${escapeAttribute(channel.id)}" data-focusable="true"${selected ? " data-autofocus='true'" : ""} aria-current="${selected}">
     <span class="channel-mark" data-tone="${channel.number % 5}">${logo ? `<img src="${escapeAttribute(logo)}" alt="" onerror="this.hidden=true" />` : ""}<b>${escapeHtml(initials)}</b></span>
     <span class="channel-name">${escapeHtml(channel.name)}</span>
     ${favorite ? `<span class="favorite-mark">${icon("favorite")}</span>` : ""}

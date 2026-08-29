@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "status": "manual-validation-required",
+  "baseline": {
+    "engineeringTarget": "WCAG 2.2 Level AA where applicable, plus each platform's native accessibility guidance",
+    "conformanceClaimApproved": false,
+    "scopeReviewed": false,
+    "exceptionsDocumented": false
+  },
+  "sharedReview": {
+    "ownerApproved": false,
+    "userSuppliedMediaLimitationsReviewed": false,
+    "knownDefectsReviewed": false,
+    "ready": false
+  },
+  "platforms": {
+    "windows": {
+      "applicationId": null,
+      "sourceAudits": {
+        "visibleKeyboardFocus": true,
+        "accessibleControlNames": true,
+        "keyboardPlaybackControls": true,
+        "noSuppressedFocusVisuals": true
+      },
+      "manualEvidence": {
+        "keyboardOnlyWalkthrough": false,
+        "narratorWalkthrough": false,
+        "displayScaling200Percent": false,
+        "highContrastMode": false,
+        "playbackControlsAndErrors": false
+      },
+      "testedVersion": null,
+      "testedAt": null,
+      "tester": null,
+      "evidenceReferences": [],
+      "ready": false
+    },
+    "android": {
+      "applicationId": "com.streamvue.player",
+      "sourceAudits": {
+        "nativeControlSemantics": true,
+        "liveStatusAnnouncements": true,
+        "selectionState": true,
+        "remoteFocus": true
+      },
+      "manualEvidence": {
+        "talkBackWalkthrough": false,
+        "switchAccessWalkthrough": false,
+        "fontScale200Percent": false,
+        "androidTvRemoteWalkthrough": false,
+        "playbackControlsAndErrors": false
+      },
+      "testedVersion": null,
+      "testedAt": null,
+      "tester": null,
+      "evidenceReferences": [],
+      "ready": false
+    },
+    "apple": {
+      "applicationId": "com.streamvue.player",
+      "sourceAudits": {
+        "nativeControlSemantics": true,
+        "playbackControlLabels": true,
+        "nativeTextScalingFoundation": true,
+        "reducedMotion": true
+      },
+      "manualEvidence": {
+        "voiceOverWalkthrough": false,
+        "voiceControlWalkthrough": false,
+        "switchControlWalkthrough": false,
+        "largestDynamicType": false,
+        "reduceMotionAndTransparency": false,
+        "appleTvRemoteWalkthrough": false,
+        "playbackControlsAndErrors": false
+      },
+      "testedVersion": null,
+      "testedAt": null,
+      "tester": null,
+      "evidenceReferences": [],
+      "ready": false
+    },
+    "samsung": {
+      "applicationId": "SvTvPlayer.StreamVue",
+      "sourceAudits": {
+        "semanticHtmlControls": true,
+        "liveStatusAnnouncements": true,
+        "modalFocusContainment": true,
+        "remoteFocus": true,
+        "reducedMotion": true
+      },
+      "manualEvidence": {
+        "remoteOnlyWalkthrough": false,
+        "voiceGuideWalkthrough": false,
+        "screenZoomAndContrast": false,
+        "realTvPlaybackControls": false,
+        "errorsAndRecovery": false
+      },
+      "testedVersion": null,
+      "testedAt": null,
+      "tester": null,
+      "evidenceReferences": [],
+      "ready": false
+    },
+    "lg": {
+      "applicationId": "com.streamvue.player.tv",
+      "sourceAudits": {
+        "semanticHtmlControls": true,
+        "liveStatusAnnouncements": true,
+        "modalFocusContainment": true,
+        "remoteFocus": true,
+        "reducedMotion": true
+      },
+      "manualEvidence": {
+        "remoteOnlyWalkthrough": false,
+        "audioGuidanceWalkthrough": false,
+        "screenZoomAndContrast": false,
+        "realTvPlaybackControls": false,
+        "errorsAndRecovery": false
+      },
+      "testedVersion": null,
+      "testedAt": null,
+      "tester": null,
+      "evidenceReferences": [],
+      "ready": false
+    }
+  }
+}

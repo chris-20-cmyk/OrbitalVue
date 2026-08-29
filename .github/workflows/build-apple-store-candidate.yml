@@ -57,6 +57,7 @@ jobs:
           node tools/verify-cross-platform-release-contract.mjs
           node tools/verify-privacy-readiness.mjs --require-ready apple
           node tools/verify-store-listing-readiness.mjs --require-ready apple
+          node tools/verify-accessibility-readiness.mjs --require-ready apple
           node tools/verify-premium-store-readiness.mjs \
             --require-ready apple \
             --expect-product-id apple "$APPLE_PREMIUM_PRODUCT_ID" \
@@ -421,4 +422,5 @@ jobs:
             artifacts/apple-store/CANDIDATE-AUDIT.json
             artifacts/apple-store/SHA256SUMS.txt
             store/store-listing.json
+            store/accessibility-readiness.json
             store/listing-assets/apple/**

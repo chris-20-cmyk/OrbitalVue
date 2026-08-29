@@ -102,7 +102,8 @@ struct PlayerPanel: View {
                     .frame(width: 24, height: 24)
             }
             .buttonStyle(.borderedProminent)
-            .accessibilityLabel(player.phase == .playing ? "Pause" : "Play")
+            .accessibilityLabel(player.phase == .playing || player.phase == .externalPlayback ? "Pause" : "Play")
+            .accessibilityHint("Controls \(channel.name)")
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(channel.name)
@@ -119,7 +120,11 @@ struct PlayerPanel: View {
                 Image(systemName: store.favorites.contains(channel.id) ? "star.fill" : "star")
                     .foregroundStyle(store.favorites.contains(channel.id) ? theme.warning : theme.text)
             }
-            .accessibilityLabel("Favorite")
+            .accessibilityLabel(
+                store.favorites.contains(channel.id)
+                    ? "Remove \(channel.name) from favorites"
+                    : "Add \(channel.name) to favorites"
+            )
 
             Menu {
                 ForEach(VideoAspectMode.allCases) { mode in
@@ -138,6 +143,7 @@ struct PlayerPanel: View {
                     .labelStyle(.iconOnly)
             }
             .accessibilityLabel("Aspect ratio, \(settings.aspectMode.label)")
+            .accessibilityValue(settings.aspectMode.label)
 
             if settings.allowsExternalPlayback {
                 if player.activeEngine == .ksPlayer {
@@ -186,7 +192,7 @@ struct PlayerPanel: View {
 
     private func metric(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(label).font(.system(size: 8, weight: .bold)).tracking(0.8)
+            Text(label).font(.caption2.weight(.bold)).tracking(0.8)
             Text(value).font(.caption2.weight(.semibold)).foregroundStyle(theme.text)
         }
     }
@@ -249,6 +255,7 @@ struct FullscreenPlayerView: View {
                             .frame(width: 30, height: 30)
                     }
                     .buttonStyle(.bordered)
+                    .accessibilityLabel("Exit full screen")
                     VStack(alignment: .leading, spacing: 2) {
                         Text(channel.name).font(.headline)
                         Text(channel.group).font(.caption).foregroundStyle(theme.muted)

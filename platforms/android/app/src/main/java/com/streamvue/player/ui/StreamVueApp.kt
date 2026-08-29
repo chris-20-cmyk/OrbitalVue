@@ -73,6 +73,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -477,7 +482,9 @@ private fun GroupsPanel(
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.5.sp,
-                modifier = Modifier.padding(8.dp)
+                modifier = Modifier
+                    .padding(8.dp)
+                    .semantics { heading() }
             )
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -516,7 +523,10 @@ private fun GroupRow(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged { focused = it.isFocused },
+            .onFocusChanged { focused = it.isFocused }
+            .semantics {
+                stateDescription = if (selected) "Selected" else "Not selected"
+            },
         color = if (selected) StreamVueTealDim else Color.Transparent,
         shape = RoundedCornerShape(11.dp),
         border = when {
@@ -854,7 +864,11 @@ private fun PlaybackStatus(signal: PlaybackSignal) {
         signal.isBuffering -> Color(0xFFFFC36A)
         else -> StreamVueTeal
     }
-    Surface(shape = RoundedCornerShape(30.dp), color = color.copy(alpha = 0.13f)) {
+    Surface(
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        shape = RoundedCornerShape(30.dp),
+        color = color.copy(alpha = 0.13f)
+    ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -882,7 +896,11 @@ private fun AspectModeMenu(
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { expanded = true }, enabled = enabled) {
+        IconButton(
+            onClick = { expanded = true },
+            enabled = enabled,
+            modifier = Modifier.semantics { stateDescription = "Current ratio ${mode.label}" }
+        ) {
             Icon(Icons.Rounded.AspectRatio, contentDescription = "Change screen ratio")
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -1285,7 +1303,9 @@ private enum class SourceImportMode(val label: String) {
 @Composable
 private fun NoticeBanner(message: String, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
-        modifier = modifier.widthIn(max = 680.dp),
+        modifier = modifier
+            .widthIn(max = 680.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
         color = Color(0xF2142630),
         shape = RoundedCornerShape(14.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, StreamVueTeal.copy(alpha = 0.3f)),

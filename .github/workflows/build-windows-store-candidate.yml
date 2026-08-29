@@ -47,6 +47,7 @@ jobs:
           node tools/verify-cross-platform-release-contract.mjs
           node tools/verify-privacy-readiness.mjs --require-ready windows
           node tools/verify-store-listing-readiness.mjs --require-ready windows
+          node tools/verify-accessibility-readiness.mjs --require-ready windows
           node tools/verify-premium-store-readiness.mjs `
             --require-ready windows `
             --expect-product-id windows $env:WINDOWS_PREMIUM_PRODUCT_ID `
@@ -83,4 +84,5 @@ jobs:
             artifacts/windows-msix/StreamVue-${{ inputs.package_version }}-win-x64-microsoft-store-unsigned.msix
             artifacts/windows-msix/SHA256SUMS.txt
             store/store-listing.json
+            store/accessibility-readiness.json
             store/listing-assets/windows/**
