@@ -57,6 +57,7 @@ jobs:
             --validate-only
           node tools/verify-cross-platform-release-contract.mjs
           node tools/verify-privacy-readiness.mjs --require-ready samsung
+          node tools/verify-store-listing-readiness.mjs --require-ready samsung
           node tools/verify-premium-store-readiness.mjs \
             --require-ready samsung \
             --expect-product-id samsung "$SAMSUNG_PREMIUM_PRODUCT_ID" \
@@ -361,4 +362,7 @@ jobs:
           name: streamvue-samsung-tv-${{ inputs.version }}
           if-no-files-found: error
           retention-days: 30
-          path: artifacts/samsung-tv/
+          path: |
+            artifacts/samsung-tv/
+            store/store-listing.json
+            store/listing-assets/samsung/**

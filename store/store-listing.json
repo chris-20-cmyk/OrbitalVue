@@ -1,0 +1,238 @@
+{
+  "contractVersion": "1.0",
+  "status": "draft-assets-missing",
+  "primaryLocale": "en-US",
+  "technicalReviewDate": "2026-08-29",
+  "owner": {
+    "developerDisplayName": null,
+    "copyrightHolder": null,
+    "contentRightsConfirmed": false,
+    "trademarkUseReviewed": false,
+    "ageRatingQuestionnairesCompleted": false,
+    "termsReviewed": false,
+    "listingClaimsReviewed": false,
+    "localizationReviewed": false
+  },
+  "shared": {
+    "productName": "StreamVue",
+    "tagline": "Your channels. Native player.",
+    "shortDescription": "Private IPTV and personal media playback across your screens",
+    "fullDescription": "StreamVue is a polished native player for IPTV and personal media sources you choose. Connect an M3U or M3U8 playlist source and browse channels using the groups supplied by that source. Native platform playback provides full-screen viewing, hardware acceleration where supported, flexible aspect ratios, favorites, search, launch refresh, and last-working-copy recovery.\n\nOn supported platforms, an optional one-time Premium unlock adds personal Plex and Emby connections. Premium availability varies by platform and remains locked until that platform's verified store-purchase route is enabled.\n\nStreamVue does not provide, sell, host, or recommend channels, playlists, or media. You must supply your own source and have permission to access every stream and library you connect. Playback features vary by device, stream format, codec, and hardware.",
+    "features": [
+      "Connect an M3U or M3U8 file or URL where supported",
+      "Keep the exact channel groups supplied by your source",
+      "Search a large library and keep private favorites",
+      "Use native playback, hardware acceleration where supported, aspect modes, and true full screen",
+      "Refresh URL sources at launch with last-working-copy recovery",
+      "Connect personal Plex and Emby libraries with an optional one-time Premium unlock where available"
+    ],
+    "contentDisclaimer": "StreamVue does not provide channels or media. Connect only sources you own or are authorized to access.",
+    "screenshotPlan": [
+      {
+        "id": "source-library",
+        "caption": "Add a playlist source, then see its channels in one private library."
+      },
+      {
+        "id": "group-browser",
+        "caption": "Browse the groups from your playlist with search and favorites close at hand."
+      },
+      {
+        "id": "native-playback",
+        "caption": "Tune with native playback controls, flexible aspect modes, and clear signal status."
+      },
+      {
+        "id": "playback-settings",
+        "caption": "Adjust playback and buffering options for the hardware and stream."
+      }
+    ]
+  },
+  "platforms": {
+    "windows": {
+      "applicationId": null,
+      "category": "Entertainment",
+      "copy": {
+        "shortDescription": "Private IPTV and personal media playback for Windows PCs",
+        "descriptionSource": "shared.fullDescription",
+        "featureSource": "shared.features",
+        "premiumAvailabilityNote": "An optional one-time Premium unlock adds personal Plex and Emby connections."
+      },
+      "assets": {
+        "storeIcon300": {
+          "path": null,
+          "reviewed": false
+        },
+        "desktopScreenshots": [
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "reviews": {
+        "copyReviewed": false,
+        "assetsReviewed": false,
+        "contentRatingReviewed": false,
+        "storeQuestionnaireReviewed": false,
+        "realDeviceScreenshotsReviewed": false
+      },
+      "ready": false
+    },
+    "android": {
+      "applicationId": "com.streamvue.player",
+      "category": "Video Players & Editors",
+      "copy": {
+        "appName": "StreamVue",
+        "shortDescription": "Private IPTV and personal media playback for phones, tablets, and TVs",
+        "fullDescriptionSource": "shared.fullDescription",
+        "premiumAvailabilityNote": "An optional one-time Premium unlock adds personal Plex and Emby connections."
+      },
+      "assets": {
+        "playIcon512": {
+          "path": null,
+          "reviewed": false
+        },
+        "featureGraphic1024x500": {
+          "path": null,
+          "reviewed": false
+        },
+        "tvBanner1280x720": {
+          "path": null,
+          "reviewed": false
+        },
+        "phoneScreenshots": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "tabletScreenshots": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "tvScreenshots": [
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "reviews": {
+        "copyReviewed": false,
+        "assetsReviewed": false,
+        "contentRatingReviewed": false,
+        "storeQuestionnaireReviewed": false,
+        "realDeviceScreenshotsReviewed": false
+      },
+      "ready": false
+    },
+    "apple": {
+      "applicationId": "com.streamvue.player",
+      "category": "Entertainment",
+      "copy": {
+        "name": "StreamVue",
+        "subtitle": "Your channels. Native player.",
+        "descriptionSource": "shared.fullDescription",
+        "keywords": "IPTV,M3U,M3U8,live TV,TV player,Plex,Emby,media player",
+        "premiumAvailabilityNote": "An optional one-time Premium unlock adds personal Plex and Emby connections."
+      },
+      "assets": {
+        "iPhoneScreenshots": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "iPadScreenshots": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "tvOSScreenshots": [
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "reviews": {
+        "copyReviewed": false,
+        "assetsReviewed": false,
+        "contentRatingReviewed": false,
+        "storeQuestionnaireReviewed": false,
+        "realDeviceScreenshotsReviewed": false
+      },
+      "ready": false
+    },
+    "samsung": {
+      "applicationId": "SvTvPlayer.StreamVue",
+      "category": "Entertainment",
+      "copy": {
+        "name": "StreamVue",
+        "description": "Private, native television playback for personal channel sources.",
+        "fullDescriptionSource": "shared.fullDescription",
+        "premiumAvailabilityNote": "An optional one-time Premium unlock adds personal Plex and Emby connections."
+      },
+      "assets": {
+        "heroLogo1920x1080": {
+          "path": null,
+          "reviewed": false
+        },
+        "heroBackground1920x1080": {
+          "path": null,
+          "reviewed": false
+        },
+        "tileLogo512x423": {
+          "path": null,
+          "reviewed": false
+        },
+        "screenshots": [
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "reviews": {
+        "copyReviewed": false,
+        "assetsReviewed": false,
+        "contentRatingReviewed": false,
+        "storeQuestionnaireReviewed": false,
+        "realDeviceScreenshotsReviewed": false
+      },
+      "ready": false
+    },
+    "lg": {
+      "applicationId": "com.streamvue.player.tv",
+      "category": "Entertainment",
+      "copy": {
+        "title": "StreamVue",
+        "appDescription": "Private television playback for your channel sources",
+        "fullDescriptionSource": "shared.fullDescription",
+        "premiumAvailabilityNote": "Plex and Emby connections are not available in this LG release."
+      },
+      "assets": {
+        "sellerIcon400": {
+          "path": "platforms/tv-web/assets/seller-icon-400.png",
+          "reviewed": false
+        },
+        "screenshots": [
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "reviews": {
+        "copyReviewed": false,
+        "assetsReviewed": false,
+        "contentRatingReviewed": false,
+        "storeQuestionnaireReviewed": false,
+        "realDeviceScreenshotsReviewed": false
+      },
+      "ready": false
+    }
+  }
+}

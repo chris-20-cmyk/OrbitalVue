@@ -63,6 +63,7 @@ jobs:
           fi
           node tools/verify-cross-platform-release-contract.mjs
           node tools/verify-privacy-readiness.mjs --require-ready android
+          node tools/verify-store-listing-readiness.mjs --require-ready android
           node tools/verify-premium-store-readiness.mjs \
             --require-ready android \
             --expect-product-id android "$ANDROID_PREMIUM_PRODUCT_ID" \
@@ -175,4 +176,7 @@ jobs:
           name: streamvue-google-play-${{ inputs.version_name }}-${{ inputs.version_code }}
           if-no-files-found: error
           retention-days: 30
-          path: artifacts/google-play/
+          path: |
+            artifacts/google-play/
+            store/store-listing.json
+            store/listing-assets/android/**

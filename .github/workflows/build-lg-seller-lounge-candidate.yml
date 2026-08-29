@@ -39,6 +39,7 @@ jobs:
             --validate-only
           node tools/verify-cross-platform-release-contract.mjs
           node tools/verify-privacy-readiness.mjs --require-ready lg
+          node tools/verify-store-listing-readiness.mjs --require-ready lg
           node tools/verify-lg-distribution-readiness.mjs \
             --require-ready \
             --expect-app-id "$LG_APP_ID"
@@ -206,4 +207,7 @@ jobs:
           name: streamvue-lg-webos-${{ inputs.version }}
           if-no-files-found: error
           retention-days: 30
-          path: artifacts/lg-webos/
+          path: |
+            artifacts/lg-webos/
+            store/store-listing.json
+            store/listing-assets/lg/**

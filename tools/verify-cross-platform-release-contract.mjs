@@ -47,6 +47,8 @@ const expectedPlatforms = {
     verificationProvider: "microsoft-store-license",
     requiredFragments: [
       "node tools/verify-privacy-readiness.mjs --require-ready windows",
+      "node tools/verify-store-listing-readiness.mjs --require-ready windows",
+      "store/store-listing.json",
       "--require-ready windows",
       "--expect-verification-provider windows microsoft-store-license",
       "-p:StreamVueDistributionMode=Store",
@@ -62,6 +64,8 @@ const expectedPlatforms = {
     verificationProvider: "google-play-developer-api",
     requiredFragments: [
       "node tools/verify-privacy-readiness.mjs --require-ready android",
+      "node tools/verify-store-listing-readiness.mjs --require-ready android",
+      "store/store-listing.json",
       "--require-ready android",
       "--expect-verification-provider android google-play-developer-api",
       "-PstreamVueDistributionMode=store",
@@ -77,6 +81,8 @@ const expectedPlatforms = {
     verificationProvider: "storekit2-verified-transactions",
     requiredFragments: [
       "node tools/verify-privacy-readiness.mjs --require-ready apple",
+      "node tools/verify-store-listing-readiness.mjs --require-ready apple",
+      "store/store-listing.json",
       "--require-ready apple",
       "--expect-verification-provider apple storekit2-verified-transactions",
       "tools/verify-apple-distribution-readiness.mjs",
@@ -92,6 +98,8 @@ const expectedPlatforms = {
     verificationProvider: "samsung-dpi-purchase-history",
     requiredFragments: [
       "node tools/verify-privacy-readiness.mjs --require-ready samsung",
+      "node tools/verify-store-listing-readiness.mjs --require-ready samsung",
+      "store/store-listing.json",
       "--require-ready samsung",
       "--expect-verification-provider samsung samsung-dpi-purchase-history",
       "tools/verify-samsung-distribution-readiness.mjs",
@@ -107,6 +115,8 @@ const expectedPlatforms = {
     verificationProvider: null,
     requiredFragments: [
       "node tools/verify-privacy-readiness.mjs --require-ready lg",
+      "node tools/verify-store-listing-readiness.mjs --require-ready lg",
+      "store/store-listing.json",
       "tools/verify-lg-distribution-readiness.mjs",
       "--expect-app-id \"$LG_APP_ID\"",
       "VITE_STREAMVUE_DISTRIBUTION_MODE: store",
