@@ -12,6 +12,7 @@
     "privacy:check": "node tools/verify-privacy-readiness.mjs",
     "listing:check": "node tools/verify-store-listing-readiness.mjs",
     "accessibility:check": "node tools/verify-accessibility-readiness.mjs",
+    "release:report": "node tools/generate-release-readiness-report.mjs",
     "release:check": "pnpm premium:check && pnpm privacy:check && pnpm listing:check && pnpm accessibility:check && pnpm apple:check && pnpm samsung:check && pnpm lg:check && node tools/verify-cross-platform-release-contract.mjs",
     "apple:check": "node tools/verify-apple-brand-assets.mjs && node tools/verify-apple-distribution-readiness.mjs",
     "samsung:check": "node tools/verify-samsung-distribution-readiness.mjs",

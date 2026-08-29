@@ -18,6 +18,7 @@ on:
       - "tools/verify-privacy-readiness.mjs"
       - "tools/verify-store-listing-readiness.mjs"
       - "tools/verify-accessibility-readiness.mjs"
+      - "tools/generate-release-readiness-report.mjs"
       - "tools/verify-apple-brand-assets.mjs"
       - "tools/verify-apple-distribution-readiness.mjs"
       - "tools/verify-samsung-distribution-readiness.mjs"
@@ -53,6 +54,7 @@ on:
       - "tools/verify-privacy-readiness.mjs"
       - "tools/verify-store-listing-readiness.mjs"
       - "tools/verify-accessibility-readiness.mjs"
+      - "tools/generate-release-readiness-report.mjs"
       - "tools/verify-apple-brand-assets.mjs"
       - "tools/verify-apple-distribution-readiness.mjs"
       - "tools/verify-samsung-distribution-readiness.mjs"
@@ -104,3 +106,14 @@ jobs:
           node tools/verify-samsung-distribution-readiness.mjs
           node tools/verify-lg-distribution-readiness.mjs
           node tools/verify-cross-platform-release-contract.mjs
+
+      - name: Generate the release-readiness dossier
+        run: node tools/generate-release-readiness-report.mjs
+
+      - name: Upload the non-release readiness dossier
+        uses: actions/upload-artifact@v7
+        with:
+          name: streamvue-release-readiness
+          path: artifacts/release-readiness/
+          if-no-files-found: error
+          retention-days: 14

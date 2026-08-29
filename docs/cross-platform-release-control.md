@@ -8,6 +8,8 @@ Run the complete release-control check from the repository root:
 pnpm release:check
 ```
 
+Generate the consolidated platform blocker dossier with `pnpm release:report`; see [release readiness reporting](release-readiness-report.md).
+
 This check is deliberately independent of signing credentials. It reads only committed public configuration and source metadata, including the fail-closed technical privacy inventory, Store-listing/asset contract, and accessibility evidence matrix.
 
 The lightweight **Cross-platform Store release contract** CI workflow runs the same boundary whenever a candidate workflow, readiness manifest, application identity, billing adapter, or reviewed store asset changes.
@@ -49,4 +51,4 @@ The verifier does not create seller accounts or products, accept terms, upload p
 7. Run the matching manual candidate workflow and inspect its audit/checksum artifact.
 8. Upload manually in the vendor console and let that store own customer delivery and subsequent store updates.
 
-See [privacy and Store disclosures](privacy-and-store-disclosures.md), [Store listing production](store-listing-production.md), [accessibility validation](accessibility-validation.md), [premium entitlements](premium-entitlements.md), [distribution and signing choices](distribution-and-signing.md), and each platform README for the detailed implementation boundary.
+See [release readiness reporting](release-readiness-report.md), [privacy and Store disclosures](privacy-and-store-disclosures.md), [Store listing production](store-listing-production.md), [accessibility validation](accessibility-validation.md), [premium entitlements](premium-entitlements.md), [distribution and signing choices](distribution-and-signing.md), and each platform README for the detailed implementation boundary.

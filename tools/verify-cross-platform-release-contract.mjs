@@ -254,6 +254,17 @@ if (/verify-premium-store-readiness\.mjs[\s\\]*--require-ready lg/.test(lgWorkfl
   fail("LG free candidate must not claim an unimplemented premium product");
 }
 
+const releaseContractWorkflow = await readText(".github/workflows/release-contract.yml");
+for (const fragment of [
+  "node tools/generate-release-readiness-report.mjs",
+  "artifacts/release-readiness/",
+  "streamvue-release-readiness"
+]) {
+  if (!releaseContractWorkflow.includes(fragment)) {
+    fail(`release contract workflow is missing readiness report fragment: ${fragment}`);
+  }
+}
+
 console.log(
   "Cross-platform release contract is valid: five manual candidate lanes, one one-time premium model, and LG safely free/locked."
 );
