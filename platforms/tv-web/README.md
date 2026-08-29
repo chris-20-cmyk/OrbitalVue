@@ -66,12 +66,15 @@ tizen build-web -- platforms/tv-web/dist/samsung
 tizen package -t wgt -s YOUR_CERTIFICATE_PROFILE -- platforms/tv-web/dist/samsung/.buildResult
 ```
 
-LG uses the free Developer Mode app and the current webOS CLI. After registering the TV with `ares-setup-device`:
+LG uses the free Developer Mode app and the current webOS CLI. Register the TV, package, and install with the pinned repository copy:
 
 ```text
-ares-package platforms/tv-web/dist/webos
-ares-install --device YOUR_TV com.streamvue.player.tv_5.0.0_all.ipk
+node node_modules/@webos-tools/cli/bin/ares-setup-device.js
+node node_modules/@webos-tools/cli/bin/ares-package.js platforms/tv-web/dist/webos
+node node_modules/@webos-tools/cli/bin/ares-install.js --device YOUR_TV com.streamvue.player.tv_5.0.0_all.ipk
 ```
+
+The repository pins `@webos-tools/cli` 3.2.5 in `pnpm-lock.yaml`. These direct Node entry points also avoid a Windows command-shim issue observed with `pnpm exec`. LG Developer Mode is time limited, so extend the session before it expires or the TV will remove developer-installed apps.
 
 The generated Samsung application/package ID is provisional until the first Tizen Studio device project is paired. Keep the same IDs after store submission begins. LG and Samsung packages must be tested on real televisions because codecs, HLS variants, remote keys, and provider header requirements vary by model.
 
@@ -98,3 +101,20 @@ STREAMVUE_SAMSUNG_DISTRIBUTOR_CERTIFICATE_PASSWORD
 ```
 
 The distributor certificate must have the Partner privilege level because `sso.partner` is used. For personal sideloading it must also contain the target television's DUID. Back up the original author `.p12` and password outside GitHub; every future update must preserve that author identity.
+
+## LG Seller Lounge candidate
+
+The manual **Build LG webOS Seller Lounge candidate** workflow produces a free Store-mode IPK with Plex and Emby visibly locked. This is deliberate: LG no longer provides its native television billing service, and StreamVue will not simulate ownership with a local flag or a client-side payment callback. Ordinary authorized M3U sources remain available.
+
+Before the workflow can run, complete `store/lg-distribution.json` with the real Seller Lounge account type and mark each human prerequisite true only after it is actually finished:
+
+- Seller terms reviewed
+- 400×400 store icon reviewed and remaining listing images prepared
+- UX scenario prepared
+- mandatory self-checklist completed with actual results
+- privacy disclosures reviewed
+- real-TV model matrix completed
+
+The verifier also locks the permanent `com.streamvue.player.tv` identity, validates the package icons, splash, and separate 400×400 Seller Lounge icon, and proves that LG remains null/unready in `store/premium-products.json`. The workflow stamps only generated `appinfo.json`, invokes the pinned official CLI, independently opens the resulting IPK, and emits the IPK, store icon, package analysis, audit record, and checksums. It does not use or invent an author certificate, accept Seller Lounge terms, upload the app, or claim LG approval.
+
+LG requires a UX scenario and a fully completed self-checklist for submission, and every later update receives its own QA review. See LG's [app approval process](https://webostv.developer.lge.com/distribute/app-approval-process), [app self-checklist](https://webostv.developer.lge.com/distribute/app-self-checklist), and [app resource requirements](https://webostv.developer.lge.com/develop/getting-started/app-resources).

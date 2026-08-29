@@ -1,0 +1,207 @@
+name: Build LG webOS Seller Lounge candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: LG webOS package version (major.minor.patch)
+        required: true
+        default: 5.0.0
+
+permissions:
+  contents: read
+
+concurrency:
+  group: streamvue-lg-seller-lounge-candidate
+  cancel-in-progress: false
+
+jobs:
+  lg-preflight:
+    name: Seller Lounge readiness before candidate assembly
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      LG_PACKAGE_VERSION: ${{ inputs.version }}
+      LG_APP_ID: com.streamvue.player.tv
+    steps:
+      - name: Check out StreamVue
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Prove exact identity and manual-submission readiness
+        run: |
+          node tools/stamp-lg-package-version.mjs \
+            --version "$LG_PACKAGE_VERSION" \
+            --validate-only
+          node tools/verify-lg-distribution-readiness.mjs \
+            --require-ready \
+            --expect-app-id "$LG_APP_ID"
+
+  lg-candidate:
+    name: Audited IPK for manual Seller Lounge upload
+    needs: lg-preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LG_PACKAGE_VERSION: ${{ inputs.version }}
+      LG_APP_ID: com.streamvue.player.tv
+      WEBOS_CLI_VERSION: 3.2.5
+    steps:
+      - name: Check out StreamVue
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install locked dependencies without lifecycle scripts
+        run: pnpm install --frozen-lockfile
+
+      - name: Reconfirm LG release readiness and pinned packaging tool
+        shell: bash
+        run: |
+          node tools/verify-lg-distribution-readiness.mjs \
+            --require-ready \
+            --expect-app-id "$LG_APP_ID"
+          node tools/stamp-lg-package-version.mjs \
+            --version "$LG_PACKAGE_VERSION" \
+            --validate-only
+          webos_cli='node_modules/@webos-tools/cli/bin/ares-package.js'
+          test -s "$webos_cli"
+          test "$(node "$webos_cli" --version)" = "Version: $WEBOS_CLI_VERSION"
+
+      - name: Test and assemble the free Store candidate
+        shell: bash
+        env:
+          VITE_STREAMVUE_DISTRIBUTION_MODE: store
+        run: |
+          node contracts/validate-contract.mjs
+          pnpm media-centers:test
+          pnpm tv:check
+          pnpm tv:test
+          pnpm tv:build
+          node tools/stamp-lg-package-version.mjs \
+            --project platforms/tv-web/dist/webos \
+            --version "$LG_PACKAGE_VERSION"
+
+          project='platforms/tv-web/dist/webos'
+          test -s "$project/appinfo.json"
+          test -s "$project/index.html"
+          test -s "$project/icon.png"
+          test -s "$project/largeIcon.png"
+          test -s "$project/splash.png"
+          grep -Fq "\"id\": \"$LG_APP_ID\"" "$project/appinfo.json"
+          grep -Fq "\"version\": \"$LG_PACKAGE_VERSION\"" "$project/appinfo.json"
+          grep -Fq '"iconColor": "#0B1020"' "$project/appinfo.json"
+          grep -RFq 'no longer provides a native TV billing service' "$project/assets"
+          if find "$project" -name '*.map' -print -quit | grep -q .; then
+            echo 'LG Seller Lounge packages must not contain source maps.' >&2
+            exit 1
+          fi
+
+      - name: Create and independently inspect the IPK
+        shell: bash
+        run: |
+          project='platforms/tv-web/dist/webos'
+          output='artifacts/lg-webos'
+          webos_cli='node_modules/@webos-tools/cli/bin/ares-package.js'
+          mkdir -p "$output"
+          node "$webos_cli" --check "$project"
+          node "$webos_cli" --outdir "$output" "$project"
+
+          expected="$output/${LG_APP_ID}_${LG_PACKAGE_VERSION}_all.ipk"
+          mapfile -t packages < <(find "$output" -maxdepth 1 -type f -name '*.ipk' -print)
+          if [[ "${#packages[@]}" != 1 || "${packages[0]}" != "$expected" || ! -s "$expected" ]]; then
+            echo 'webOS packaging must produce exactly the expected non-empty IPK.' >&2
+            exit 1
+          fi
+          node "$webos_cli" --info-detail "$expected" > "$output/PACKAGE-DETAILS.txt"
+          grep -Fq "Package: $LG_APP_ID" "$output/PACKAGE-DETAILS.txt"
+          grep -Fq "Version: $LG_PACKAGE_VERSION" "$output/PACKAGE-DETAILS.txt"
+
+          audit_root="$(mktemp -d)"
+          trap 'rm -rf -- "$audit_root"' EXIT
+          members="$(ar t "$expected")"
+          for member in debian-binary control.tar.gz data.tar.gz; do
+            grep -Fxq "$member" <<< "$members"
+          done
+          test "$(wc -l <<< "$members" | tr -d ' ')" = 3
+          ar p "$expected" debian-binary | grep -Fxq '2.0'
+          ar p "$expected" data.tar.gz > "$audit_root/data.tar.gz"
+          test -s "$audit_root/data.tar.gz"
+
+          listing="$(tar -tzf "$audit_root/data.tar.gz")"
+          app_root="usr/palm/applications/$LG_APP_ID"
+          for required in \
+            "$app_root/appinfo.json" \
+            "$app_root/index.html" \
+            "$app_root/icon.png" \
+            "$app_root/largeIcon.png" \
+            "$app_root/splash.png"; do
+            grep -Fxq "$required" <<< "$listing"
+          done
+          if grep -Eiq '\.map$|\.(p12|pfx|pem|key|jks|keystore)$|(^|/)\.env($|\.)' <<< "$listing"; then
+            echo 'The IPK contains a source map, signing material, or environment file.' >&2
+            exit 1
+          fi
+
+          packaged_appinfo="$audit_root/appinfo.json"
+          tar -xOzf "$audit_root/data.tar.gz" "$app_root/appinfo.json" > "$packaged_appinfo"
+          APPINFO_PATH="$packaged_appinfo" node - <<'NODE'
+          const fs = require('node:fs');
+          const value = JSON.parse(fs.readFileSync(process.env.APPINFO_PATH, 'utf8'));
+          const expected = {
+            id: process.env.LG_APP_ID,
+            version: process.env.LG_PACKAGE_VERSION,
+            type: 'web',
+            main: 'index.html',
+            icon: 'icon.png',
+            largeIcon: 'largeIcon.png',
+            iconColor: '#0B1020',
+            resolution: '1920x1080',
+            splashBackground: 'splash.png'
+          };
+          for (const [key, wanted] of Object.entries(expected)) {
+            if (value[key] !== wanted) throw new Error(`Packaged appinfo.${key} does not match the release identity.`);
+          }
+          NODE
+
+          cp platforms/tv-web/assets/seller-icon-400.png "$output/SELLER-ICON-400.png"
+          PACKAGE_PATH="$expected" node - <<'NODE'
+          const fs = require('node:fs');
+          const distribution = JSON.parse(fs.readFileSync('store/lg-distribution.json', 'utf8'));
+          const audit = {
+            schemaVersion: 1,
+            appId: distribution.appId,
+            packageVersion: process.env.LG_PACKAGE_VERSION,
+            distributionMode: 'store',
+            commerceMode: distribution.commerceMode,
+            premiumMediaCenters: 'locked',
+            webosCliVersion: process.env.WEBOS_CLI_VERSION,
+            artifact: process.env.PACKAGE_PATH.split('/').at(-1),
+            sellerIcon: 'SELLER-ICON-400.png',
+            destination: 'manual-lg-seller-lounge-upload'
+          };
+          fs.writeFileSync('artifacts/lg-webos/CANDIDATE-AUDIT.json', `${JSON.stringify(audit, null, 2)}\n`);
+          NODE
+          (cd "$output" && sha256sum *.ipk SELLER-ICON-400.png PACKAGE-DETAILS.txt CANDIDATE-AUDIT.json > SHA256SUMS.txt)
+
+      - name: Upload manual LG Seller Lounge candidate
+        uses: actions/upload-artifact@v7
+        with:
+          name: streamvue-lg-webos-${{ inputs.version }}
+          if-no-files-found: error
+          retention-days: 30
+          path: artifacts/lg-webos/

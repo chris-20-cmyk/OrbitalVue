@@ -11,12 +11,14 @@
     "premium:check": "node tools/verify-premium-store-readiness.mjs",
     "apple:check": "node tools/verify-apple-brand-assets.mjs && node tools/verify-apple-distribution-readiness.mjs",
     "samsung:check": "node tools/verify-samsung-distribution-readiness.mjs",
+    "lg:check": "node tools/verify-lg-distribution-readiness.mjs",
     "tv:dev": "pnpm --filter @streamvue/tv-web dev",
     "tv:check": "pnpm media-centers:build && pnpm --filter @streamvue/tv-web check",
     "tv:test": "pnpm --filter @streamvue/catalog test && pnpm --filter @streamvue/tv-web test",
     "tv:build": "pnpm media-centers:build && pnpm --filter @streamvue/tv-web build"
   },
   "devDependencies": {
+    "@webos-tools/cli": "3.2.5",
     "typescript": "7.0.2",
     "vite": "8.2.2",
     "vitest": "4.1.11"

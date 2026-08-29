@@ -8,6 +8,7 @@
   "appDescription": "Private television playback for your channel sources",
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",
+  "iconColor": "#0B1020",
   "resolution": "1920x1080",
   "splashBackground": "splash.png",
   "transparent": false,

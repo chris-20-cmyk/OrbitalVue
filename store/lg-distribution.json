@@ -1,0 +1,16 @@
+{
+  "contractVersion": "1.0",
+  "appId": "com.streamvue.player.tv",
+  "sellerIcon": "platforms/tv-web/assets/seller-icon-400.png",
+  "sellerIconReviewed": false,
+  "listingAssetsPrepared": false,
+  "sellerAccountType": null,
+  "sellerTermsReviewed": false,
+  "uxScenarioPrepared": false,
+  "selfChecklistCompleted": false,
+  "privacyDisclosureReviewed": false,
+  "realTvMatrixCompleted": false,
+  "commerceMode": "free-premium-locked",
+  "premiumLocked": true,
+  "ready": false
+}

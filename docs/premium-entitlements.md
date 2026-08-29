@@ -99,7 +99,7 @@ Each store adapter must:
 node tools/verify-premium-store-readiness.mjs
 ```
 
-Every store candidate workflow must also run `node tools/verify-premium-store-readiness.mjs --require-ready <platform>` with the exact product and approved verification provider. That command intentionally fails for every currently unconfigured platform, preventing a paid feature from being represented as purchasable.
+Every candidate that claims the premium feature is purchasable must also run `node tools/verify-premium-store-readiness.mjs --require-ready <platform>` with the exact product and approved verification provider. That command intentionally fails for every currently unconfigured platform, preventing a paid feature from being represented as purchasable. LG's separate free candidate is the explicit exception: it proves that the LG product/provider remain null and unready, packages the Store surface with Plex/Emby locked, and makes no premium purchase claim.
 
 Foundation CI exercises both modes. Direct-install test packages remain personal builds, while unsigned Google Play, Samsung, LG, and synthetic Windows MSIX artifacts are explicitly named as locked/layout-only and compile with media centers unavailable. They are verification artifacts, not sellable products.
 
@@ -108,6 +108,8 @@ The Windows candidate workflow cannot produce a Partner Center artifact until `-
 The Apple candidate requires `--require-ready apple`, the exact shared StoreKit product, and `verificationProvider` equal to `storekit2-verified-transactions`. It separately requires the KSPlayer distribution decision to be ready, one bundle ID across iOS/tvOS, protected Apple Distribution signing material, and platform-specific App Store profiles. It exports reviewable IPAs but does not upload them or claim that App Store review has passed.
 
 The Samsung candidate requires `--require-ready samsung`, the exact non-consumable product, `verificationProvider` equal to `samsung-dpi-purchase-history`, and the separate `store/samsung-distribution.json` gate. That distribution gate requires the exact Tizen/Seller identities, HTTPS verifier, original author-certificate fingerprint, Partner distributor readiness, seller-terms review, DPI product creation, and a real-TV Checkout test. The workflow exports a signed, audited `.wgt` for manual Seller Office upload and never submits it automatically.
+
+The LG candidate uses `store/lg-distribution.json` instead of pretending premium commerce exists. It requires the exact permanent app ID, Seller account type, terms, reviewed 400×400 store icon and listing assets, UX scenario, mandatory completed self-checklist, privacy review, and real-TV matrix. Its verifier also requires `store/premium-products.json` to keep LG's product and verification provider null and `ready` false. The workflow exports an audited IPK for manual Seller Lounge upload; it does not sign, submit, accept terms, or unlock Plex/Emby.
 
 Current adapters use StoreKit 2 on Apple, Google Play Billing on Android/Google TV, the Microsoft Store licensing API for a future MSIX release, and Samsung Checkout plus a server-side DPI verifier on Samsung TV. LG intentionally remains unavailable until a reviewed third-party billing provider and verifier are selected. No local preference or build flag may stand in for proof of purchase. Direct-download Windows builds stay personal/included.
 
