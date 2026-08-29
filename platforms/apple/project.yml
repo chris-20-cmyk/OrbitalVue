@@ -27,6 +27,7 @@ settings:
     DEAD_CODE_STRIPPING: YES
     CODE_SIGN_STYLE: Automatic
     STREAMVUE_DISTRIBUTION_MODE: personal
+    STREAMVUE_PREMIUM_PRODUCT_ID: ""
   configs:
     Store:
       STREAMVUE_DISTRIBUTION_MODE: store
@@ -59,6 +60,7 @@ targets:
         LSApplicationCategoryType: public.app-category.entertainment
         ITSAppUsesNonExemptEncryption: false
         StreamVueDistributionMode: $(STREAMVUE_DISTRIBUTION_MODE)
+        StreamVuePremiumProductID: $(STREAMVUE_PREMIUM_PRODUCT_ID)
         NSLocalNetworkUsageDescription: StreamVue connects to IPTV, Plex, and Emby servers that you choose on your local network.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
@@ -102,6 +104,7 @@ targets:
         LSApplicationCategoryType: public.app-category.entertainment
         ITSAppUsesNonExemptEncryption: false
         StreamVueDistributionMode: $(STREAMVUE_DISTRIBUTION_MODE)
+        StreamVuePremiumProductID: $(STREAMVUE_PREMIUM_PRODUCT_ID)
         NSLocalNetworkUsageDescription: StreamVue connects to IPTV, Plex, and Emby servers that you choose on your local network.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true

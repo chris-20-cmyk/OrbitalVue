@@ -1,3 +1,5 @@
+import java.net.URI
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -11,6 +13,28 @@ val streamVueDistributionMode = providers.gradleProperty("streamVueDistributionM
 require(streamVueDistributionMode == "personal" || streamVueDistributionMode == "store") {
     "streamVueDistributionMode must be personal or store."
 }
+val streamVuePremiumProductId = providers.gradleProperty("streamVuePremiumProductId")
+    .orElse("")
+    .get()
+    .trim()
+require(streamVuePremiumProductId.isEmpty() || Regex("^[A-Za-z0-9._-]{3,256}$").matches(streamVuePremiumProductId)) {
+    "streamVuePremiumProductId must be empty or a valid seller-console product identifier."
+}
+val streamVuePremiumVerificationUrl = providers.gradleProperty("streamVuePremiumVerificationUrl")
+    .orElse("")
+    .get()
+    .trim()
+if (streamVuePremiumVerificationUrl.isNotEmpty()) {
+    val endpoint = URI(streamVuePremiumVerificationUrl)
+    require(endpoint.scheme.equals("https", ignoreCase = true) &&
+        !endpoint.host.isNullOrBlank() && endpoint.userInfo == null &&
+        endpoint.query == null && endpoint.fragment == null) {
+        "streamVuePremiumVerificationUrl must be an HTTPS origin/path without credentials, query, or fragment."
+    }
+}
+
+fun quotedBuildConfig(value: String): String =
+    "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
 android {
     namespace = "com.streamvue.player"
@@ -27,7 +51,9 @@ android {
         targetSdk = 36
         versionCode = 5_000_001
         versionName = "5.0.0-alpha.1"
-        buildConfigField("String", "DISTRIBUTION_MODE", "\"$streamVueDistributionMode\"")
+        buildConfigField("String", "DISTRIBUTION_MODE", quotedBuildConfig(streamVueDistributionMode))
+        buildConfigField("String", "PREMIUM_PRODUCT_ID", quotedBuildConfig(streamVuePremiumProductId))
+        buildConfigField("String", "PREMIUM_VERIFICATION_URL", quotedBuildConfig(streamVuePremiumVerificationUrl))
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -92,6 +118,7 @@ dependencies {
     implementation(libs.androidx.media3.ui)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.gson)
+    implementation(libs.google.play.billing)
 
     testImplementation(libs.junit)
     debugImplementation(libs.androidx.compose.ui.tooling)

@@ -71,6 +71,51 @@ struct PremiumAccessTests {
         }
         #expect(await http.requestCount() == 0)
     }
+
+    @Test("Runtime entitlement changes reach an existing repository")
+    func runtimeEntitlementUpdatesRepository() async {
+        let locked = PremiumAccessPolicy.evaluate(
+            distributionMode: "store",
+            hasVerifiedStorePurchase: false
+        )
+        let runtime = PremiumAccessRuntime(initial: locked)
+        let http = PremiumAccessNetworkProbe()
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("StreamVuePremiumRuntimeTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let repository = MediaCenterRepository(
+            directory: directory,
+            service: MediaCenterService(httpClient: http),
+            premiumAccessRuntime: runtime
+        )
+
+        do {
+            _ = try await repository.connectPlex(
+                serverAddress: "https://plex.invalid:32400",
+                token: "runtime-token"
+            )
+            Issue.record("The locked runtime accepted a Plex connection.")
+        } catch is PremiumAccessError {
+        } catch {
+            Issue.record("The locked runtime returned the wrong error: \(error)")
+        }
+        #expect(await http.requestCount() == 0)
+
+        await runtime.update(PremiumAccessPolicy.evaluate(
+            distributionMode: "store",
+            hasVerifiedStorePurchase: true,
+            productID: "com.streamvue.personal-media-centers"
+        ))
+        do {
+            _ = try await repository.connectPlex(
+                serverAddress: "https://plex.invalid:32400",
+                token: "runtime-token"
+            )
+        } catch {
+            // The probe intentionally rejects the first request; reaching it proves the updated gate was read.
+        }
+        #expect(await http.requestCount() == 1)
+    }
 }
 
 private actor PremiumAccessNetworkProbe: MediaCenterHTTPClient {

@@ -141,3 +141,25 @@ public enum PremiumAccessPolicy {
         return candidate
     }
 }
+
+public actor PremiumAccessRuntime {
+    public static let shared = PremiumAccessRuntime()
+
+    private var snapshot: PremiumAccessSnapshot
+
+    public init(initial: PremiumAccessSnapshot = PremiumAccessPolicy.current) {
+        snapshot = initial
+    }
+
+    public func current() -> PremiumAccessSnapshot {
+        snapshot
+    }
+
+    public func update(_ value: PremiumAccessSnapshot) {
+        snapshot = value
+    }
+
+    public func requireMediaCenters() throws {
+        try snapshot.requireMediaCenters()
+    }
+}

@@ -7,10 +7,12 @@ struct SourceImportView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(StreamVueStore.self) private var store
     @Environment(StreamVueTheme.self) private var theme
+    @Environment(PremiumPurchaseStore.self) private var premiumPurchases
     @State private var playlistURL = ""
     @State private var isImportingFile = false
     @FocusState private var isURLFocused: Bool
-    private let premiumAccess = PremiumAccessPolicy.current
+
+    private var premiumAccess: PremiumAccessSnapshot { premiumPurchases.access }
 
     var body: some View {
         NavigationStack {
@@ -88,9 +90,45 @@ struct SourceImportView: View {
                         }
                         Text(premiumAccess.canUseMediaCenters
                              ? "Bring your personal movies, shows, recordings, and live-TV libraries into the same StreamVue experience. \(premiumAccess.explanation)"
-                             : premiumAccess.explanation)
+                             : premiumPurchases.message)
                             .font(.subheadline)
                             .foregroundStyle(theme.muted)
+
+                        if !premiumAccess.canUseMediaCenters,
+                           premiumPurchases.isBusy || premiumPurchases.canPurchase || premiumPurchases.canRestore {
+                            if premiumPurchases.isBusy {
+                                HStack(spacing: 10) {
+                                    ProgressView()
+                                    Text("Checking purchase status…")
+                                        .font(.footnote)
+                                        .foregroundStyle(theme.muted)
+                                }
+                            }
+                            HStack(spacing: 10) {
+                                if premiumPurchases.canPurchase {
+                                    Button {
+                                        Task { await premiumPurchases.purchase() }
+                                    } label: {
+                                        Label(
+                                            premiumPurchases.localizedPrice.map { "Buy once — \($0)" } ?? "Buy once",
+                                            systemImage: "cart.badge.plus"
+                                        )
+                                        .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                }
+                                if premiumPurchases.canRestore {
+                                    Button {
+                                        Task { await premiumPurchases.restore() }
+                                    } label: {
+                                        Label("Restore purchase", systemImage: "arrow.clockwise")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
+                            }
+                            .disabled(premiumPurchases.isBusy)
+                        }
 
                         ForEach(MediaCenterProvider.allCases) { provider in
                             if premiumAccess.canUseMediaCenters {

@@ -47,6 +47,7 @@ The current Apple milestone is a source and simulator foundation, not an App Sto
 - Just-in-time Plex direct-play and Emby direct-play/direct-stream/transcode resolution, so the active native player is the only component that briefly receives a credentialed URL
 - Windows VOD resume and seek controls using server-provided playback positions, with normal source-manager refresh, offline fallback, and safe credential cleanup
 - A cross-platform premium-access boundary: personal builds include Plex/Emby, while store builds collect no credentials and make no media-server requests until a native one-time purchase is verified
+- Native one-time purchase foundations: StoreKit 2 on iOS/tvOS and Google Play Billing 9.1.0 on Android/Google TV, with localized pricing, Buy/Restore actions, live entitlement changes, pending-payment handling, and fail-closed Google backend verification
 
 These integrations connect only to a server entered by the user and do not include a hosted relay, public-media discovery, or third-party content.
 

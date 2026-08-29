@@ -88,8 +88,7 @@ import com.streamvue.player.playback.PlaybackSignal
 import com.streamvue.player.playback.StreamPlayerSurface
 import com.streamvue.player.playback.VideoScaleMode
 import com.streamvue.player.playback.rememberStreamPlayer
-import com.streamvue.player.premium.PremiumAccessPolicy
-import com.streamvue.player.premium.PremiumAccessSnapshot
+import com.streamvue.player.premium.PremiumBillingState
 import com.streamvue.player.ui.theme.StreamVueBackground
 import com.streamvue.player.ui.theme.StreamVueBorder
 import com.streamvue.player.ui.theme.StreamVueError
@@ -109,6 +108,8 @@ fun StreamVueApp(
     onImportUrl: (String) -> Unit,
     onConnectPlex: (String, String, String?, Boolean) -> Unit,
     onConnectEmby: (String, String, String, String?, Boolean) -> Unit,
+    onPurchasePremium: () -> Unit,
+    onRestorePremium: () -> Unit,
     onRefresh: () -> Unit,
     onSelectGroup: (String?) -> Unit,
     onQueryChanged: (String) -> Unit,
@@ -117,7 +118,6 @@ fun StreamVueApp(
     onDismissError: () -> Unit,
     onFullscreenChanged: (Boolean) -> Unit
 ) {
-    val premiumAccess = remember { PremiumAccessPolicy.current() }
     var showImport by remember { mutableStateOf(false) }
     var isFullscreen by remember { mutableStateOf(false) }
     var scaleMode by remember { mutableStateOf(VideoScaleMode.Auto) }
@@ -220,7 +220,7 @@ fun StreamVueApp(
 
     if (showImport) {
         ImportSourceDialog(
-            premiumAccess = premiumAccess,
+            premiumBilling = state.premiumBilling,
             onDismiss = { showImport = false },
             onChooseFile = {
                 showImport = false
@@ -237,7 +237,9 @@ fun StreamVueApp(
             onConnectEmby = { address, username, password, name, allowHttp ->
                 showImport = false
                 onConnectEmby(address, username, password, name, allowHttp)
-            }
+            },
+            onPurchasePremium = onPurchasePremium,
+            onRestorePremium = onRestorePremium
         )
     }
 
@@ -1010,13 +1012,16 @@ private fun Onboarding(
 
 @Composable
 private fun ImportSourceDialog(
-    premiumAccess: PremiumAccessSnapshot,
+    premiumBilling: PremiumBillingState,
     onDismiss: () -> Unit,
     onChooseFile: () -> Unit,
     onImportUrl: (String) -> Unit,
     onConnectPlex: (String, String, String?, Boolean) -> Unit,
-    onConnectEmby: (String, String, String, String?, Boolean) -> Unit
+    onConnectEmby: (String, String, String, String?, Boolean) -> Unit,
+    onPurchasePremium: () -> Unit,
+    onRestorePremium: () -> Unit
 ) {
+    val premiumAccess = premiumBilling.access
     var mode by remember { mutableStateOf(SourceImportMode.Playlist) }
     var playlistUrl by remember { mutableStateOf("") }
     var serverAddress by remember { mutableStateOf("") }
@@ -1095,10 +1100,52 @@ private fun ImportSourceDialog(
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        premiumAccess.explanation,
+                        if (premiumAccess.canUseMediaCenters) premiumAccess.explanation else premiumBilling.message,
                         color = if (premiumAccess.canUseMediaCenters) StreamVueMuted else Color(0xFFFFC36A),
                         fontSize = 10.sp
                     )
+                    if (!premiumAccess.canUseMediaCenters &&
+                        (premiumBilling.isBusy || premiumBilling.canPurchase || premiumBilling.canRestore)) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        if (premiumBilling.isBusy) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = StreamVueTeal
+                                )
+                                Spacer(modifier = Modifier.width(9.dp))
+                                Text("Checking purchase status…", color = StreamVueMuted, fontSize = 10.sp)
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            if (premiumBilling.canPurchase) {
+                                Button(
+                                    onClick = onPurchasePremium,
+                                    enabled = !premiumBilling.isBusy,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        premiumBilling.localizedPrice?.let { "Buy once — $it" }
+                                            ?: "Buy once"
+                                    )
+                                }
+                            }
+                            if (premiumBilling.canRestore) {
+                                OutlinedButton(
+                                    onClick = onRestorePremium,
+                                    enabled = !premiumBilling.isBusy,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Restore purchase")
+                                }
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
                         value = serverAddress,

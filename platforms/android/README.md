@@ -19,6 +19,16 @@ From the repository root on Windows:
 
 The default `personal` distribution includes Plex and Emby. To verify the fail-closed store surface before Google Play Billing is connected, append `-PstreamVueDistributionMode=store`; that build will not collect media-server credentials or contact a saved media center. See [premium access and store readiness](../../docs/premium-entitlements.md).
 
+The Android/Google TV client includes Google Play Billing Library 9.1.0 for a one-time non-consumable unlock. A charge can be offered only when a real Play Console product and secure purchase verifier are both supplied:
+
+```text
+-PstreamVueDistributionMode=store
+-PstreamVuePremiumProductId=<exact Play Console product ID>
+-PstreamVuePremiumVerificationUrl=https://<your verifier>/google-play/verify
+```
+
+The verifier must validate the purchase token with the Google Play Developer API. With either value missing, purchase and restore controls remain unavailable and Plex/Emby stay locked.
+
 From macOS or Linux:
 
 ```bash

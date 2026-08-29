@@ -8,6 +8,7 @@ public struct StreamVueApplicationRoot: View {
     @State private var settings: StreamVueSettings
     @State private var player: StreamPlayerController
     @State private var theme: StreamVueTheme
+    @State private var premiumPurchases: PremiumPurchaseStore
     @State private var ksRetuneTask: Task<Void, Never>?
     @State private var playbackResolutionTask: Task<Void, Never>?
 
@@ -16,6 +17,7 @@ public struct StreamVueApplicationRoot: View {
         _settings = State(initialValue: StreamVueSettings())
         _player = State(initialValue: StreamPlayerController())
         _theme = State(initialValue: StreamVueTheme())
+        _premiumPurchases = State(initialValue: PremiumPurchaseStore())
         _ksRetuneTask = State(initialValue: nil)
         _playbackResolutionTask = State(initialValue: nil)
     }
@@ -32,9 +34,11 @@ public struct StreamVueApplicationRoot: View {
         .environment(settings)
         .environment(player)
         .environment(theme)
+        .environment(premiumPurchases)
         .tint(theme.accent)
         .preferredColorScheme(.dark)
         .task { await store.start() }
+        .task { await premiumPurchases.start() }
         .task(id: store.selectedChannel?.id) {
             guard let channel = store.selectedChannel else {
                 player.stop()
@@ -64,6 +68,14 @@ public struct StreamVueApplicationRoot: View {
         .onChange(of: settings.preferredAudioLanguage) { _, _ in scheduleKSRetune() }
         .onChange(of: settings.preferredSubtitleLanguage) { _, _ in scheduleKSRetune() }
         .onChange(of: settings.ksSubtitleFontSize) { _, _ in player.configure(settings: settings) }
+        .onChange(of: premiumPurchases.access) { previous, current in
+            if previous.canUseMediaCenters, !current.canUseMediaCenters {
+                player.stop()
+            }
+            Task {
+                await store.premiumAccessDidChange(from: previous, to: current)
+            }
+        }
         .onDisappear {
             ksRetuneTask?.cancel()
             playbackResolutionTask?.cancel()
@@ -119,6 +131,7 @@ private struct PreviewRoot: View {
     )
     @State private var player = StreamPlayerController()
     @State private var theme = StreamVueTheme()
+    @State private var premiumPurchases = PremiumPurchaseStore()
 
     var body: some View {
         #if os(tvOS)
@@ -127,6 +140,7 @@ private struct PreviewRoot: View {
             .environment(settings)
             .environment(player)
             .environment(theme)
+            .environment(premiumPurchases)
             .preferredColorScheme(.dark)
         #else
         MobileRootView()
@@ -134,6 +148,7 @@ private struct PreviewRoot: View {
             .environment(settings)
             .environment(player)
             .environment(theme)
+            .environment(premiumPurchases)
             .preferredColorScheme(.dark)
         #endif
     }

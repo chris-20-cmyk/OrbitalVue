@@ -23,6 +23,27 @@ The repository defaults to the personal mode so current private builds remain fu
 
 An unknown or misspelled mode is treated as store/unavailable by every runtime policy. This is intentional: an invalid release configuration must never become an accidental unlock.
 
+## Native purchase adapters
+
+### Android and Google TV
+
+StreamVue uses Google Play Billing Library 9.1.0 and enables pending one-time purchases plus automatic service reconnection. It queries current purchases at startup/resume, never grants access for `PENDING`, and acknowledges a non-consumable only after verification succeeds.
+
+Google recommends verifying purchase tokens with the Google Play Developer API on a secure backend. Store builds therefore require both build properties below before the Buy or Restore actions become available:
+
+```text
+-PstreamVuePremiumProductId=<exact Play Console product ID>
+-PstreamVuePremiumVerificationUrl=https://<your verifier>/google-play/verify
+```
+
+The verifier endpoint receives a versioned JSON request containing `platform`, `packageName`, `productId`, and the transient `purchaseToken`. It must return `{ "schemaVersion": 1, "verified": true, "productId": "<same ID>" }` only after checking the token with Google. The token is never copied into `PremiumAccessSnapshot`, logs, catalogs, or local settings. The endpoint must be HTTPS and cannot be configured with URL credentials, a query, or a fragment.
+
+### Apple iOS and tvOS
+
+The `Store` configuration reads the exact non-consumable identifier from the `STREAMVUE_PREMIUM_PRODUCT_ID` Xcode build setting. StoreKit 2 loads the localized product, processes `Transaction.updates`, and rebuilds access from cryptographically verified `Transaction.currentEntitlements`. Unverified, pending, revoked, missing, or mismatched transactions stay locked. `AppStore.sync()` is called only after the user selects **Restore purchase**, because that API can display an App Store account prompt.
+
+Official implementation references: [Google Play Billing integration](https://developer.android.com/google/play/billing/integrate), [Google Play billing security](https://developer.android.com/google/play/billing/security), [StoreKit current entitlements](https://developer.apple.com/documentation/storekit/transaction/currententitlements), and [AppStore.sync](https://developer.apple.com/documentation/storekit/appstore/sync()).
+
 ## What remains before charging for the feature
 
 Each store adapter must:

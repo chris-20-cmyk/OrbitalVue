@@ -178,6 +178,40 @@ public final class StreamVueStore {
     public func dismissNotice() { notice = nil }
     public func dismissError() { errorMessage = nil }
 
+    public func premiumAccessDidChange(
+        from previous: PremiumAccessSnapshot,
+        to current: PremiumAccessSnapshot
+    ) async {
+        if previous.canUseMediaCenters, !current.canUseMediaCenters, isMediaCenterSource {
+            catalog = nil
+            groups = []
+            visibleSections = []
+            favoriteSections = []
+            selectedChannel = nil
+            selectedGroup = nil
+            query = ""
+            notice = nil
+            errorMessage = "Premium media-center access is no longer verified. Playlist sources remain available."
+            return
+        }
+
+        guard !previous.canUseMediaCenters, current.canUseMediaCenters,
+              activeSourceKind == .mediaCenter, catalog == nil else { return }
+        isLoading = true
+        loadingLabel = "Opening your verified media center…"
+        errorMessage = nil
+        do {
+            if let loaded = try await mediaCenterRepository.loadSaved() {
+                apply(loaded)
+            } else {
+                isLoading = false
+                loadingLabel = ""
+            }
+        } catch {
+            show(error)
+        }
+    }
+
     /// Resolves a cache-safe media-center locator into an ephemeral URL and
     /// protected headers immediately before playback. The resolved descriptor
     /// is never written back to the catalog.

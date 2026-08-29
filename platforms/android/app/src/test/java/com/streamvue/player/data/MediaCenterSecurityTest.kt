@@ -119,6 +119,44 @@ class MediaCenterSecurityTest {
         }
     }
 
+    @Test
+    fun `verified runtime purchase unlocks an existing repository`() {
+        val directory = Files.createTempDirectory("streamvue-premium-runtime-test").toFile()
+        try {
+            val context = object : ContextWrapper(null) {
+                override fun getFilesDir() = directory
+            }
+            val transport = PlexFixtureTransport()
+            var access = PremiumAccessPolicy.evaluate("store", false)
+            val repository = MediaCenterRepository(
+                context = context,
+                gson = Gson(),
+                service = MediaCenterService(transport, MemoryVault(), testDevice, Gson()),
+                premiumAccessProvider = { access }
+            )
+
+            assertThrows(IllegalStateException::class.java) {
+                runBlocking {
+                    repository.connectPlex("https://plex.example:32400", "runtime-token")
+                }
+            }
+            assertTrue(transport.requests.isEmpty())
+
+            access = PremiumAccessPolicy.evaluate(
+                "store",
+                true,
+                "com.streamvue.personal-media-centers"
+            )
+            val loaded = runBlocking {
+                repository.connectPlex("https://plex.example:32400", "runtime-token")
+            }
+            assertEquals(1, loaded.catalog.channels.size)
+            assertTrue(transport.requests.isNotEmpty())
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
     private class MemoryVault : MediaCenterCredentialVault {
         private val values = HashMap<String, String>()
         override fun save(id: String, value: String) { values[id] = value }

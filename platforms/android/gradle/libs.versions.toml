@@ -10,6 +10,7 @@ tv-material = "1.1.0"
 coroutines = "1.11.0"
 junit = "4.13.2"
 gson = "2.14.0"
+play-billing = "9.1.0"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
@@ -32,6 +33,7 @@ androidx-tv-material = { module = "androidx.tv:tv-material", version.ref = "tv-m
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 junit = { module = "junit:junit", version.ref = "junit" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
+google-play-billing = { module = "com.android.billingclient:billing", version.ref = "play-billing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

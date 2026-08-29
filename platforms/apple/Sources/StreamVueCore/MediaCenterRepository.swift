@@ -10,7 +10,8 @@ public actor MediaCenterRepository {
     private let snapshotFile: URL
     private let service: MediaCenterService
     private let maximumSnapshotBytes: Int
-    private let premiumAccess: PremiumAccessSnapshot
+    private let fixedPremiumAccess: PremiumAccessSnapshot?
+    private let premiumAccessRuntime: PremiumAccessRuntime
     private var cachedSnapshot: MediaCenterSnapshot?
 
     public init(
@@ -18,7 +19,8 @@ public actor MediaCenterRepository {
         fileManager: FileManager = .default,
         service: MediaCenterService = MediaCenterService(),
         maximumSnapshotBytes: Int = defaultMaximumSnapshotBytes,
-        premiumAccess: PremiumAccessSnapshot = PremiumAccessPolicy.current
+        premiumAccess: PremiumAccessSnapshot? = nil,
+        premiumAccessRuntime: PremiumAccessRuntime = .shared
     ) {
         self.fileManager = fileManager
         let base = directory ?? fileManager.urls(
@@ -29,11 +31,13 @@ public actor MediaCenterRepository {
         self.snapshotFile = base.appendingPathComponent("media-center-source.json")
         self.service = service
         self.maximumSnapshotBytes = max(1, maximumSnapshotBytes)
-        self.premiumAccess = premiumAccess
+        self.fixedPremiumAccess = premiumAccess
+        self.premiumAccessRuntime = premiumAccessRuntime
     }
 
     public func loadSaved() async throws -> LoadedCatalog? {
-        guard premiumAccess.canUseMediaCenters else { return nil }
+        let access = await currentPremiumAccess()
+        guard access.canUseMediaCenters else { return nil }
         guard fileManager.fileExists(atPath: snapshotFile.path) else { return nil }
         let saved = try readSnapshot()
         do {
@@ -61,7 +65,7 @@ public actor MediaCenterRepository {
         displayName: String? = nil,
         allowInsecureHTTP: Bool = false
     ) async throws -> LoadedCatalog {
-        try premiumAccess.requireMediaCenters()
+        try await requirePremiumAccess()
         let previousConnection = try? currentSnapshot()?.connection
         let connection = try await service.connectPlex(
             serverAddress: serverAddress,
@@ -83,7 +87,7 @@ public actor MediaCenterRepository {
         displayName: String? = nil,
         allowInsecureHTTP: Bool = false
     ) async throws -> LoadedCatalog {
-        try premiumAccess.requireMediaCenters()
+        try await requirePremiumAccess()
         let previousConnection = try? currentSnapshot()?.connection
         let connection = try await service.connectEmby(
             serverAddress: serverAddress,
@@ -100,7 +104,7 @@ public actor MediaCenterRepository {
     }
 
     public func refreshCurrent() async throws -> LoadedCatalog? {
-        try premiumAccess.requireMediaCenters()
+        try await requirePremiumAccess()
         guard let saved = try currentSnapshot() else { return nil }
         do {
             let refreshed = try await service.snapshot(for: saved.connection)
@@ -125,7 +129,7 @@ public actor MediaCenterRepository {
         mediaSourceID: String? = nil,
         startPositionMS: Int? = nil
     ) async throws -> MediaCenterPlaybackPlan {
-        try premiumAccess.requireMediaCenters()
+        try await requirePremiumAccess()
         let locator = try MediaCenterLocator.parsePlaybackURI(internalURI)
         let snapshot = try requireCurrentSnapshot()
         guard snapshot.connection.provider == locator.provider,
@@ -145,7 +149,7 @@ public actor MediaCenterRepository {
         for locator: MediaCenterPlaybackLocator,
         maximumWidth: Int = 640
     ) async throws -> MediaCenterPlaybackPlan? {
-        try premiumAccess.requireMediaCenters()
+        try await requirePremiumAccess()
         let snapshot = try requireCurrentSnapshot()
         guard snapshot.connection.provider == locator.provider,
               snapshot.connection.serverID == locator.serverID,
@@ -260,5 +264,15 @@ public actor MediaCenterRepository {
         values.isExcludedFromBackup = true
         var mutableDirectory = directory
         try? mutableDirectory.setResourceValues(values)
+    }
+
+    private func currentPremiumAccess() async -> PremiumAccessSnapshot {
+        if let fixedPremiumAccess { return fixedPremiumAccess }
+        return await premiumAccessRuntime.current()
+    }
+
+    private func requirePremiumAccess() async throws {
+        let access = await currentPremiumAccess()
+        try access.requireMediaCenters()
     }
 }

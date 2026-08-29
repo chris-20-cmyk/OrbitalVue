@@ -10,7 +10,7 @@ import com.streamvue.player.data.Channel
 import com.streamvue.player.data.LoadedCatalog
 import com.streamvue.player.data.MediaCenterRepository
 import com.streamvue.player.data.PlaylistRepository
-import com.streamvue.player.premium.PremiumAccessPolicy
+import com.streamvue.player.premium.PremiumBillingState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +35,7 @@ data class AppUiState(
     val selectedChannel: Channel? = null,
     val playbackChannel: Channel? = null,
     val isResolvingPlayback: Boolean = false,
+    val premiumBilling: PremiumBillingState = PremiumBillingState.initial(),
     val notice: String? = null,
     val error: String? = null
 ) {
@@ -43,16 +44,21 @@ data class AppUiState(
 }
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
+    private val mutableState = MutableStateFlow(AppUiState())
     private val repository = PlaylistRepository(application)
-    private val mediaCenterRepository = MediaCenterRepository(application)
-    private val premiumAccess = PremiumAccessPolicy.current()
+    private val mediaCenterRepository = MediaCenterRepository(
+        context = application,
+        premiumAccessProvider = { mutableState.value.premiumBilling.access }
+    )
     private val sourcePreferences = application.getSharedPreferences(
         "streamvue-active-source-v1",
         Context.MODE_PRIVATE
     )
-    private val mutableState = MutableStateFlow(AppUiState())
     private var playbackResolutionJob: Job? = null
     val state: StateFlow<AppUiState> = mutableState.asStateFlow()
+
+    private val premiumAccess
+        get() = mutableState.value.premiumBilling.access
 
     init {
         viewModelScope.launch {
@@ -193,6 +199,50 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissError() {
         mutableState.update { it.copy(error = null) }
+    }
+
+    fun updatePremiumBilling(billing: PremiumBillingState) {
+        val previousAccess = mutableState.value.premiumBilling.access
+        mutableState.update { current ->
+            if (current.premiumBilling == billing) return@update current
+            if (current.premiumBilling.access.canUseMediaCenters &&
+                !billing.access.canUseMediaCenters && current.isMediaCenterSource) {
+                playbackResolutionJob?.cancel()
+                current.copy(
+                    catalog = null,
+                    groups = emptyList(),
+                    selectedGroup = null,
+                    visibleChannels = emptyList(),
+                    sections = emptyList(),
+                    selectedChannel = null,
+                    playbackChannel = null,
+                    isResolvingPlayback = false,
+                    premiumBilling = billing,
+                    notice = null,
+                    error = "Premium media-center access is no longer verified. Playlist sources remain available."
+                )
+            } else {
+                current.copy(premiumBilling = billing)
+            }
+        }
+        if (!previousAccess.canUseMediaCenters && billing.access.canUseMediaCenters &&
+            activeSource == ActiveSource.MediaCenter && mutableState.value.catalog == null) {
+            viewModelScope.launch {
+                mutableState.update {
+                    it.copy(
+                        isLoading = true,
+                        loadingLabel = "Opening your verified media center…",
+                        error = null
+                    )
+                }
+                runCatching { mediaCenterRepository.loadSaved() }
+                    .onSuccess { loaded ->
+                        if (loaded != null) applyLoaded(loaded)
+                        else mutableState.update { it.copy(isLoading = false, loadingLabel = "") }
+                    }
+                    .onFailure(::showFailure)
+            }
+        }
     }
 
     private fun launchLoad(
