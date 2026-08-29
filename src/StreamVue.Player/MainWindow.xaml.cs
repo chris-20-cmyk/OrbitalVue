@@ -49,6 +49,7 @@ public partial class MainWindow : Window
     private readonly PlaylistSourceService _playlistSource = new();
     private readonly XtreamSourceService _xtreamSource = new();
     private readonly MediaCenterSourceService _mediaCenterSource = new();
+    private readonly PremiumAccessSnapshot _premiumAccess = PremiumAccessPolicy.Current;
     private readonly AppSettingsStore _settingsStore = new();
     private readonly PlaylistCacheStore _playlistCache = new();
     private readonly PlaylistSourceRefreshService _playlistSourceRefresh;
@@ -184,6 +185,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        ApplyPremiumAccessPresentation();
+        SourceTabs.SelectionChanged += SourceTabs_SelectionChanged;
         _playlistSourceRefresh = new PlaylistSourceRefreshService(
             LoadPlaylistSourceDefinitionAsync,
             (sourceType, sourceValue, token) => _playlistCache.TryLoadAsync(sourceType, sourceValue, token),
@@ -217,6 +220,51 @@ public partial class MainWindow : Window
 
         AspectBox.SelectedIndex = 0;
         DefaultAspectBox.SelectedIndex = 0;
+    }
+
+    private void ApplyPremiumAccessPresentation()
+    {
+        PlexAccessBadge.Text = _premiumAccess.BadgeText;
+        EmbyAccessBadge.Text = _premiumAccess.BadgeText;
+        if (_premiumAccess.CanUseMediaCenters)
+        {
+            PlexAccessDetailText.Text = $"Index movies and episodes without storing playable token URLs in the library. {_premiumAccess.Explanation}";
+            EmbyAccessDetailText.Text = $"Connect directly with a protected Windows-user-bound session. {_premiumAccess.Explanation}";
+            return;
+        }
+
+        PlexAccessDetailText.Text = _premiumAccess.Explanation;
+        EmbyAccessDetailText.Text = _premiumAccess.Explanation;
+        PlexConnectButton.Content = "Premium unavailable";
+        EmbyConnectButton.Content = "Premium unavailable";
+        PlexConnectButton.IsEnabled = false;
+        EmbyConnectButton.IsEnabled = false;
+        PlexConnectButton.Opacity = 0.48;
+        EmbyConnectButton.Opacity = 0.48;
+        foreach (var control in new System.Windows.Controls.Control[]
+                 {
+                     PlexServerBox, PlexNameBox, PlexTokenBox, PlexAllowHttpBox,
+                     EmbyServerBox, EmbyNameBox, EmbyUsernameBox, EmbyPasswordBox, EmbyAllowHttpBox
+                 })
+            control.IsEnabled = false;
+    }
+
+    private void SourceTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!ReferenceEquals(e.OriginalSource, SourceTabs) || _premiumAccess.CanUseMediaCenters) return;
+        if (ReferenceEquals(SourceTabs.SelectedItem, PlexSourceTab) ||
+            ReferenceEquals(SourceTabs.SelectedItem, EmbySourceTab))
+        {
+            ImportStatusText.Text = "Premium store verification required";
+            ImportDetailText.Text = "No media-server credential or request is allowed in this store build. Playlist sources remain available.";
+            return;
+        }
+
+        if (ImportStatusText.Text == "Premium store verification required")
+        {
+            ImportStatusText.Text = "Ready to connect";
+            ImportDetailText.Text = "Choose a source that you are authorized to access.";
+        }
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
@@ -815,6 +863,7 @@ public partial class MainWindow : Window
         IProgress<PlaylistProgress>? progress,
         CancellationToken cancellationToken)
     {
+        if (source.SourceType is "plex" or "emby") PremiumAccessPolicy.RequireMediaCenters(_premiumAccess);
         return source.SourceType switch
         {
             "file" => await _playlistSource.LoadFileAsync(source.SourceValue, progress, cancellationToken),
@@ -848,11 +897,19 @@ public partial class MainWindow : Window
     private async Task<bool> LoadUnifiedPlaylistSourcesAsync(bool startup, bool closeImportOnSuccess = false)
     {
         if (_isLoading) return false;
-        var enabledSources = (_settings.PlaylistSources ?? [])
+        var configuredSources = (_settings.PlaylistSources ?? [])
             .Where(source => source.IsEnabled)
             .OrderBy(source => source.SortOrder)
             .ThenBy(source => source.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        var enabledSources = configuredSources
+            .Where(source => _premiumAccess.CanUseMediaCenters || source.SourceType is not ("plex" or "emby"))
+            .ToList();
+        if (enabledSources.Count == 0 && configuredSources.Count > 0)
+        {
+            EnsureMediaCenterAccess(configuredSources[0].TypeLabel);
+            return false;
+        }
         if (enabledSources.Count == 0) return false;
 
         _isLoading = true;
@@ -1372,12 +1429,15 @@ public partial class MainWindow : Window
             "xtream", sourceValue, allowCachedFallback: true);
     }
 
-    private Task<bool> RefreshSavedMediaCenterAsync(string provider, string sourceValue) =>
-        LoadPlaylistAsync(
+    private Task<bool> RefreshSavedMediaCenterAsync(string provider, string sourceValue)
+    {
+        if (!EnsureMediaCenterAccess(provider)) return Task.FromResult(false);
+        return LoadPlaylistAsync(
             (progress, token) => _mediaCenterSource.LoadSavedAsync(provider, sourceValue, progress, token),
             provider,
             sourceValue,
             allowCachedFallback: true);
+    }
 
     private static bool IsPlaylistFileExtension(string extension) =>
         extension.Equals(".m3u", StringComparison.OrdinalIgnoreCase) ||
@@ -2645,6 +2705,7 @@ public partial class MainWindow : Window
         bool rememberChannel,
         ChannelPlaybackProfile? profile = null)
     {
+        if (!EnsureMediaCenterAccess(logicalChannel.SourceName ?? "Media center")) return;
         CancelMediaPlaybackResolution(clearResume: false);
         var cancellation = new CancellationTokenSource();
         _mediaPlaybackCancellation = cancellation;
@@ -4175,6 +4236,7 @@ public partial class MainWindow : Window
 
     private async Task<bool> UsePlaylistSourceAsync(PlaylistSourceDefinition source)
     {
+        if (source.SourceType is "plex" or "emby" && !EnsureMediaCenterAccess(source.TypeLabel)) return false;
         switch (source.SourceType)
         {
             case "file":
@@ -4628,6 +4690,7 @@ public partial class MainWindow : Window
 
     private async void LoadPlex_Click(object sender, RoutedEventArgs e)
     {
+        if (!EnsureMediaCenterAccess("Plex")) return;
         if (!TryPrepareMediaCenterConnection(
                 "Plex",
                 PlexServerBox.Text,
@@ -4652,6 +4715,7 @@ public partial class MainWindow : Window
 
     private async void LoadEmby_Click(object sender, RoutedEventArgs e)
     {
+        if (!EnsureMediaCenterAccess("Emby")) return;
         if (!TryPrepareMediaCenterConnection(
                 "Emby",
                 EmbyServerBox.Text,
@@ -4698,6 +4762,24 @@ public partial class MainWindow : Window
             FooterStatusText.Text = $"{provider} connection needs attention";
             return false;
         }
+    }
+
+    private bool EnsureMediaCenterAccess(string provider)
+    {
+        if (_premiumAccess.CanUseMediaCenters) return true;
+        ImportProgress.Visibility = Visibility.Collapsed;
+        ImportStatusText.Text = $"{provider} premium access is unavailable";
+        ImportDetailText.Text = _premiumAccess.Explanation;
+        FooterStatusDot.Fill = WarningBrush;
+        FooterStatusText.Text = "A verified one-time store purchase is required";
+        if (!_backgroundLaunch)
+        {
+            SourceTabs.SelectedItem = provider.Contains("Emby", StringComparison.OrdinalIgnoreCase)
+                ? EmbySourceTab
+                : PlexSourceTab;
+            ShowModal(ImportOverlay);
+        }
+        return false;
     }
 
     private void PlayPause_Click(object sender, RoutedEventArgs e)

@@ -7,6 +7,11 @@ options:
     iOS: "17.0"
     tvOS: "17.0"
 
+configs:
+  Debug: debug
+  Release: release
+  Store: release
+
 packages:
   StreamVueModules:
     path: .
@@ -21,6 +26,10 @@ settings:
     ENABLE_MODULE_VERIFIER: YES
     DEAD_CODE_STRIPPING: YES
     CODE_SIGN_STYLE: Automatic
+    STREAMVUE_DISTRIBUTION_MODE: personal
+  configs:
+    Store:
+      STREAMVUE_DISTRIBUTION_MODE: store
 
 targets:
   StreamVue:
@@ -49,6 +58,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.entertainment
         ITSAppUsesNonExemptEncryption: false
+        StreamVueDistributionMode: $(STREAMVUE_DISTRIBUTION_MODE)
         NSLocalNetworkUsageDescription: StreamVue connects to IPTV, Plex, and Emby servers that you choose on your local network.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
@@ -91,6 +101,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.entertainment
         ITSAppUsesNonExemptEncryption: false
+        StreamVueDistributionMode: $(STREAMVUE_DISTRIBUTION_MODE)
         NSLocalNetworkUsageDescription: StreamVue connects to IPTV, Plex, and Emby servers that you choose on your local network.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true

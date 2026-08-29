@@ -49,8 +49,12 @@ jobs:
           testDebugUnitTest
           lintDebug
           assembleDebug
-          bundleRelease
           --stacktrace
+
+      - name: Build the fail-closed Google Play bundle
+        run: |
+          bash platforms/android/gradlew -p platforms/android bundleRelease -PstreamVueDistributionMode=store --stacktrace
+          grep -F 'DISTRIBUTION_MODE = "store"' platforms/android/app/build/generated/source/buildConfig/release/com/streamvue/player/BuildConfig.java
 
       - name: Verify Android TV metadata and 16 KB alignment
         run: |
@@ -76,10 +80,12 @@ jobs:
       - name: Verify and build Samsung and LG television clients
         run: |
           node contracts/validate-contract.mjs
+          node tools/verify-premium-store-readiness.mjs
           pnpm media-centers:test
           pnpm tv:check
           pnpm tv:test
           pnpm tv:build
+          VITE_STREAMVUE_DISTRIBUTION_MODE=store pnpm tv:build
 
       - name: Assemble public foundation assets
         shell: bash
@@ -87,9 +93,9 @@ jobs:
           PACKAGE_VERSION="${RELEASE_TAG#v}"
           mkdir -p artifacts/platform-foundation
           cp platforms/android/app/build/outputs/apk/debug/app-debug.apk "artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-android-personal-test.apk"
-          cp platforms/android/app/build/outputs/bundle/release/app-release.aab "artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-google-play-unsigned.aab"
-          (cd platforms/tv-web/dist/samsung && zip -q -r "../../../../artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-samsung-tizen-unsigned.zip" .)
-          (cd platforms/tv-web/dist/webos && zip -q -r "../../../../artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-lg-webos-unsigned.zip" .)
+          cp platforms/android/app/build/outputs/bundle/release/app-release.aab "artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-google-play-store-locked-unsigned.aab"
+          (cd platforms/tv-web/dist/samsung && zip -q -r "../../../../artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-samsung-tizen-store-locked-unsigned.zip" .)
+          (cd platforms/tv-web/dist/webos && zip -q -r "../../../../artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-lg-webos-store-locked-unsigned.zip" .)
           (cd artifacts/platform-foundation && sha256sum * > SHA256SUMS.txt)
 
       - name: Create or update the prerelease

@@ -13,6 +13,7 @@ import {
   type PlayerAdapter
 } from "../playback/PlayerAdapter.js";
 import { icon, type IconName } from "./icons.js";
+import { currentPremiumAccess } from "../premium/PremiumAccess.js";
 
 type Screen = "loading" | "onboarding" | "browse" | "player";
 type Modal = "source" | "search" | "confirm-clear" | null;
@@ -25,6 +26,7 @@ const GROUP_WINDOW_SIZE = 8;
 
 export class StreamVueTvApp {
   private readonly repository = new CatalogRepository();
+  private readonly premiumAccess = currentPremiumAccess();
   private readonly navigator: SpatialNavigator;
   private catalog: StreamVueCatalog | null = null;
   private screen: Screen = "loading";
@@ -242,11 +244,17 @@ export class StreamVueTvApp {
       </div>`;
     }
     const provider = this.sourceMode === "plex" ? "Plex" : "Emby";
+    if (!this.premiumAccess.canUseMediaCenters) {
+      return `<div class="source-form" role="tabpanel">
+        <p class="premium-copy"><strong>${provider} • ${escapeHtml(this.premiumAccess.badgeText)}</strong><span>${escapeHtml(this.premiumAccess.explanation)}</span></p>
+        <p class="vault-note">No media-server address or credential is collected while store verification is unavailable. Playlist sources remain available.</p>
+      </div>`;
+    }
     const providerFields = this.sourceMode === "plex"
       ? `<label class="field-label" for="plex-access">Plex server token</label><input id="plex-access" class="tv-input" type="password" data-focusable="true" autocomplete="off" spellcheck="false" placeholder="Paste the token for this server" />`
       : `<div class="source-field-grid"><div><label class="field-label" for="emby-user">Emby username</label><input id="emby-user" class="tv-input" data-focusable="true" autocomplete="off" spellcheck="false" /></div><div><label class="field-label" for="emby-password">Emby password</label><input id="emby-password" class="tv-input" type="password" data-focusable="true" autocomplete="off" /></div></div>`;
     return `<div class="source-form" role="tabpanel">
-      <p class="premium-copy"><strong>${provider} personal library</strong><span>Credentials are verified against one server before protected requests begin.</span></p>
+      <p class="premium-copy"><strong>${provider} • ${escapeHtml(this.premiumAccess.badgeText)}</strong><span>Credentials are verified against one server before protected requests begin. ${escapeHtml(this.premiumAccess.explanation)}</span></p>
       <label class="field-label" for="media-server">Server address</label>
       <input id="media-server" class="tv-input" data-focusable="true" data-autofocus="true" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://media-server.example:port" />
       ${providerFields}

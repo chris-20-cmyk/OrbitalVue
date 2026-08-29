@@ -86,6 +86,7 @@ try
     if (first.GuideMappingKey != equivalent.GuideMappingKey || first.GuideMappingKey == distinct.GuideMappingKey)
         throw new InvalidOperationException("The URL-independent guide mapping identity was not stable or unique.");
 
+    RunPremiumAccessSelfTest();
     await RunMediaCenterSelfTestAsync(testRoot);
 
     var store = new AppSettingsStore(settingsPath);
@@ -1326,6 +1327,7 @@ try
     Console.WriteLine("Independent encrypted multi-source playlist caches: PASS");
     Console.WriteLine("Protected multi-account Xtream vault and legacy migration: PASS");
     Console.WriteLine("Protected Plex and Emby catalog, credential, cache, and just-in-time playback contract: PASS");
+    Console.WriteLine("Personal/store premium entitlement policy: PASS");
     Console.WriteLine("XMLTV Now/Next, episode metadata, and call-sign matching: PASS");
     Console.WriteLine("Encrypted offline guide cache: PASS");
     Console.WriteLine("Protected multi-source guide configuration: PASS");
@@ -1362,6 +1364,33 @@ finally
     if (Directory.Exists(testRoot)) Directory.Delete(testRoot, recursive: true);
 }
 
+static void RunPremiumAccessSelfTest()
+{
+    var personal = PremiumAccessPolicy.Evaluate("personal", hasVerifiedStorePurchase: false);
+    if (!personal.CanUseMediaCenters || personal.AccessState != PremiumAccessState.Included ||
+        personal.ReceiptVerification != "not-required" || personal.ProductId is not null)
+        throw new InvalidOperationException("Personal builds did not include premium media centers.");
+
+    var locked = PremiumAccessPolicy.Evaluate("store", hasVerifiedStorePurchase: false);
+    if (locked.CanUseMediaCenters || locked.AccessState != PremiumAccessState.Unavailable)
+        throw new InvalidOperationException("An unverified store build exposed premium media centers.");
+
+    var incompleteVerification = PremiumAccessPolicy.Evaluate("store", hasVerifiedStorePurchase: true);
+    if (incompleteVerification.CanUseMediaCenters)
+        throw new InvalidOperationException("A store boolean without a store product identifier unlocked premium access.");
+
+    var verified = PremiumAccessPolicy.Evaluate(
+        "store",
+        hasVerifiedStorePurchase: true,
+        productId: "com.streamvue.personal-media-centers");
+    if (!verified.CanUseMediaCenters || verified.AccessState != PremiumAccessState.Verified ||
+        verified.ReceiptVerification != "verified")
+        throw new InvalidOperationException("A verified one-time store purchase did not unlock premium access.");
+
+    if (PremiumAccessPolicy.Evaluate("typo", false).CanUseMediaCenters)
+        throw new InvalidOperationException("An unknown distribution mode failed open.");
+}
+
 static async Task RunMediaCenterSelfTestAsync(string testRoot)
 {
     const string plexBaseUrl = "https://plex.local:32400";
@@ -1369,6 +1398,24 @@ static async Task RunMediaCenterSelfTestAsync(string testRoot)
     const string plexToken = "plex-probe-secret-token";
     const string embyPassword = "emby-probe-password";
     const string embyToken = "emby-probe-secret-token";
+
+    var lockedHandler = new MediaCenterProbeHandler(plexToken, embyPassword, embyToken);
+    var lockedService = new MediaCenterSourceService(
+        new MediaCenterCredentialStore(Path.Combine(testRoot, "locked-media-center-credentials.bin")),
+        new HttpClient(lockedHandler),
+        "streamvue-win-locked-probe",
+        PremiumAccessPolicy.Evaluate("store", hasVerifiedStorePurchase: false));
+    try
+    {
+        await lockedService.ConnectPlexAsync(plexBaseUrl, plexToken, null, allowInsecureHttp: false);
+        throw new InvalidOperationException("A locked Windows store service accepted a Plex connection.");
+    }
+    catch (InvalidOperationException exception) when (
+        exception.Message.Contains("one-time store purchase", StringComparison.OrdinalIgnoreCase))
+    {
+    }
+    if (lockedHandler.Requests.Count != 0)
+        throw new InvalidOperationException("A locked Windows store service reached the media-server network.");
 
     if (MediaCenterSecurity.NormalizeBaseUrl($"{plexBaseUrl}/") != plexBaseUrl)
         throw new InvalidOperationException("Media-center server normalization was not canonical.");

@@ -10,6 +10,7 @@ import com.streamvue.player.data.Channel
 import com.streamvue.player.data.LoadedCatalog
 import com.streamvue.player.data.MediaCenterRepository
 import com.streamvue.player.data.PlaylistRepository
+import com.streamvue.player.premium.PremiumAccessPolicy
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -44,6 +45,7 @@ data class AppUiState(
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = PlaylistRepository(application)
     private val mediaCenterRepository = MediaCenterRepository(application)
+    private val premiumAccess = PremiumAccessPolicy.current()
     private val sourcePreferences = application.getSharedPreferences(
         "streamvue-active-source-v1",
         Context.MODE_PRIVATE
@@ -80,6 +82,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         displayName: String?,
         allowInsecureHttp: Boolean
     ) {
+        if (!requireMediaCenterAccess()) return
         launchLoad("Connecting to Plex…", ActiveSource.MediaCenter) {
             mediaCenterRepository.connectPlex(
                 serverAddress = serverAddress,
@@ -97,6 +100,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         displayName: String?,
         allowInsecureHttp: Boolean
     ) {
+        if (!requireMediaCenterAccess()) return
         launchLoad("Connecting to Emby…", ActiveSource.MediaCenter) {
             mediaCenterRepository.connectEmby(
                 serverAddress = serverAddress,
@@ -117,7 +121,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         launchLoad("Refreshing library…", source) {
             when (source) {
                 ActiveSource.Playlist -> repository.refreshCurrent()
-                ActiveSource.MediaCenter -> mediaCenterRepository.refreshCurrent()
+                ActiveSource.MediaCenter -> {
+                    premiumAccess.requireMediaCenters()
+                    mediaCenterRepository.refreshCurrent()
+                }
             } ?: error("Connect a source before refreshing.")
         }
     }
@@ -157,6 +164,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             return
         }
+        if (!requireMediaCenterAccess()) return
         mutableState.update {
             it.copy(
                 selectedChannel = channel,
@@ -278,7 +286,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun loadSource(source: ActiveSource): LoadedCatalog? = when (source) {
         ActiveSource.Playlist -> repository.loadSaved()
-        ActiveSource.MediaCenter -> mediaCenterRepository.loadSaved()
+        ActiveSource.MediaCenter -> if (premiumAccess.canUseMediaCenters) {
+            mediaCenterRepository.loadSaved()
+        } else {
+            null
+        }
+    }
+
+    private fun requireMediaCenterAccess(): Boolean {
+        if (premiumAccess.canUseMediaCenters) return true
+        showFailure(IllegalStateException(premiumAccess.explanation))
+        return false
     }
 
     private var activeSource: ActiveSource

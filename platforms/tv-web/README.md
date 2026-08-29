@@ -20,6 +20,8 @@ Raw playlist locations never appear in normal browsing; only the provider host a
 
 Plex and Emby credentials are kept outside the catalog database. Samsung builds use Tizen KeyManager. LG webOS 24 and newer use Key Manager 3 backed by the television's trusted execution environment; older or unsupported televisions intentionally keep the credential for the current app session only and ask the user to reconnect after a restart. Public server identity is verified before a protected request is sent, and cached media snapshots contain only opaque StreamVue locators.
 
+Personal builds include media-center access. Setting `VITE_STREAMVUE_DISTRIBUTION_MODE=store` produces the fail-closed store surface: it shows the locked premium state, renders no credential inputs, and blocks refresh and playback before the credential vault or network is touched. A one-time store product must be created and verified through the applicable seller API before this mode can unlock. See [premium access and store readiness](../../docs/premium-entitlements.md).
+
 The television's native player cannot attach arbitrary authorization headers. StreamVue therefore materializes the provider token into the native playback URL only for the active playback request, clears that URL when playback stops, and never stores it in source metadata or offline snapshots.
 
 Samsung AVPlay exposes User-Agent and Cookie streaming properties but not an arbitrary Referer property. LG's portable HTML5 video path cannot guarantee custom request headers. StreamVue reports that limitation instead of sending a private source through a proxy.

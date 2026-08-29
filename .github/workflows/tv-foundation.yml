@@ -11,6 +11,8 @@ on:
       - "packages/media-centers/**"
       - "platforms/tv-web/**"
       - "contracts/**"
+      - "store/**"
+      - "tools/verify-premium-store-readiness.mjs"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -22,6 +24,8 @@ on:
       - "packages/media-centers/**"
       - "platforms/tv-web/**"
       - "contracts/**"
+      - "store/**"
+      - "tools/verify-premium-store-readiness.mjs"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -51,7 +55,9 @@ jobs:
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
       - name: Validate portable catalog contract
-        run: node contracts/validate-contract.mjs
+        run: |
+          node contracts/validate-contract.mjs
+          node tools/verify-premium-store-readiness.mjs
       - name: Build and test authenticated media-center adapters
         run: pnpm media-centers:test
       - name: Check, test, and build television clients
@@ -59,6 +65,7 @@ jobs:
           pnpm tv:check
           pnpm tv:test
           pnpm tv:build
+          VITE_STREAMVUE_DISTRIBUTION_MODE=store pnpm tv:build
       - name: Verify platform package contents
         run: |
           test -f platforms/tv-web/dist/samsung/config.xml
@@ -70,7 +77,7 @@ jobs:
       - name: Upload unsigned television projects
         uses: actions/upload-artifact@v7
         with:
-          name: streamvue-tv-5.0-foundation
+          name: streamvue-tv-5.0-store-locked-foundation
           if-no-files-found: error
           retention-days: 14
           path: |

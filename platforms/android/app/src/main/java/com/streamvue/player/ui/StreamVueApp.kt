@@ -88,6 +88,8 @@ import com.streamvue.player.playback.PlaybackSignal
 import com.streamvue.player.playback.StreamPlayerSurface
 import com.streamvue.player.playback.VideoScaleMode
 import com.streamvue.player.playback.rememberStreamPlayer
+import com.streamvue.player.premium.PremiumAccessPolicy
+import com.streamvue.player.premium.PremiumAccessSnapshot
 import com.streamvue.player.ui.theme.StreamVueBackground
 import com.streamvue.player.ui.theme.StreamVueBorder
 import com.streamvue.player.ui.theme.StreamVueError
@@ -115,6 +117,7 @@ fun StreamVueApp(
     onDismissError: () -> Unit,
     onFullscreenChanged: (Boolean) -> Unit
 ) {
+    val premiumAccess = remember { PremiumAccessPolicy.current() }
     var showImport by remember { mutableStateOf(false) }
     var isFullscreen by remember { mutableStateOf(false) }
     var scaleMode by remember { mutableStateOf(VideoScaleMode.Auto) }
@@ -217,6 +220,7 @@ fun StreamVueApp(
 
     if (showImport) {
         ImportSourceDialog(
+            premiumAccess = premiumAccess,
             onDismiss = { showImport = false },
             onChooseFile = {
                 showImport = false
@@ -1006,6 +1010,7 @@ private fun Onboarding(
 
 @Composable
 private fun ImportSourceDialog(
+    premiumAccess: PremiumAccessSnapshot,
     onDismiss: () -> Unit,
     onChooseFile: () -> Unit,
     onImportUrl: (String) -> Unit,
@@ -1023,9 +1028,9 @@ private fun ImportSourceDialog(
     val usesCleartextHttp = serverAddress.trim().startsWith("http://", ignoreCase = true)
     val canConnect = when (mode) {
         SourceImportMode.Playlist -> playlistUrl.isNotBlank()
-        SourceImportMode.Plex -> serverAddress.isNotBlank() && plexToken.isNotBlank() &&
+        SourceImportMode.Plex -> premiumAccess.canUseMediaCenters && serverAddress.isNotBlank() && plexToken.isNotBlank() &&
             (!usesCleartextHttp || allowInsecureHttp)
-        SourceImportMode.Emby -> serverAddress.isNotBlank() && username.isNotBlank() &&
+        SourceImportMode.Emby -> premiumAccess.canUseMediaCenters && serverAddress.isNotBlank() && username.isNotBlank() &&
             password.isNotEmpty() && (!usesCleartextHttp || allowInsecureHttp)
     }
 
@@ -1082,11 +1087,17 @@ private fun ImportSourceDialog(
                     )
                 } else {
                     Text(
-                        "${mode.label.uppercase()}  •  PREMIUM",
+                        "${mode.label.uppercase()}  •  ${premiumAccess.badgeText}",
                         color = StreamVueTeal,
                         fontWeight = FontWeight.Bold,
                         fontSize = 10.sp,
                         letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        premiumAccess.explanation,
+                        color = if (premiumAccess.canUseMediaCenters) StreamVueMuted else Color(0xFFFFC36A),
+                        fontSize = 10.sp
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
@@ -1099,6 +1110,7 @@ private fun ImportSourceDialog(
                         label = { Text("Server address") },
                         placeholder = { Text("https://media-server.example:port") },
                         leadingIcon = { Icon(Icons.Rounded.Tv, contentDescription = null) },
+                        enabled = premiumAccess.canUseMediaCenters,
                         singleLine = true
                     )
                     Spacer(modifier = Modifier.height(10.dp))
@@ -1107,6 +1119,7 @@ private fun ImportSourceDialog(
                         onValueChange = { displayName = it },
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Server nickname (optional)") },
+                        enabled = premiumAccess.canUseMediaCenters,
                         singleLine = true
                     )
                     Spacer(modifier = Modifier.height(10.dp))
@@ -1117,6 +1130,7 @@ private fun ImportSourceDialog(
                             modifier = Modifier.fillMaxWidth(),
                             label = { Text("Plex server token") },
                             visualTransformation = PasswordVisualTransformation(),
+                            enabled = premiumAccess.canUseMediaCenters,
                             singleLine = true
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -1131,6 +1145,7 @@ private fun ImportSourceDialog(
                             onValueChange = { username = it },
                             modifier = Modifier.fillMaxWidth(),
                             label = { Text("Emby username") },
+                            enabled = premiumAccess.canUseMediaCenters,
                             singleLine = true
                         )
                         Spacer(modifier = Modifier.height(10.dp))
@@ -1140,6 +1155,7 @@ private fun ImportSourceDialog(
                             modifier = Modifier.fillMaxWidth(),
                             label = { Text("Emby password") },
                             visualTransformation = PasswordVisualTransformation(),
+                            enabled = premiumAccess.canUseMediaCenters,
                             singleLine = true
                         )
                     }
@@ -1166,7 +1182,8 @@ private fun ImportSourceDialog(
                             }
                             Switch(
                                 checked = allowInsecureHttp,
-                                onCheckedChange = { allowInsecureHttp = it }
+                                onCheckedChange = { allowInsecureHttp = it },
+                                enabled = premiumAccess.canUseMediaCenters
                             )
                         }
                     }

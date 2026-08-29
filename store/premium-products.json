@@ -1,0 +1,12 @@
+{
+  "contractVersion": "1.0",
+  "featureId": "personal-media-centers",
+  "purchaseModel": "one-time-non-consumable",
+  "platforms": {
+    "windows": { "productId": null, "verificationProvider": null, "ready": false },
+    "android": { "productId": null, "verificationProvider": null, "ready": false },
+    "apple": { "productId": null, "verificationProvider": null, "ready": false },
+    "samsung": { "productId": null, "verificationProvider": null, "ready": false },
+    "lg": { "productId": null, "verificationProvider": null, "ready": false }
+  }
+}

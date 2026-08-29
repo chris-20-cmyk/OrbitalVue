@@ -17,6 +17,8 @@ From the repository root on Windows:
 .\platforms\android\gradlew.bat -p platforms\android testDebugUnitTest lintDebug assembleDebug bundleRelease
 ```
 
+The default `personal` distribution includes Plex and Emby. To verify the fail-closed store surface before Google Play Billing is connected, append `-PstreamVueDistributionMode=store`; that build will not collect media-server credentials or contact a saved media center. See [premium access and store readiness](../../docs/premium-entitlements.md).
+
 From macOS or Linux:
 
 ```bash

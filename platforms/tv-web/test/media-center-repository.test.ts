@@ -18,6 +18,7 @@ import {
   SessionCredentialVault,
   type ProtectedMediaCredential
 } from "../src/catalog/CredentialVault.js";
+import { evaluatePremiumAccess } from "../src/premium/PremiumAccess.js";
 
 class MemoryCatalogStore implements CatalogStore {
   record: SavedCatalogRecord | null = null;
@@ -215,6 +216,45 @@ describe("television media-center repository", () => {
 
     expect(restored?.refreshed).toBe(false);
     expect(restored?.notice).toContain("no longer matches this server");
+    expect(requestCount).toBe(0);
+  });
+
+  it("blocks a store media-center restore before credentials or network are touched", async () => {
+    const connection = createMediaCenterConnection({
+      provider: "plex",
+      serverId: "locked-server",
+      displayName: "Locked Plex",
+      baseUrl: "https://locked.home:32400",
+      credentialId: "mc-plex-locked"
+    });
+    const snapshot: MediaCenterSnapshot = {
+      contractVersion: connection.contractVersion,
+      loadedAt: new Date().toISOString(),
+      connection,
+      libraries: [],
+      items: []
+    };
+    const cache = new MemoryCatalogStore();
+    cache.record = {
+      key: "active",
+      sourceUrl: null,
+      catalog: createMediaCenterCatalog(connection, [], [], snapshot.loadedAt),
+      savedAt: snapshot.loadedAt,
+      sourceKind: "media-center",
+      mediaCenterSnapshot: snapshot
+    };
+    let requestCount = 0;
+    const repository = new CatalogRepository(
+      cache,
+      new SessionCredentialVault(),
+      async () => {
+        requestCount += 1;
+        throw new Error("network should not be reached");
+      },
+      evaluatePremiumAccess("store", false)
+    );
+
+    await expect(repository.loadSaved()).rejects.toThrow("one-time store purchase");
     expect(requestCount).toBe(0);
   });
 });

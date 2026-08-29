@@ -12,6 +12,18 @@ const mediaCenterSchema = JSON.parse(
 const mediaCenter = JSON.parse(
   await readFile(join(here, "fixtures", "media-center.expected.json"), "utf8")
 );
+const premiumAccessSchema = JSON.parse(
+  await readFile(join(here, "premium-access-contract-v1.schema.json"), "utf8")
+);
+const personalPremiumAccess = JSON.parse(
+  await readFile(join(here, "fixtures", "premium-access.personal.expected.json"), "utf8")
+);
+const lockedStorePremiumAccess = JSON.parse(
+  await readFile(join(here, "fixtures", "premium-access.store-locked.expected.json"), "utf8")
+);
+const lockedUnknownPremiumAccess = JSON.parse(
+  await readFile(join(here, "fixtures", "premium-access.unknown-locked.expected.json"), "utf8")
+);
 
 const fail = (message) => {
   throw new Error(`Contract validation failed: ${message}`);
@@ -125,6 +137,51 @@ for (const item of mediaCenter.items) {
   }
 }
 
+if (premiumAccessSchema.$schema !== "https://json-schema.org/draft/2020-12/schema") {
+  fail("the premium-access schema must remain on JSON Schema Draft 2020-12");
+}
+const validatePremiumDecision = (decision, expected) => {
+  const allowedKeys = new Set([
+    "contractVersion",
+    "featureId",
+    "distributionMode",
+    "accessState",
+    "acquisition",
+    "receiptVerification",
+    "productId"
+  ]);
+  for (const key of Object.keys(decision)) {
+    if (!allowedKeys.has(key)) fail(`premium-access decision contains unexpected field ${key}`);
+  }
+  if (decision.contractVersion !== "1.0") fail("unexpected premium-access contractVersion");
+  if (decision.featureId !== "personal-media-centers") fail("unexpected premium feature identifier");
+  for (const [key, value] of Object.entries(expected)) {
+    if (decision[key] !== value) fail(`premium-access ${decision.distributionMode}.${key} is invalid`);
+  }
+  const serialized = JSON.stringify(decision).toLowerCase();
+  for (const secretName of ["purchase-token", "account-id", "password", "access-token"]) {
+    if (serialized.includes(secretName)) fail(`premium-access decision contains ${secretName}`);
+  }
+};
+validatePremiumDecision(personalPremiumAccess, {
+  distributionMode: "personal",
+  accessState: "included",
+  acquisition: "included",
+  receiptVerification: "not-required"
+});
+validatePremiumDecision(lockedStorePremiumAccess, {
+  distributionMode: "store",
+  accessState: "unavailable",
+  acquisition: "one-time",
+  receiptVerification: "unavailable"
+});
+validatePremiumDecision(lockedUnknownPremiumAccess, {
+  distributionMode: "unknown",
+  accessState: "unavailable",
+  acquisition: "one-time",
+  receiptVerification: "unavailable"
+});
+
 console.log(
-  `StreamVue contracts 1.0 are valid (${catalog.channels.length} playlist channels, ${mediaCenter.items.length} media-center items).`
+  `StreamVue contracts 1.0 are valid (${catalog.channels.length} playlist channels, ${mediaCenter.items.length} media-center items, personal/store/unknown premium access).`
 );

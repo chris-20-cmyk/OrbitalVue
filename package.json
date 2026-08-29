@@ -8,6 +8,7 @@
     "catalog:test": "pnpm --filter @streamvue/catalog test",
     "media-centers:build": "pnpm --filter @streamvue/catalog build && pnpm --filter @streamvue/media-centers build",
     "media-centers:test": "pnpm --filter @streamvue/catalog build && pnpm --filter @streamvue/media-centers test",
+    "premium:check": "node tools/verify-premium-store-readiness.mjs",
     "tv:dev": "pnpm --filter @streamvue/tv-web dev",
     "tv:check": "pnpm media-centers:build && pnpm --filter @streamvue/tv-web check",
     "tv:test": "pnpm --filter @streamvue/catalog test && pnpm --filter @streamvue/tv-web test",

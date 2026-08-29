@@ -1,12 +1,16 @@
 package com.streamvue.player.data
 
+import android.content.ContextWrapper
 import com.google.gson.Gson
+import com.streamvue.player.premium.PremiumAccessPolicy
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.URI
+import java.nio.file.Files
 
 class MediaCenterSecurityTest {
     @Test
@@ -82,6 +86,37 @@ class MediaCenterSecurityTest {
         }
         assertEquals(protectedBefore, transport.protectedRequestCount)
         assertEquals("/identity", transport.requests.last().url.path)
+    }
+
+    @Test
+    fun `locked store repository rejects a connection before any network request`() {
+        val directory = Files.createTempDirectory("streamvue-premium-access-test").toFile()
+        try {
+            val context = object : ContextWrapper(null) {
+                override fun getFilesDir() = directory
+            }
+            val vault = MemoryVault()
+            val transport = PlexFixtureTransport()
+            val service = MediaCenterService(transport, vault, testDevice, Gson())
+            val repository = MediaCenterRepository(
+                context = context,
+                gson = Gson(),
+                service = service,
+                premiumAccess = PremiumAccessPolicy.evaluate("store", false)
+            )
+
+            assertThrows(IllegalStateException::class.java) {
+                runBlocking {
+                    repository.connectPlex(
+                        serverAddress = "https://plex.example:32400",
+                        token = "must-never-leave-this-test"
+                    )
+                }
+            }
+            assertTrue(transport.requests.isEmpty())
+        } finally {
+            directory.deleteRecursively()
+        }
     }
 
     private class MemoryVault : MediaCenterCredentialVault {

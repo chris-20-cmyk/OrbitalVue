@@ -18,17 +18,20 @@ public sealed partial class MediaCenterSourceService
     private readonly MediaCenterCredentialStore _credentialStore;
     private readonly HttpClient _http;
     private readonly string _deviceId;
+    private readonly PremiumAccessSnapshot _premiumAccess;
 
     public MediaCenterSourceService(
         MediaCenterCredentialStore? credentialStore = null,
         HttpClient? httpClient = null,
-        string? deviceId = null)
+        string? deviceId = null,
+        PremiumAccessSnapshot? premiumAccess = null)
     {
         _credentialStore = credentialStore ?? new MediaCenterCredentialStore();
         _http = httpClient ?? CreateHttpClient();
         _deviceId = string.IsNullOrWhiteSpace(deviceId)
             ? ResolveDeviceId()
             : MediaCenterSecurity.RequireIdentifier(deviceId, "media-center device identifier");
+        _premiumAccess = premiumAccess ?? PremiumAccessPolicy.Current;
     }
 
     public async Task<PlaylistResult> ConnectPlexAsync(
@@ -39,6 +42,7 @@ public sealed partial class MediaCenterSourceService
         IProgress<PlaylistProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        PremiumAccessPolicy.RequireMediaCenters(_premiumAccess);
         var baseUrl = MediaCenterSecurity.NormalizeBaseUrl(serverAddress);
         MediaCenterSecurity.RequireAllowedTransport(baseUrl, allowInsecureHttp);
         accessToken = accessToken.Trim();
@@ -62,6 +66,7 @@ public sealed partial class MediaCenterSourceService
         IProgress<PlaylistProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        PremiumAccessPolicy.RequireMediaCenters(_premiumAccess);
         var baseUrl = MediaCenterSecurity.NormalizeBaseUrl(serverAddress);
         MediaCenterSecurity.RequireAllowedTransport(baseUrl, allowInsecureHttp);
         username = username.Trim();
@@ -103,6 +108,7 @@ public sealed partial class MediaCenterSourceService
         IProgress<PlaylistProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        PremiumAccessPolicy.RequireMediaCenters(_premiumAccess);
         provider = MediaCenterSecurity.NormalizeProvider(provider);
         var baseUrl = MediaCenterSecurity.NormalizeBaseUrl(serverAddress);
         var credential = await _credentialStore.TryLoadForSourceAsync(provider, baseUrl, cancellationToken)
@@ -116,8 +122,11 @@ public sealed partial class MediaCenterSourceService
     public async Task<bool> HasCredentialAsync(
         string provider,
         string serverAddress,
-        CancellationToken cancellationToken = default) =>
-        await _credentialStore.TryLoadForSourceAsync(provider, serverAddress, cancellationToken) is not null;
+        CancellationToken cancellationToken = default)
+    {
+        PremiumAccessPolicy.RequireMediaCenters(_premiumAccess);
+        return await _credentialStore.TryLoadForSourceAsync(provider, serverAddress, cancellationToken) is not null;
+    }
 
     public Task DeleteCredentialAsync(
         string provider,
@@ -129,6 +138,7 @@ public sealed partial class MediaCenterSourceService
         ChannelItem channel,
         CancellationToken cancellationToken = default)
     {
+        PremiumAccessPolicy.RequireMediaCenters(_premiumAccess);
         var locator = MediaCenterSecurity.ParsePlaybackLocator(channel.Url);
         var credential = await _credentialStore.TryLoadByServerAsync(locator.Provider, locator.ServerId, cancellationToken)
             ?? throw new InvalidOperationException($"Reconnect this {ProviderLabel(locator.Provider)} server to unlock playback.");

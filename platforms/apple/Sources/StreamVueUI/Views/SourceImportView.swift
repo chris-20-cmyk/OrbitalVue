@@ -10,6 +10,7 @@ struct SourceImportView: View {
     @State private var playlistURL = ""
     @State private var isImportingFile = false
     @FocusState private var isURLFocused: Bool
+    private let premiumAccess = PremiumAccessPolicy.current
 
     var body: some View {
         NavigationStack {
@@ -78,22 +79,28 @@ struct SourceImportView: View {
                                 .font(.caption.weight(.bold))
                                 .tracking(1.4)
                                 .foregroundStyle(theme.muted)
-                            Text("PREMIUM")
+                            Text(premiumAccess.badgeText)
                                 .font(.caption2.weight(.black))
                                 .foregroundStyle(theme.background)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
                                 .background(theme.accent, in: Capsule())
                         }
-                        Text("Bring your personal movies, shows, recordings, and live-TV libraries into the same StreamVue experience.")
+                        Text(premiumAccess.canUseMediaCenters
+                             ? "Bring your personal movies, shows, recordings, and live-TV libraries into the same StreamVue experience. \(premiumAccess.explanation)"
+                             : premiumAccess.explanation)
                             .font(.subheadline)
                             .foregroundStyle(theme.muted)
 
                         ForEach(MediaCenterProvider.allCases) { provider in
-                            NavigationLink {
-                                MediaCenterConnectView(provider: provider) { dismiss() }
-                            } label: {
-                                MediaCenterSourceCard(provider: provider)
+                            if premiumAccess.canUseMediaCenters {
+                                NavigationLink {
+                                    MediaCenterConnectView(provider: provider) { dismiss() }
+                                } label: {
+                                    MediaCenterSourceCard(provider: provider, isAvailable: true)
+                                }
+                            } else {
+                                MediaCenterSourceCard(provider: provider, isAvailable: false)
                             }
                         }
                     }
@@ -172,11 +179,14 @@ private struct SourceDivider: View {
 
 private struct MediaCenterSourceCard: View {
     let provider: MediaCenterProvider
+    let isAvailable: Bool
     @Environment(StreamVueTheme.self) private var theme
 
     var body: some View {
         HStack(spacing: 16) {
-            Image(systemName: provider == .plex ? "play.rectangle.on.rectangle" : "rectangle.stack")
+            Image(systemName: isAvailable
+                  ? (provider == .plex ? "play.rectangle.on.rectangle" : "rectangle.stack")
+                  : "lock.fill")
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(theme.accent)
                 .frame(width: 48, height: 48)
@@ -185,12 +195,14 @@ private struct MediaCenterSourceCard: View {
                 Text(provider.displayName)
                     .font(.headline)
                     .foregroundStyle(theme.text)
-                Text(provider == .plex ? "Connect a Plex Media Server" : "Connect an Emby server")
+                Text(isAvailable
+                     ? (provider == .plex ? "Connect a Plex Media Server" : "Connect an Emby server")
+                     : "Store purchase verification is not configured")
                     .font(.subheadline)
                     .foregroundStyle(theme.muted)
             }
             Spacer()
-            Image(systemName: "chevron.right")
+            Image(systemName: isAvailable ? "chevron.right" : "lock")
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(theme.accent)
         }

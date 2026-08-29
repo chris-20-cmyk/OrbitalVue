@@ -3,6 +3,15 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+val streamVueDistributionMode = providers.gradleProperty("streamVueDistributionMode")
+    .orElse("personal")
+    .get()
+    .trim()
+    .lowercase()
+require(streamVueDistributionMode == "personal" || streamVueDistributionMode == "store") {
+    "streamVueDistributionMode must be personal or store."
+}
+
 android {
     namespace = "com.streamvue.player"
     compileSdk {
@@ -18,6 +27,7 @@ android {
         targetSdk = 36
         versionCode = 5_000_001
         versionName = "5.0.0-alpha.1"
+        buildConfigField("String", "DISTRIBUTION_MODE", "\"$streamVueDistributionMode\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

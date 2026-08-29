@@ -51,7 +51,10 @@ jobs:
       - name: Verify the release
         shell: pwsh
         run: |
+          node tools/verify-premium-store-readiness.mjs
           dotnet build StreamVue.Native.slnx -c Release --no-restore
+          dotnet build src/StreamVue.Player/StreamVue.Player.csproj -c Release --no-restore -p:StreamVueDistributionMode=Store
+          dotnet build src/StreamVue.Player/StreamVue.Player.csproj -c Release --no-restore -p:StreamVueDistributionMode=Personal
           dotnet run --project tools/StreamVue.FeatureProbe/StreamVue.FeatureProbe.csproj -c Release --no-build
           dotnet run --project tools/StreamVue.PlaylistProbe/StreamVue.PlaylistProbe.csproj -c Release --no-build -- --routing-scale 70000
 

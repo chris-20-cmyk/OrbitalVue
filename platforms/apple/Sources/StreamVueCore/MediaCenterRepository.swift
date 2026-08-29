@@ -10,13 +10,15 @@ public actor MediaCenterRepository {
     private let snapshotFile: URL
     private let service: MediaCenterService
     private let maximumSnapshotBytes: Int
+    private let premiumAccess: PremiumAccessSnapshot
     private var cachedSnapshot: MediaCenterSnapshot?
 
     public init(
         directory: URL? = nil,
         fileManager: FileManager = .default,
         service: MediaCenterService = MediaCenterService(),
-        maximumSnapshotBytes: Int = defaultMaximumSnapshotBytes
+        maximumSnapshotBytes: Int = defaultMaximumSnapshotBytes,
+        premiumAccess: PremiumAccessSnapshot = PremiumAccessPolicy.current
     ) {
         self.fileManager = fileManager
         let base = directory ?? fileManager.urls(
@@ -27,9 +29,11 @@ public actor MediaCenterRepository {
         self.snapshotFile = base.appendingPathComponent("media-center-source.json")
         self.service = service
         self.maximumSnapshotBytes = max(1, maximumSnapshotBytes)
+        self.premiumAccess = premiumAccess
     }
 
     public func loadSaved() async throws -> LoadedCatalog? {
+        guard premiumAccess.canUseMediaCenters else { return nil }
         guard fileManager.fileExists(atPath: snapshotFile.path) else { return nil }
         let saved = try readSnapshot()
         do {
@@ -57,6 +61,7 @@ public actor MediaCenterRepository {
         displayName: String? = nil,
         allowInsecureHTTP: Bool = false
     ) async throws -> LoadedCatalog {
+        try premiumAccess.requireMediaCenters()
         let previousConnection = try? currentSnapshot()?.connection
         let connection = try await service.connectPlex(
             serverAddress: serverAddress,
@@ -78,6 +83,7 @@ public actor MediaCenterRepository {
         displayName: String? = nil,
         allowInsecureHTTP: Bool = false
     ) async throws -> LoadedCatalog {
+        try premiumAccess.requireMediaCenters()
         let previousConnection = try? currentSnapshot()?.connection
         let connection = try await service.connectEmby(
             serverAddress: serverAddress,
@@ -94,6 +100,7 @@ public actor MediaCenterRepository {
     }
 
     public func refreshCurrent() async throws -> LoadedCatalog? {
+        try premiumAccess.requireMediaCenters()
         guard let saved = try currentSnapshot() else { return nil }
         do {
             let refreshed = try await service.snapshot(for: saved.connection)
@@ -118,6 +125,7 @@ public actor MediaCenterRepository {
         mediaSourceID: String? = nil,
         startPositionMS: Int? = nil
     ) async throws -> MediaCenterPlaybackPlan {
+        try premiumAccess.requireMediaCenters()
         let locator = try MediaCenterLocator.parsePlaybackURI(internalURI)
         let snapshot = try requireCurrentSnapshot()
         guard snapshot.connection.provider == locator.provider,
@@ -137,6 +145,7 @@ public actor MediaCenterRepository {
         for locator: MediaCenterPlaybackLocator,
         maximumWidth: Int = 640
     ) async throws -> MediaCenterPlaybackPlan? {
+        try premiumAccess.requireMediaCenters()
         let snapshot = try requireCurrentSnapshot()
         guard snapshot.connection.provider == locator.provider,
               snapshot.connection.serverID == locator.serverID,

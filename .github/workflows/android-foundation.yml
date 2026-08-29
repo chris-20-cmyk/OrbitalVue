@@ -9,11 +9,15 @@ on:
     paths:
       - "platforms/android/**"
       - "contracts/**"
+      - "store/**"
+      - "tools/verify-premium-store-readiness.mjs"
       - ".github/workflows/android-foundation.yml"
   pull_request:
     paths:
       - "platforms/android/**"
       - "contracts/**"
+      - "store/**"
+      - "tools/verify-premium-store-readiness.mjs"
       - ".github/workflows/android-foundation.yml"
 
 permissions:
@@ -27,7 +31,9 @@ jobs:
       - name: Check out StreamVue
         uses: actions/checkout@v7
       - name: Validate contract fixtures
-        run: node contracts/validate-contract.mjs
+        run: |
+          node contracts/validate-contract.mjs
+          node tools/verify-premium-store-readiness.mjs
 
   android:
     name: Android and Google TV
@@ -53,8 +59,11 @@ jobs:
           testDebugUnitTest
           lintDebug
           assembleDebug
-          bundleRelease
           --stacktrace
+      - name: Build the fail-closed Google Play configuration
+        run: |
+          bash platforms/android/gradlew -p platforms/android bundleRelease -PstreamVueDistributionMode=store --stacktrace
+          grep -F 'DISTRIBUTION_MODE = "store"' platforms/android/app/build/generated/source/buildConfig/release/com/streamvue/player/BuildConfig.java
       - name: Verify Android TV metadata and 16 KB alignment
         run: |
           APK="platforms/android/app/build/outputs/apk/debug/app-debug.apk"

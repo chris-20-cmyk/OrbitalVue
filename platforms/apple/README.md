@@ -33,6 +33,8 @@ The AVKit path uses `AVURLAsset`, `AVPlayerItem`, `AVPlayer`, and `AVPlayerViewC
 
 KSPlayer's public package is GPL-3.0. StreamVue pins version 2.3.4 for reproducibility, but CI does not upload KSPlayer-enabled binaries while this repository has no compatible software license. Personal source builds may proceed; public binary/App Store distribution requires either a GPL-compatible StreamVue release or KSPlayer's separately licensed LGPL/commercial package. See [the licensing gate](../../docs/ksplayer-licensing.md).
 
+The normal Debug and Release configurations are personal builds and include Plex/Emby. The `Store` Xcode configuration injects `StreamVueDistributionMode=store` into each app's Info.plist so the shared Swift package reads the correct runtime mode; until StoreKit 2 verifies a real one-time product, that configuration hides credential entry and blocks saved refresh, artwork, and playback at the repository boundary. This purchase gate is separate from both Apple code signing and the KSPlayer distribution license. See [premium access and store readiness](../../docs/premium-entitlements.md).
+
 Because IPTV providers are user-selected and some still expose only HTTP endpoints, both app targets include the global ATS exception intended for apps that connect to arbitrary user-specified servers. StreamVue defaults an address without a scheme to HTTPS, warns before connecting to explicit HTTP sources, keeps normal server-trust evaluation for HTTPS, and refuses HTTPS-to-HTTP redirects. Public App Store submissions must include this provider-compatibility justification in review notes.
 
 ## Playlist and privacy behavior

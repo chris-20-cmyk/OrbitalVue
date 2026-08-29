@@ -21,6 +21,11 @@
     <PlatformTarget>x64</PlatformTarget>
     <PublishSingleFile>false</PublishSingleFile>
     <SelfContained>true</SelfContained>
+    <StreamVueDistributionMode Condition="'$(StreamVueDistributionMode)' == ''">Personal</StreamVueDistributionMode>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(StreamVueDistributionMode)' == 'Store'">
+    <DefineConstants>$(DefineConstants);STREAMVUE_STORE_BUILD</DefineConstants>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(QaBuild)' == 'true'">
@@ -38,5 +43,11 @@
   <ItemGroup>
     <Resource Include="Assets\streamvue.ico" />
   </ItemGroup>
+
+  <Target Name="ValidateStreamVueDistributionMode" BeforeTargets="CoreCompile">
+    <Error
+      Condition="'$(StreamVueDistributionMode)' != 'Personal' and '$(StreamVueDistributionMode)' != 'Store'"
+      Text="StreamVueDistributionMode must be Personal or Store. Unknown release modes fail closed." />
+  </Target>
 
 </Project>

@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.core.content.edit
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.streamvue.player.premium.PremiumAccessPolicy
+import com.streamvue.player.premium.PremiumAccessSnapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -19,12 +21,14 @@ class MediaCenterRepository internal constructor(
         transport = UrlConnectionMediaCenterTransport(),
         credentialVault = AndroidKeystoreCredentialVault(context, gson),
         device = deviceIdentity(context)
-    )
+    ),
+    private val premiumAccess: PremiumAccessSnapshot = PremiumAccessPolicy.current()
 ) {
     private val snapshotFile = File(context.filesDir, "catalog/media-center-source.json")
     private var cachedSnapshot: MediaCenterSnapshot? = null
 
     suspend fun loadSaved(): LoadedCatalog? = withContext(Dispatchers.IO) {
+        if (!premiumAccess.canUseMediaCenters) return@withContext null
         if (!snapshotFile.exists()) return@withContext null
         val saved = readSnapshot()
         runCatching {
@@ -55,6 +59,7 @@ class MediaCenterRepository internal constructor(
         displayName: String? = null,
         allowInsecureHttp: Boolean = false
     ): LoadedCatalog = withContext(Dispatchers.IO) {
+        premiumAccess.requireMediaCenters()
         val previous = runCatching { currentSnapshot()?.connection }.getOrNull()
         val connection = service.connectPlex(serverAddress, token, displayName, allowInsecureHttp)
         activate(connection, previous, "Plex library connected")
@@ -67,6 +72,7 @@ class MediaCenterRepository internal constructor(
         displayName: String? = null,
         allowInsecureHttp: Boolean = false
     ): LoadedCatalog = withContext(Dispatchers.IO) {
+        premiumAccess.requireMediaCenters()
         val previous = runCatching { currentSnapshot()?.connection }.getOrNull()
         val connection = service.connectEmby(
             serverAddress,
@@ -79,6 +85,7 @@ class MediaCenterRepository internal constructor(
     }
 
     suspend fun refreshCurrent(): LoadedCatalog? = withContext(Dispatchers.IO) {
+        premiumAccess.requireMediaCenters()
         val saved = currentSnapshot() ?: return@withContext null
         runCatching { service.snapshot(saved.connection).also(::persist) }.fold(
             onSuccess = { refreshed ->
@@ -100,6 +107,7 @@ class MediaCenterRepository internal constructor(
     }
 
     suspend fun resolvePlayback(channel: Channel): Channel = withContext(Dispatchers.IO) {
+        premiumAccess.requireMediaCenters()
         val locator = MediaCenterLocator.parsePlaybackUri(channel.streamUri)
         val snapshot = currentSnapshot() ?: error("Connect the media server again before playing this item.")
         require(locator.provider == snapshot.connection.provider &&

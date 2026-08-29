@@ -46,8 +46,11 @@ The current Apple milestone is a source and simulator foundation, not an App Sto
 - Platform-protected credential storage with a separate encrypted last-working catalog; passwords are exchanged for provider tokens and are not retained
 - Just-in-time Plex direct-play and Emby direct-play/direct-stream/transcode resolution, so the active native player is the only component that briefly receives a credentialed URL
 - Windows VOD resume and seek controls using server-provided playback positions, with normal source-manager refresh, offline fallback, and safe credential cleanup
+- A cross-platform premium-access boundary: personal builds include Plex/Emby, while store builds collect no credentials and make no media-server requests until a native one-time purchase is verified
 
 These integrations connect only to a server entered by the user and do not include a hosted relay, public-media discovery, or third-party content.
+
+The intended store product is a one-time lifetime unlock, not a subscription. Store product IDs and native receipt providers are intentionally unconfigured until they are created in each seller console. See [premium access and store readiness](docs/premium-entitlements.md).
 
 ## 4.0 production resilience
 

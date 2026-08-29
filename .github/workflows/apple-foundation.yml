@@ -9,11 +9,15 @@ on:
     paths:
       - "platforms/apple/**"
       - "contracts/**"
+      - "store/**"
+      - "tools/verify-premium-store-readiness.mjs"
       - ".github/workflows/apple-foundation.yml"
   pull_request:
     paths:
       - "platforms/apple/**"
       - "contracts/**"
+      - "store/**"
+      - "tools/verify-premium-store-readiness.mjs"
       - ".github/workflows/apple-foundation.yml"
 
 permissions:
@@ -27,7 +31,9 @@ jobs:
       - name: Check out StreamVue
         uses: actions/checkout@v7
       - name: Validate contract fixtures
-        run: node contracts/validate-contract.mjs
+        run: |
+          node contracts/validate-contract.mjs
+          node tools/verify-premium-store-readiness.mjs
 
   apple:
     name: iPhone, iPad, and Apple TV
@@ -139,6 +145,40 @@ jobs:
             ONLY_ACTIVE_ARCH=YES \
             SWIFT_ENABLE_BATCH_MODE=NO \
             analyze | xcbeautify
+
+      - name: Build and verify locked Apple Store configurations
+        shell: bash
+        run: |
+          xcodebuild \
+            -quiet \
+            -jobs 2 \
+            -project platforms/apple/StreamVueApple.xcodeproj \
+            -scheme StreamVue \
+            -configuration Store \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath artifacts/apple-derived-data/store-ios \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            SWIFT_ENABLE_BATCH_MODE=NO \
+            build
+          xcodebuild \
+            -quiet \
+            -jobs 2 \
+            -project platforms/apple/StreamVueApple.xcodeproj \
+            -scheme StreamVueTV \
+            -configuration Store \
+            -destination "generic/platform=tvOS Simulator" \
+            -derivedDataPath artifacts/apple-derived-data/store-tvos \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            SWIFT_ENABLE_BATCH_MODE=NO \
+            build
+          test "$(plutil -extract StreamVueDistributionMode raw -o - artifacts/apple-derived-data/store-ios/Build/Products/Store-iphonesimulator/StreamVue.app/Info.plist)" = "store"
+          test "$(plutil -extract StreamVueDistributionMode raw -o - artifacts/apple-derived-data/store-tvos/Build/Products/Store-appletvsimulator/StreamVueTV.app/Info.plist)" = "store"
 
       - name: Verify simulator products without distributing them
         run: |

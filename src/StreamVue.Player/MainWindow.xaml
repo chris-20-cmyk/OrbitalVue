@@ -1294,10 +1294,10 @@
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Plex personal library" />
                                     <Border Margin="10,0,0,0" Padding="7,3" CornerRadius="5" Background="#17312F">
-                                        <TextBlock Foreground="{StaticResource AccentBrush}" FontSize="7.5" FontWeight="Bold" Text="PREMIUM" />
+                                        <TextBlock x:Name="PlexAccessBadge" Foreground="{StaticResource AccentBrush}" FontSize="7.5" FontWeight="Bold" Text="PREMIUM" />
                                     </Border>
                                 </StackPanel>
-                                <TextBlock Margin="0,6,0,14" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Index movies and episodes without storing playable token URLs in the library." />
+                                <TextBlock x:Name="PlexAccessDetailText" Margin="0,6,0,14" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Index movies and episodes without storing playable token URLs in the library." TextWrapping="Wrap" />
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="2*" />
@@ -1318,7 +1318,7 @@
                                 <CheckBox x:Name="PlexAllowHttpBox" Margin="0,13,0,0" Foreground="#9EACBF" FontSize="10" Content="Allow unencrypted HTTP on a trusted local network" />
                                 <Grid Margin="0,16,0,0">
                                     <TextBlock VerticalAlignment="Center" Foreground="#718198" FontSize="9.5" Text="Identity is checked before StreamVue sends the token." />
-                                    <Button HorizontalAlignment="Right" Style="{StaticResource PrimaryButton}" Click="LoadPlex_Click" Content="Connect Plex" />
+                                    <Button x:Name="PlexConnectButton" HorizontalAlignment="Right" Style="{StaticResource PrimaryButton}" Click="LoadPlex_Click" Content="Connect Plex" />
                                 </Grid>
                             </StackPanel>
                         </TabItem>
@@ -1328,10 +1328,10 @@
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Emby personal library" />
                                     <Border Margin="10,0,0,0" Padding="7,3" CornerRadius="5" Background="#17312F">
-                                        <TextBlock Foreground="{StaticResource AccentBrush}" FontSize="7.5" FontWeight="Bold" Text="PREMIUM" />
+                                        <TextBlock x:Name="EmbyAccessBadge" Foreground="{StaticResource AccentBrush}" FontSize="7.5" FontWeight="Bold" Text="PREMIUM" />
                                     </Border>
                                 </StackPanel>
-                                <TextBlock Margin="0,6,0,14" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Connect directly to your Emby server with a protected, Windows-user-bound session." />
+                                <TextBlock x:Name="EmbyAccessDetailText" Margin="0,6,0,14" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Connect directly to your Emby server with a protected, Windows-user-bound session." TextWrapping="Wrap" />
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="2*" />
@@ -1365,7 +1365,7 @@
                                 <CheckBox x:Name="EmbyAllowHttpBox" Margin="0,13,0,0" Foreground="#9EACBF" FontSize="10" Content="Allow unencrypted HTTP on a trusted local network" />
                                 <Grid Margin="0,16,0,0">
                                     <TextBlock VerticalAlignment="Center" Foreground="#718198" FontSize="9.5" Text="Your password is exchanged for a protected Emby access token." />
-                                    <Button HorizontalAlignment="Right" Style="{StaticResource PrimaryButton}" Click="LoadEmby_Click" Content="Connect Emby" />
+                                    <Button x:Name="EmbyConnectButton" HorizontalAlignment="Right" Style="{StaticResource PrimaryButton}" Click="LoadEmby_Click" Content="Connect Emby" />
                                 </Grid>
                             </StackPanel>
                         </TabItem>

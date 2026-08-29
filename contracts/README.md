@@ -31,3 +31,9 @@ The TypeScript reference implementation and mocked Plex/Emby conformance tests l
 ```text
 pnpm media-centers:test
 ```
+
+## Premium access
+
+`premium-access-contract-v1.schema.json` defines the secret-free access decision for optional personal media-center integration. Personal builds include the feature. Store builds require a verified one-time, non-consumable purchase and otherwise fail closed; unknown build modes also fail closed. Receipts, purchase tokens, store account identifiers, and media-server credentials are never part of this portable decision.
+
+See [Premium access and store readiness](../docs/premium-entitlements.md) for build switches and the native store-adapter checklist.
