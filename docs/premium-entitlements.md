@@ -16,7 +16,7 @@ The repository defaults to the personal mode so current private builds remain fu
 
 | Platform | Store-mode build switch | Result today |
 | --- | --- | --- |
-| Windows | `-p:StreamVueDistributionMode=Store` | Compiles with Plex/Emby locked |
+| Windows | `-p:StreamVueDistributionMode=Store` | Compiles locked; an MSIX Store build can verify a configured durable add-on |
 | Android / Google TV | `-PstreamVueDistributionMode=store` | Compiles with Plex/Emby locked |
 | Samsung / LG television shell | `VITE_STREAMVUE_DISTRIBUTION_MODE=store` | Bundles with Plex/Emby locked |
 | Apple | Xcode configuration `Store` (injects `StreamVueDistributionMode=store` into the app Info.plist) | Compiles with Plex/Emby locked |
@@ -24,6 +24,19 @@ The repository defaults to the personal mode so current private builds remain fu
 An unknown or misspelled mode is treated as store/unavailable by every runtime policy. This is intentional: an invalid release configuration must never become an accidental unlock.
 
 ## Native purchase adapters
+
+### Windows Microsoft Store
+
+The Windows Store build uses `Windows.Services.Store`, not a local preference or receipt file. Create a **Durable** Partner Center add-on with product lifetime **Forever**, then pass its exact Product ID at build time:
+
+```text
+-p:StreamVueDistributionMode=Store
+-p:StreamVuePremiumProductId=<exact Partner Center product ID>
+```
+
+StreamVue finds the matching `StoreProduct.InAppOfferToken`, displays the Microsoft Store title and localized price, launches the Store-owned purchase dialog on the WPF UI thread, and rebuilds access from the exact matching entry in `StoreAppLicense.AddOnLicenses`. A successful dialog result alone never unlocks the feature. `StoreContext.OfflineLicensesChanged` triggers another license query, so a removed entitlement stops protected media-center playback and locks credential actions.
+
+The purchase surface intentionally remains unavailable for an unpackaged EXE, an elevated process, an app without an exact product ID, or an add-on that is not associated with the current package. The public Store route therefore still needs a Partner Center product plus the planned MSIX packaging lane. Direct-download/Velopack builds remain personal and include Plex/Emby without a purchase.
 
 ### Android and Google TV
 
@@ -42,7 +55,7 @@ The verifier endpoint receives a versioned JSON request containing `platform`, `
 
 The `Store` configuration reads the exact non-consumable identifier from the `STREAMVUE_PREMIUM_PRODUCT_ID` Xcode build setting. StoreKit 2 loads the localized product, processes `Transaction.updates`, and rebuilds access from cryptographically verified `Transaction.currentEntitlements`. Unverified, pending, revoked, missing, or mismatched transactions stay locked. `AppStore.sync()` is called only after the user selects **Restore purchase**, because that API can display an App Store account prompt.
 
-Official implementation references: [Google Play Billing integration](https://developer.android.com/google/play/billing/integrate), [Google Play billing security](https://developer.android.com/google/play/billing/security), [StoreKit current entitlements](https://developer.apple.com/documentation/storekit/transaction/currententitlements), and [AppStore.sync](https://developer.apple.com/documentation/storekit/appstore/sync()).
+Official implementation references: [Microsoft Store purchases and trials](https://learn.microsoft.com/en-us/windows/uwp/monetize/in-app-purchases-and-trials), [Microsoft durable add-ons](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/add-on/create-app-submission), [Google Play Billing integration](https://developer.android.com/google/play/billing/integrate), [Google Play billing security](https://developer.android.com/google/play/billing/security), [StoreKit current entitlements](https://developer.apple.com/documentation/storekit/transaction/currententitlements), and [AppStore.sync](https://developer.apple.com/documentation/storekit/appstore/sync()).
 
 ## What remains before charging for the feature
 
@@ -66,7 +79,7 @@ A future store workflow must also run `node tools/verify-premium-store-readiness
 
 Foundation CI exercises both modes. Direct-install test packages remain personal builds, while unsigned Google Play, Samsung, and LG artifacts are explicitly named `store-locked` and compile with media centers unavailable. They are verification artifacts, not sellable products; a future store-publish job must pass the platform-specific `--require-ready` gate first.
 
-Platform adapters will use StoreKit 2 on Apple, Google Play Billing on Android/Google TV, the Microsoft Store licensing API for an MSIX release, and the applicable Samsung/LG seller APIs where a paid in-app product is supported. A direct-download Windows build can stay personal/included or later use a separately verified one-time license; it must not trust a local preference or build flag as proof of purchase.
+Current adapters use StoreKit 2 on Apple, Google Play Billing on Android/Google TV, and the Microsoft Store licensing API for a future MSIX release. Samsung/LG will use only an applicable seller API that can verify the television account's entitlement; no local preference or build flag may stand in for proof of purchase. Direct-download Windows builds stay personal/included.
 
 ## Portable contract
 

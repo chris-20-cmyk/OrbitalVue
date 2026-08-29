@@ -48,8 +48,9 @@ public partial class MainWindow : Window
 
     private readonly PlaylistSourceService _playlistSource = new();
     private readonly XtreamSourceService _xtreamSource = new();
-    private readonly MediaCenterSourceService _mediaCenterSource = new();
-    private readonly PremiumAccessSnapshot _premiumAccess = PremiumAccessPolicy.Current;
+    private readonly MediaCenterSourceService _mediaCenterSource;
+    private readonly MicrosoftStorePremiumService _premiumStore = new();
+    private PremiumAccessSnapshot _premiumAccess = PremiumAccessPolicy.Current;
     private readonly AppSettingsStore _settingsStore = new();
     private readonly PlaylistCacheStore _playlistCache = new();
     private readonly PlaylistSourceRefreshService _playlistSourceRefresh;
@@ -184,6 +185,9 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
+        _mediaCenterSource = new MediaCenterSourceService(
+            premiumAccessProvider: () => _premiumAccess);
+        _premiumStore.StateChanged += PremiumStore_StateChanged;
         InitializeComponent();
         ApplyPremiumAccessPresentation();
         SourceTabs.SelectionChanged += SourceTabs_SelectionChanged;
@@ -224,29 +228,91 @@ public partial class MainWindow : Window
 
     private void ApplyPremiumAccessPresentation()
     {
+        var purchase = _premiumStore.State;
         PlexAccessBadge.Text = _premiumAccess.BadgeText;
         EmbyAccessBadge.Text = _premiumAccess.BadgeText;
+        var purchaseControlsVisible = !_premiumAccess.CanUseMediaCenters &&
+            (purchase.IsBusy || purchase.CanPurchase || purchase.CanRestore);
+        PlexPurchasePanel.Visibility = purchaseControlsVisible ? Visibility.Visible : Visibility.Collapsed;
+        EmbyPurchasePanel.Visibility = purchaseControlsVisible ? Visibility.Visible : Visibility.Collapsed;
+        PlexPurchaseProgress.Visibility = purchase.IsBusy ? Visibility.Visible : Visibility.Collapsed;
+        EmbyPurchaseProgress.Visibility = purchase.IsBusy ? Visibility.Visible : Visibility.Collapsed;
+        var productLabel = string.IsNullOrWhiteSpace(purchase.ProductTitle)
+            ? "Lifetime Plex + Emby access"
+            : purchase.ProductTitle;
+        PlexPurchaseProductText.Text = productLabel;
+        EmbyPurchaseProductText.Text = productLabel;
+        var purchaseLabel = string.IsNullOrWhiteSpace(purchase.FormattedPrice)
+            ? "Buy once"
+            : $"Buy once — {purchase.FormattedPrice}";
+        PlexPurchaseButton.Content = purchaseLabel;
+        EmbyPurchaseButton.Content = purchaseLabel;
+        PlexPurchaseButton.IsEnabled = purchase.CanPurchase && !purchase.IsBusy;
+        EmbyPurchaseButton.IsEnabled = purchase.CanPurchase && !purchase.IsBusy;
+        PlexRestoreButton.IsEnabled = purchase.CanRestore && !purchase.IsBusy;
+        EmbyRestoreButton.IsEnabled = purchase.CanRestore && !purchase.IsBusy;
         if (_premiumAccess.CanUseMediaCenters)
         {
             PlexAccessDetailText.Text = $"Index movies and episodes without storing playable token URLs in the library. {_premiumAccess.Explanation}";
             EmbyAccessDetailText.Text = $"Connect directly with a protected Windows-user-bound session. {_premiumAccess.Explanation}";
+            PlexConnectButton.Content = "Connect Plex";
+            EmbyConnectButton.Content = "Connect Emby";
+            PlexConnectButton.Opacity = 1;
+            EmbyConnectButton.Opacity = 1;
+            foreach (var control in MediaCenterCredentialControls()) control.IsEnabled = true;
+            PlexConnectButton.IsEnabled = true;
+            EmbyConnectButton.IsEnabled = true;
             return;
         }
 
-        PlexAccessDetailText.Text = _premiumAccess.Explanation;
-        EmbyAccessDetailText.Text = _premiumAccess.Explanation;
+        var lockedMessage = purchase.Message ?? _premiumAccess.Explanation;
+        PlexAccessDetailText.Text = lockedMessage;
+        EmbyAccessDetailText.Text = lockedMessage;
         PlexConnectButton.Content = "Premium unavailable";
         EmbyConnectButton.Content = "Premium unavailable";
         PlexConnectButton.IsEnabled = false;
         EmbyConnectButton.IsEnabled = false;
         PlexConnectButton.Opacity = 0.48;
         EmbyConnectButton.Opacity = 0.48;
-        foreach (var control in new System.Windows.Controls.Control[]
-                 {
-                     PlexServerBox, PlexNameBox, PlexTokenBox, PlexAllowHttpBox,
-                     EmbyServerBox, EmbyNameBox, EmbyUsernameBox, EmbyPasswordBox, EmbyAllowHttpBox
-                 })
-            control.IsEnabled = false;
+        foreach (var control in MediaCenterCredentialControls()) control.IsEnabled = false;
+    }
+
+    private System.Windows.Controls.Control[] MediaCenterCredentialControls() =>
+    [
+        PlexServerBox, PlexNameBox, PlexTokenBox, PlexAllowHttpBox,
+        EmbyServerBox, EmbyNameBox, EmbyUsernameBox, EmbyPasswordBox, EmbyAllowHttpBox
+    ];
+
+    private void PremiumStore_StateChanged(object? sender, PremiumPurchaseState state)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            _ = Dispatcher.BeginInvoke(() => PremiumStore_StateChanged(sender, state));
+            return;
+        }
+        var previous = _premiumAccess;
+        _premiumAccess = state.Access;
+        ApplyPremiumAccessPresentation();
+        RefreshPlaylistSourceList();
+        if (!previous.CanUseMediaCenters && state.Access.CanUseMediaCenters)
+        {
+            ImportStatusText.Text = "Lifetime premium access verified";
+            ImportDetailText.Text = state.Message ?? state.Access.Explanation;
+            FooterStatusDot.Fill = LiveBrush;
+            FooterStatusText.Text = "Microsoft Store premium access verified";
+            return;
+        }
+        if (!previous.CanUseMediaCenters || state.Access.CanUseMediaCenters) return;
+        if (_currentChannel?.IsProtectedMedia == true)
+        {
+            CancelMediaPlaybackResolution(clearResume: true);
+            _playback?.Stop();
+            _displayRefreshRate?.Restore();
+        }
+        ImportStatusText.Text = "Premium access is no longer verified";
+        ImportDetailText.Text = state.Message ?? state.Access.Explanation;
+        FooterStatusDot.Fill = WarningBrush;
+        FooterStatusText.Text = "Protected media-center playback stopped";
     }
 
     private void SourceTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -302,6 +368,7 @@ public partial class MainWindow : Window
         _settings.Multiview.ChannelKeys ??= [null, null, null, null];
         _settings.Multiview.SavedLayouts ??= [];
         _favoriteKeys = new HashSet<string>(_settings.FavoriteChannelKeys ?? [], StringComparer.OrdinalIgnoreCase);
+        await _premiumStore.StartAsync(new WindowInteropHelper(this).EnsureHandle());
         ApplySettingsToControls();
         RefreshSavedMultiviewLayouts();
         UpdatePlaylistHealthUi();
@@ -4769,7 +4836,7 @@ public partial class MainWindow : Window
         if (_premiumAccess.CanUseMediaCenters) return true;
         ImportProgress.Visibility = Visibility.Collapsed;
         ImportStatusText.Text = $"{provider} premium access is unavailable";
-        ImportDetailText.Text = _premiumAccess.Explanation;
+        ImportDetailText.Text = _premiumStore.State.Message ?? _premiumAccess.Explanation;
         FooterStatusDot.Fill = WarningBrush;
         FooterStatusText.Text = "A verified one-time store purchase is required";
         if (!_backgroundLaunch)
@@ -4781,6 +4848,12 @@ public partial class MainWindow : Window
         }
         return false;
     }
+
+    private async void PurchasePremium_Click(object sender, RoutedEventArgs e) =>
+        await _premiumStore.PurchaseAsync();
+
+    private async void RestorePremium_Click(object sender, RoutedEventArgs e) =>
+        await _premiumStore.RestoreAsync();
 
     private void PlayPause_Click(object sender, RoutedEventArgs e)
     {
@@ -7638,6 +7711,8 @@ public partial class MainWindow : Window
         Application.Current.SessionEnding -= Application_SessionEnding;
         _dvrWakeTimer.Triggered -= DvrWakeTimer_Triggered;
         _dvrWakeTimer.Dispose();
+        _premiumStore.StateChanged -= PremiumStore_StateChanged;
+        _premiumStore.Dispose();
         if (_trayIcon is not null)
         {
             _trayIcon.Visible = false;

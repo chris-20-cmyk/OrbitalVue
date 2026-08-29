@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
@@ -22,6 +22,7 @@
     <PublishSingleFile>false</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <StreamVueDistributionMode Condition="'$(StreamVueDistributionMode)' == ''">Personal</StreamVueDistributionMode>
+    <StreamVuePremiumProductId Condition="'$(StreamVuePremiumProductId)' == ''"></StreamVuePremiumProductId>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(StreamVueDistributionMode)' == 'Store'">
@@ -44,10 +45,20 @@
     <Resource Include="Assets\streamvue.ico" />
   </ItemGroup>
 
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>StreamVuePremiumProductId</_Parameter1>
+      <_Parameter2>$(StreamVuePremiumProductId)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
   <Target Name="ValidateStreamVueDistributionMode" BeforeTargets="CoreCompile">
     <Error
       Condition="'$(StreamVueDistributionMode)' != 'Personal' and '$(StreamVueDistributionMode)' != 'Store'"
       Text="StreamVueDistributionMode must be Personal or Store. Unknown release modes fail closed." />
+    <Error
+      Condition="'$(StreamVuePremiumProductId)' != '' and !$([System.Text.RegularExpressions.Regex]::IsMatch('$(StreamVuePremiumProductId)', '^[A-Za-z0-9._-]{3,256}$'))"
+      Text="StreamVuePremiumProductId must be empty or an exact Partner Center product identifier." />
   </Target>
 
 </Project>

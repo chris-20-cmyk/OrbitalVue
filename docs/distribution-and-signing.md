@@ -22,6 +22,8 @@ No paid certificate is needed to continue building StreamVue 5.1. The generated 
 
 Microsoft's current onboarding flow at [storedeveloper.microsoft.com](https://storedeveloper.microsoft.com/) has no registration fee. An MSIX submitted through the Store does not need a CA-trusted certificate: after certification, Microsoft re-signs it and provides trusted installation and Store-managed updates. StreamVue's current Velopack EXE remains useful for personal preview releases, but a separate MSIX packaging lane is needed for this route. See Microsoft's [publishing guide](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/publish-first-app) and [Store overview](https://learn.microsoft.com/en-us/windows/apps/publish/get-started).
 
+The source now includes the Microsoft Store durable-add-on adapter. A Store package must define the Partner Center product ID with `-p:StreamVueDistributionMode=Store -p:StreamVuePremiumProductId=<exact product ID>`. Purchase UI remains fail-closed until the executable is running with the final MSIX package identity; the existing direct-download/Velopack build does not impersonate Store ownership.
+
 ### 2. SignPath Foundation — free if StreamVue becomes open source
 
 [SignPath Foundation](https://signpath.org/) offers free signing for eligible open-source projects. Its published conditions require an OSI-approved license, no proprietary components, an actively maintained and already released project, and public documentation. StreamVue currently has no repository `LICENSE` file, so choosing this route would require an explicit licensing decision; making a repository public by itself does not grant an open-source license. See the [SignPath eligibility conditions](https://signpath.org/terms.html).

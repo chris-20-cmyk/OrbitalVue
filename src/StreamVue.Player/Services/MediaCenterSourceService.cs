@@ -18,20 +18,21 @@ public sealed partial class MediaCenterSourceService
     private readonly MediaCenterCredentialStore _credentialStore;
     private readonly HttpClient _http;
     private readonly string _deviceId;
-    private readonly PremiumAccessSnapshot _premiumAccess;
+    private readonly Func<PremiumAccessSnapshot> _premiumAccessProvider;
 
     public MediaCenterSourceService(
         MediaCenterCredentialStore? credentialStore = null,
         HttpClient? httpClient = null,
         string? deviceId = null,
-        PremiumAccessSnapshot? premiumAccess = null)
+        PremiumAccessSnapshot? premiumAccess = null,
+        Func<PremiumAccessSnapshot>? premiumAccessProvider = null)
     {
         _credentialStore = credentialStore ?? new MediaCenterCredentialStore();
         _http = httpClient ?? CreateHttpClient();
         _deviceId = string.IsNullOrWhiteSpace(deviceId)
             ? ResolveDeviceId()
             : MediaCenterSecurity.RequireIdentifier(deviceId, "media-center device identifier");
-        _premiumAccess = premiumAccess ?? PremiumAccessPolicy.Current;
+        _premiumAccessProvider = premiumAccessProvider ?? (() => premiumAccess ?? PremiumAccessPolicy.Current);
     }
 
     public async Task<PlaylistResult> ConnectPlexAsync(
@@ -42,7 +43,7 @@ public sealed partial class MediaCenterSourceService
         IProgress<PlaylistProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        PremiumAccessPolicy.RequireMediaCenters(_premiumAccess);
+        RequirePremiumAccess();
         var baseUrl = MediaCenterSecurity.NormalizeBaseUrl(serverAddress);
         MediaCenterSecurity.RequireAllowedTransport(baseUrl, allowInsecureHttp);
         accessToken = accessToken.Trim();
@@ -66,7 +67,7 @@ public sealed partial class MediaCenterSourceService
         IProgress<PlaylistProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        PremiumAccessPolicy.RequireMediaCenters(_premiumAccess);
+        RequirePremiumAccess();
         var baseUrl = MediaCenterSecurity.NormalizeBaseUrl(serverAddress);
         MediaCenterSecurity.RequireAllowedTransport(baseUrl, allowInsecureHttp);
         username = username.Trim();
@@ -108,7 +109,7 @@ public sealed partial class MediaCenterSourceService
         IProgress<PlaylistProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        PremiumAccessPolicy.RequireMediaCenters(_premiumAccess);
+        RequirePremiumAccess();
         provider = MediaCenterSecurity.NormalizeProvider(provider);
         var baseUrl = MediaCenterSecurity.NormalizeBaseUrl(serverAddress);
         var credential = await _credentialStore.TryLoadForSourceAsync(provider, baseUrl, cancellationToken)
@@ -124,7 +125,7 @@ public sealed partial class MediaCenterSourceService
         string serverAddress,
         CancellationToken cancellationToken = default)
     {
-        PremiumAccessPolicy.RequireMediaCenters(_premiumAccess);
+        RequirePremiumAccess();
         return await _credentialStore.TryLoadForSourceAsync(provider, serverAddress, cancellationToken) is not null;
     }
 
@@ -138,7 +139,7 @@ public sealed partial class MediaCenterSourceService
         ChannelItem channel,
         CancellationToken cancellationToken = default)
     {
-        PremiumAccessPolicy.RequireMediaCenters(_premiumAccess);
+        RequirePremiumAccess();
         var locator = MediaCenterSecurity.ParsePlaybackLocator(channel.Url);
         var credential = await _credentialStore.TryLoadByServerAsync(locator.Provider, locator.ServerId, cancellationToken)
             ?? throw new InvalidOperationException($"Reconnect this {ProviderLabel(locator.Provider)} server to unlock playback.");
@@ -653,6 +654,9 @@ public sealed partial class MediaCenterSourceService
         var sanitized = value.Replace("\r", string.Empty).Replace("\n", string.Empty).Replace("\"", string.Empty).Trim();
         return sanitized.Length == 0 ? null : sanitized[..Math.Min(512, sanitized.Length)];
     }
+
+    private void RequirePremiumAccess() =>
+        PremiumAccessPolicy.RequireMediaCenters(_premiumAccessProvider());
 
     private static string AddQuery(string url, params (string Name, string Value)[] values)
     {

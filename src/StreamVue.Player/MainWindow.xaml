@@ -1298,6 +1298,21 @@
                                     </Border>
                                 </StackPanel>
                                 <TextBlock x:Name="PlexAccessDetailText" Margin="0,6,0,14" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Index movies and episodes without storing playable token URLs in the library." TextWrapping="Wrap" />
+                                <Border x:Name="PlexPurchasePanel" Margin="0,0,0,14" Padding="12,10" CornerRadius="10" Background="#10211F" BorderBrush="#21443F" BorderThickness="1" Visibility="Collapsed">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock x:Name="PlexPurchaseProductText" Foreground="#D8E9E7" FontSize="10" FontWeight="SemiBold" Text="Lifetime media centers" />
+                                            <ProgressBar x:Name="PlexPurchaseProgress" Width="90" Height="3" Margin="0,6,0,0" HorizontalAlignment="Left" Foreground="{StaticResource AccentBrush}" IsIndeterminate="True" Visibility="Collapsed" />
+                                        </StackPanel>
+                                        <Button x:Name="PlexPurchaseButton" Grid.Column="1" Margin="10,0,0,0" Padding="12,7" VerticalAlignment="Center" Style="{StaticResource PrimaryButton}" Click="PurchasePremium_Click" Content="Buy once" />
+                                        <Button x:Name="PlexRestoreButton" Grid.Column="2" Margin="8,0,0,0" Padding="12,7" VerticalAlignment="Center" Style="{StaticResource SecondaryButton}" Click="RestorePremium_Click" Content="Restore" />
+                                    </Grid>
+                                </Border>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="2*" />
@@ -1332,6 +1347,21 @@
                                     </Border>
                                 </StackPanel>
                                 <TextBlock x:Name="EmbyAccessDetailText" Margin="0,6,0,14" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Connect directly to your Emby server with a protected, Windows-user-bound session." TextWrapping="Wrap" />
+                                <Border x:Name="EmbyPurchasePanel" Margin="0,0,0,14" Padding="12,10" CornerRadius="10" Background="#10211F" BorderBrush="#21443F" BorderThickness="1" Visibility="Collapsed">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock x:Name="EmbyPurchaseProductText" Foreground="#D8E9E7" FontSize="10" FontWeight="SemiBold" Text="Lifetime media centers" />
+                                            <ProgressBar x:Name="EmbyPurchaseProgress" Width="90" Height="3" Margin="0,6,0,0" HorizontalAlignment="Left" Foreground="{StaticResource AccentBrush}" IsIndeterminate="True" Visibility="Collapsed" />
+                                        </StackPanel>
+                                        <Button x:Name="EmbyPurchaseButton" Grid.Column="1" Margin="10,0,0,0" Padding="12,7" VerticalAlignment="Center" Style="{StaticResource PrimaryButton}" Click="PurchasePremium_Click" Content="Buy once" />
+                                        <Button x:Name="EmbyRestoreButton" Grid.Column="2" Margin="8,0,0,0" Padding="12,7" VerticalAlignment="Center" Style="{StaticResource SecondaryButton}" Click="RestorePremium_Click" Content="Restore" />
+                                    </Grid>
+                                </Border>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="2*" />

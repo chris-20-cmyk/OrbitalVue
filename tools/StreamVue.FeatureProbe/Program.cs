@@ -87,6 +87,7 @@ try
         throw new InvalidOperationException("The URL-independent guide mapping identity was not stable or unique.");
 
     RunPremiumAccessSelfTest();
+    await RunMicrosoftStorePremiumSelfTestAsync();
     await RunMediaCenterSelfTestAsync(testRoot);
 
     var store = new AppSettingsStore(settingsPath);
@@ -1328,6 +1329,7 @@ try
     Console.WriteLine("Protected multi-account Xtream vault and legacy migration: PASS");
     Console.WriteLine("Protected Plex and Emby catalog, credential, cache, and just-in-time playback contract: PASS");
     Console.WriteLine("Personal/store premium entitlement policy: PASS");
+    Console.WriteLine("Microsoft Store durable add-on verification and revocation: PASS");
     Console.WriteLine("XMLTV Now/Next, episode metadata, and call-sign matching: PASS");
     Console.WriteLine("Encrypted offline guide cache: PASS");
     Console.WriteLine("Protected multi-source guide configuration: PASS");
@@ -1391,6 +1393,64 @@ static void RunPremiumAccessSelfTest()
         throw new InvalidOperationException("An unknown distribution mode failed open.");
 }
 
+static async Task RunMicrosoftStorePremiumSelfTestAsync()
+{
+    var invalid = PremiumStoreConfiguration.Evaluate("store", "premium.é");
+    if (invalid.ProductId is not null)
+        throw new InvalidOperationException("The Microsoft Store configuration accepted a non-ASCII product ID.");
+
+    var personalFactoryCalled = false;
+    using (var personal = new MicrosoftStorePremiumService(
+               PremiumStoreConfiguration.Evaluate("personal", null),
+               _ =>
+               {
+                   personalFactoryCalled = true;
+                   return new MicrosoftStoreProbeClient();
+               }))
+    {
+        await personal.StartAsync(1);
+        if (personalFactoryCalled || !personal.State.Access.CanUseMediaCenters)
+            throw new InvalidOperationException("A personal Windows build contacted the Microsoft Store or lost included access.");
+    }
+
+    const string productId = "com.streamvue.personal-media-centers";
+    var client = new MicrosoftStoreProbeClient
+    {
+        Product = new MicrosoftStoreProduct(productId, "9NPROBE12345", "Lifetime media centers", "$14.99")
+    };
+    using var service = new MicrosoftStorePremiumService(
+        PremiumStoreConfiguration.Evaluate("store", productId),
+        _ => client);
+    if (service.State.Access.CanUseMediaCenters)
+        throw new InvalidOperationException("An injected Windows Store configuration did not start fail-closed.");
+    await service.StartAsync(1);
+    if (service.State.Access.CanUseMediaCenters || !service.State.CanPurchase ||
+        service.State.FormattedPrice != "$14.99" || client.LicenseQueries != 1)
+        throw new InvalidOperationException("The unowned durable add-on did not remain locked with localized purchase UI.");
+
+    client.NextPurchaseOutcome = MicrosoftStorePurchaseOutcome.Succeeded;
+    await service.PurchaseAsync();
+    if (service.State.Access.CanUseMediaCenters)
+        throw new InvalidOperationException("A purchase-dialog result unlocked Windows access without a Store license.");
+
+    client.OwnsProduct = true;
+    await service.RestoreAsync();
+    if (!service.State.Access.CanUseMediaCenters ||
+        service.State.Access.AccessState != PremiumAccessState.Verified)
+        throw new InvalidOperationException("A valid Microsoft Store durable license did not unlock premium access.");
+
+    var revocation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    service.StateChanged += (_, state) =>
+    {
+        if (!state.Access.CanUseMediaCenters) revocation.TrySetResult();
+    };
+    client.OwnsProduct = false;
+    client.RaiseLicenseChanged();
+    await revocation.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    if (service.State.Access.CanUseMediaCenters)
+        throw new InvalidOperationException("A Microsoft Store license revocation did not fail closed.");
+}
+
 static async Task RunMediaCenterSelfTestAsync(string testRoot)
 {
     const string plexBaseUrl = "https://plex.local:32400";
@@ -1416,6 +1476,36 @@ static async Task RunMediaCenterSelfTestAsync(string testRoot)
     }
     if (lockedHandler.Requests.Count != 0)
         throw new InvalidOperationException("A locked Windows store service reached the media-server network.");
+
+    var runtimeAccess = PremiumAccessPolicy.Evaluate("store", hasVerifiedStorePurchase: false);
+    var runtimeHandler = new MediaCenterProbeHandler(plexToken, embyPassword, embyToken);
+    var runtimeService = new MediaCenterSourceService(
+        new MediaCenterCredentialStore(Path.Combine(testRoot, "runtime-media-center-credentials.bin")),
+        new HttpClient(runtimeHandler),
+        "streamvue-win-runtime-probe",
+        premiumAccessProvider: () => runtimeAccess);
+    try
+    {
+        await runtimeService.ConnectPlexAsync(plexBaseUrl, plexToken, null, allowInsecureHttp: false);
+        throw new InvalidOperationException("A locked runtime entitlement accepted a Plex connection.");
+    }
+    catch (InvalidOperationException exception) when (
+        exception.Message.Contains("one-time store purchase", StringComparison.OrdinalIgnoreCase))
+    {
+    }
+    if (runtimeHandler.Requests.Count != 0)
+        throw new InvalidOperationException("A locked runtime entitlement reached the media-server network.");
+    runtimeAccess = PremiumAccessPolicy.Evaluate(
+        "store",
+        hasVerifiedStorePurchase: true,
+        productId: "com.streamvue.personal-media-centers");
+    var runtimePlaylist = await runtimeService.ConnectPlexAsync(
+        plexBaseUrl,
+        plexToken,
+        "Runtime Plex",
+        allowInsecureHttp: false);
+    if (runtimePlaylist.Channels.Count != 1 || runtimeHandler.Requests.Count == 0)
+        throw new InvalidOperationException("An existing Windows media-center service did not observe verified runtime access.");
 
     if (MediaCenterSecurity.NormalizeBaseUrl($"{plexBaseUrl}/") != plexBaseUrl)
         throw new InvalidOperationException("Media-center server normalization was not canonical.");
@@ -1837,5 +1927,36 @@ sealed class MediaCenterProbeHandler(
     {
         if (!headers.TryGetValue(name, out var actual) || actual != expected)
             throw new InvalidOperationException($"The media-center probe expected the {name} credential header.");
+    }
+}
+
+sealed class MicrosoftStoreProbeClient : IMicrosoftStoreClient
+{
+    public MicrosoftStoreProduct? Product { get; init; }
+    public bool OwnsProduct { get; set; }
+    public MicrosoftStorePurchaseOutcome NextPurchaseOutcome { get; set; } =
+        MicrosoftStorePurchaseOutcome.NotPurchased;
+    public int LicenseQueries { get; private set; }
+
+    public event EventHandler? LicenseChanged;
+
+    public Task<MicrosoftStoreProduct?> GetDurableProductAsync(string productId) =>
+        Task.FromResult(Product?.ProductId == productId ? Product : null);
+
+    public Task<bool> OwnsDurableProductAsync(string productId)
+    {
+        LicenseQueries++;
+        return Task.FromResult(OwnsProduct && Product?.ProductId == productId);
+    }
+
+    public Task<MicrosoftStorePurchaseOutcome> PurchaseAsync(string productId) =>
+        Task.FromResult(Product?.ProductId == productId
+            ? NextPurchaseOutcome
+            : MicrosoftStorePurchaseOutcome.Unknown);
+
+    public void RaiseLicenseChanged() => LicenseChanged?.Invoke(this, EventArgs.Empty);
+
+    public void Dispose()
+    {
     }
 }
