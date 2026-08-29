@@ -44,6 +44,10 @@ describe("television premium store adapters", () => {
     })).toBeNull();
     expect(normalizeSamsungCheckoutConfig({
       ...config,
+      appId: "a".repeat(31)
+    })).toBeNull();
+    expect(normalizeSamsungCheckoutConfig({
+      ...config,
       verificationUrl: "https://entitlements.streamvue.test/status?unlock=true"
     })).toBeNull();
     expect(normalizeSamsungCheckoutConfig({
@@ -144,6 +148,72 @@ describe("television premium store adapters", () => {
     expect(service.snapshot.message).toContain("has not verified");
   });
 
+  it("does not offer a purchase when DPI says Checkout is unavailable in the service country", async () => {
+    let nativePurchaseCount = 0;
+    const service = new SamsungCheckoutPremiumService(
+      config,
+      samsungApis(() => { nativePurchaseCount += 1; }),
+      verifier([unverifiedDecision(false)])
+    );
+
+    await service.start();
+
+    expect(service.snapshot.status).toBe("unavailable");
+    expect(service.snapshot.canBuy).toBe(false);
+    expect(service.snapshot.canRestore).toBe(true);
+    expect(service.snapshot.access.canUseMediaCenters).toBe(false);
+    expect(service.snapshot.message).toContain("service country");
+    await expect(service.purchase()).rejects.toThrow("service country");
+    expect(nativePurchaseCount).toBe(0);
+  });
+
+  it("rechecks native Billing availability immediately before purchase", async () => {
+    let nativePurchaseCount = 0;
+    const service = new SamsungCheckoutPremiumService(
+      config,
+      samsungApis(() => { nativePurchaseCount += 1; }, [true, false]),
+      verifier([unverifiedDecision()])
+    );
+
+    await service.start();
+    expect(service.snapshot.canBuy).toBe(true);
+
+    await expect(service.purchase()).rejects.toThrow("became unavailable");
+    expect(service.snapshot.status).toBe("unavailable");
+    expect(service.snapshot.canRestore).toBe(true);
+    expect(nativePurchaseCount).toBe(0);
+  });
+
+  it("uses the required DPI country decision when a newer TV omits the deprecated native probe", async () => {
+    const apis = samsungApis();
+    if (apis.billing) delete apis.billing.isServiceAvailable;
+    const service = new SamsungCheckoutPremiumService(
+      config,
+      apis,
+      verifier([unverifiedDecision()])
+    );
+
+    await service.start();
+
+    expect(service.snapshot.status).toBe("available");
+    expect(service.snapshot.canBuy).toBe(true);
+  });
+
+  it("restores verified ownership even where new Checkout purchases are unavailable", async () => {
+    const service = new SamsungCheckoutPremiumService(
+      config,
+      samsungApis(),
+      verifier([verifiedDecision(false)])
+    );
+
+    await service.start();
+
+    expect(service.snapshot.status).toBe("verified");
+    expect(service.snapshot.access.canUseMediaCenters).toBe(true);
+    expect(service.snapshot.canBuy).toBe(false);
+    expect(service.snapshot.canRestore).toBe(true);
+  });
+
   it("unlocks only after verification and locks again when Samsung history revokes ownership", async () => {
     const transitions: Array<{ status: string; allowed: boolean }> = [];
     const service = new SamsungCheckoutPremiumService(
@@ -190,10 +260,22 @@ describe("television premium store adapters", () => {
     buy?: (
       paymentDetails: string,
       success: (data: { payResult?: string; payDetail?: string }) => void
-    ) => void
+    ) => void,
+    serviceAvailability: boolean[] = []
   ): SamsungCheckoutApis {
     return {
       billing: {
+        isServiceAvailable: (serverType, success) => {
+          expect(serverType).toBe("PRD");
+          const available = serviceAvailability.shift() ?? true;
+          success({
+            apiResult: JSON.stringify({
+              status: "100000",
+              result: "Success",
+              serviceYn: available ? "Y" : "N"
+            })
+          });
+        },
         buyItem: (_appId, serverType, paymentDetails, success) => {
           expect(serverType).toBe("PRD");
           if (buy) buy(paymentDetails, success);
@@ -220,10 +302,11 @@ describe("television premium store adapters", () => {
     }) as typeof fetch;
   }
 
-  function unverifiedDecision(): unknown {
+  function unverifiedDecision(checkoutAvailable = true): unknown {
     return {
       schemaVersion: 1,
       verified: false,
+      checkoutAvailable,
       productId: config.productId,
       product: {
         productId: config.productId,
@@ -235,9 +318,9 @@ describe("television premium store adapters", () => {
     };
   }
 
-  function verifiedDecision(): unknown {
+  function verifiedDecision(checkoutAvailable = true): unknown {
     return {
-      ...unverifiedDecision() as Record<string, unknown>,
+      ...unverifiedDecision(checkoutAvailable) as Record<string, unknown>,
       verified: true
     };
   }

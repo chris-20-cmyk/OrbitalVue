@@ -13,6 +13,8 @@ on:
       - "contracts/**"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-samsung-distribution-readiness.mjs"
+      - "tools/stamp-samsung-package-version.mjs"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -26,6 +28,8 @@ on:
       - "contracts/**"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-samsung-distribution-readiness.mjs"
+      - "tools/stamp-samsung-package-version.mjs"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -58,6 +62,7 @@ jobs:
         run: |
           node contracts/validate-contract.mjs
           node tools/verify-premium-store-readiness.mjs
+          node tools/verify-samsung-distribution-readiness.mjs
       - name: Build and test authenticated media-center adapters
         run: pnpm media-centers:test
       - name: Check, test, and build television clients

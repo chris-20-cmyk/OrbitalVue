@@ -105,8 +105,8 @@ TV file onboarding cannot assume that every model exposes a usable file picker, 
 - Inputs: mandatory arrows, Enter, and Back plus registered media keys.
 - Source headers: documented AVPlay streaming properties cover User-Agent and Cookie. Arbitrary Referer support is not promised, so channels requiring Referer are reported as unsupported instead of silently proxying credentials.
 - Lifecycle: stop/release AVPlay on termination and restore catalog/focus state on relaunch.
-- Premium commerce: Samsung Checkout opens the native one-time purchase surface; a protected backend owns the DPI security key and returns only the exact product offer plus purchase-history decision. Native callbacks never grant access, and foreground/history rechecks can revoke an active media-center session.
-- Signing: Samsung author plus distributor certificate; registered TV DUID for sideload tests.
+- Premium commerce: Samsung Checkout opens the native one-time purchase surface only after a protected backend confirms DPI country availability; the deprecated native production-service probe is used as a second check where the TV still exposes it. The backend owns the DPI security key and returns only the exact product offer plus purchase-history decision. Native callbacks never grant access, and foreground/history rechecks can revoke an active media-center session.
+- Signing: original Samsung author plus Partner distributor certificate for the Store candidate; registered TV DUID in a local distributor certificate for sideload tests. CI validates the author fingerprint and never auto-submits the package.
 
 ### LG webOS adapter
 

@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "verified": false,
+  "checkoutAvailable": true,
   "productId": "streamvue-premium",
   "product": {
     "productId": "streamvue-premium",

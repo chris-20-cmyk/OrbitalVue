@@ -1,0 +1,14 @@
+{
+  "contractVersion": "1.0",
+  "widgetId": "https://streamvue.app/tv",
+  "packageId": "SvTvPlayer",
+  "applicationId": "SvTvPlayer.StreamVue",
+  "checkoutApplicationId": null,
+  "verifierUrl": null,
+  "authorCertificateSha256": null,
+  "partnerDistributorCertificateReady": false,
+  "sellerTermsReviewed": false,
+  "dpiProductConfigured": false,
+  "realTvCheckoutTested": false,
+  "ready": false
+}

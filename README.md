@@ -220,7 +220,7 @@ pnpm tv:test
 pnpm tv:build
 ```
 
-This produces unsigned Tizen and webOS project directories. Vendor SDK signing is required only when sideloading or submitting the final `.wgt` or `.ipk` package.
+This produces unsigned Tizen and webOS project directories. Vendor SDK signing is required only when sideloading or submitting the final `.wgt` or `.ipk` package. A separate manual **Build Samsung TV Store candidate** workflow creates an author/Partner-distributor-signed `.wgt` only after the Seller Office, DPI, real-TV checkout, premium-product, and author-continuity gates agree; it does not upload to Samsung.
 
 ### iPhone, iPad, and Apple TV
 

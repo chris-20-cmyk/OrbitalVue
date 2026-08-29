@@ -33,6 +33,11 @@ interface SamsungWebApis {
 }
 
 interface SamsungBilling {
+  isServiceAvailable(
+    serverType: "DEV" | "PRD",
+    successCallback: (data: { apiResult: string }) => void,
+    errorCallback?: (error: { name?: string; message?: string }) => void
+  ): void;
   buyItem(
     appId: string,
     serverType: "DEV" | "PRD",

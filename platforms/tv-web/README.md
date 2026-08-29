@@ -15,7 +15,7 @@ This project is the shared television UI for StreamVue 5.0. It deliberately uses
 - Native HTML5/HLS playback for LG webOS and browser development
 - Auto, Fit, Fill, Zoom, 16:9, 4:3, and 21:9 framing
 - Buffering shown only while the native player reports buffering
-- Samsung Checkout one-time Buy/Restore UI with localized verifier-owned product metadata, server-side DPI purchase-history verification, and live revocation handling
+- Samsung Checkout one-time Buy/Restore UI with localized verifier-owned product metadata, server-side DPI purchase-history and country-availability verification, a native service check immediately before purchase where the deprecated probe is still exposed, and live revocation handling
 - An explicit LG billing-unavailable state with no placeholder payment flow, because LG has discontinued its native television billing service
 
 Raw playlist locations never appear in normal browsing; only the provider host and optional port are displayed. The full source URL remains in app-private television storage so it can refresh at launch.
@@ -34,7 +34,7 @@ $env:VITE_STREAMVUE_SAMSUNG_VERIFICATION_URL = "https://<verifier>/samsung/statu
 pnpm tv:build
 ```
 
-The exact request/response boundary is committed in [`contracts/samsung-checkout-verifier-v1.schema.json`](../../contracts/samsung-checkout-verifier-v1.schema.json). The normal unsigned CI artifact does not set these values and remains visibly store-locked.
+The exact request/response boundary is committed in [`contracts/samsung-checkout-verifier-v1.schema.json`](../../contracts/samsung-checkout-verifier-v1.schema.json). The backend response includes `checkoutAvailable`, computed with Samsung DPI's signed country-availability request; no DPI security key or check value is sent to the TV. The normal unsigned CI artifact does not set these values and remains visibly store-locked.
 
 The television's native player cannot attach arbitrary authorization headers. StreamVue therefore materializes the provider token into the native playback URL only for the active playback request, clears that URL when playback stops, and never stores it in source metadata or offline snapshots.
 
@@ -74,3 +74,27 @@ ares-install --device YOUR_TV com.streamvue.player.tv_5.0.0_all.ipk
 ```
 
 The generated Samsung application/package ID is provisional until the first Tizen Studio device project is paired. Keep the same IDs after store submission begins. LG and Samsung packages must be tested on real televisions because codecs, HLS variants, remote keys, and provider header requirements vary by model.
+
+## Samsung Seller Office candidate
+
+The manual **Build Samsung TV Store candidate** workflow first proves every public readiness field in a separate job before requesting access to the signing environment. It then installs the SHA-256-pinned Tizen Web CLI, builds in Store mode, stamps only the generated `config.xml`, verifies the exact package/widget/Checkout identities, and signs one `.wgt` with protected author and partner-distributor certificates. It checks the author certificate against the committed continuity fingerprint, removes all signing material, and uploads a temporary audit artifact. It never submits to Seller Office.
+
+The workflow remains locked until `store/premium-products.json` and `store/samsung-distribution.json` contain the real reviewed values. Add these non-secret repository variables:
+
+```text
+STREAMVUE_SAMSUNG_APP_ID
+STREAMVUE_SAMSUNG_PREMIUM_PRODUCT_ID
+STREAMVUE_SAMSUNG_VERIFICATION_URL
+STREAMVUE_SAMSUNG_AUTHOR_CERT_SHA256
+```
+
+Create a protected GitHub environment named `samsung-store-signing` (ideally with a required reviewer), then add these environment secrets:
+
+```text
+STREAMVUE_SAMSUNG_AUTHOR_CERTIFICATE_BASE64
+STREAMVUE_SAMSUNG_AUTHOR_CERTIFICATE_PASSWORD
+STREAMVUE_SAMSUNG_DISTRIBUTOR_CERTIFICATE_BASE64
+STREAMVUE_SAMSUNG_DISTRIBUTOR_CERTIFICATE_PASSWORD
+```
+
+The distributor certificate must have the Partner privilege level because `sso.partner` is used. For personal sideloading it must also contain the target television's DUID. Back up the original author `.p12` and password outside GitHub; every future update must preserve that author identity.

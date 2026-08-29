@@ -87,6 +87,7 @@ jobs:
         run: |
           node contracts/validate-contract.mjs
           node tools/verify-premium-store-readiness.mjs
+          node tools/verify-samsung-distribution-readiness.mjs
           pnpm media-centers:test
           pnpm tv:check
           pnpm tv:test

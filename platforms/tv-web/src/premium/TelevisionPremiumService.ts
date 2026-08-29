@@ -46,7 +46,7 @@ export interface SamsungCheckoutConfig {
 }
 
 export interface SamsungCheckoutApis {
-  billing?: Pick<SamsungBilling, "buyItem">;
+  billing?: Pick<SamsungBilling, "buyItem"> & Partial<Pick<SamsungBilling, "isServiceAvailable">>;
   productinfo?: Pick<SamsungProductInfo, "getSystemConfig" | "ProductInfoConfigKey">;
   sso?: Pick<SamsungSso, "getLoginUid">;
 }
@@ -68,11 +68,12 @@ interface SamsungProductOffer {
 
 interface SamsungVerifierDecision {
   verified: boolean;
+  checkoutAvailable: boolean;
   product: SamsungProductOffer | null;
 }
 
 const SAMSUNG_PRODUCT_PATTERN = /^[A-Za-z0-9_-]{1,20}$/;
-const APP_ID_PATTERN = /^[A-Za-z0-9._-]{3,128}$/;
+const APP_ID_PATTERN = /^[A-Za-z0-9._-]{3,30}$/;
 const COUNTRY_PATTERN = /^[A-Z]{2}$/;
 const CURRENCY_PATTERN = /^[A-Z]{3}$/;
 const ORDER_TOTAL_PATTERN = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/;
@@ -186,6 +187,17 @@ export class SamsungCheckoutPremiumService implements TelevisionPremiumService {
     if (!config || !billing || !product || !this.current.canBuy) {
       throw new Error(this.current.message);
     }
+    if (!await samsungBillingServiceAvailable(billing)) {
+      const message = "Samsung Checkout became unavailable before purchase. Existing purchases can still be restored.";
+      this.update({
+        ...this.current,
+        status: "unavailable",
+        canBuy: false,
+        canRestore: true,
+        message
+      });
+      throw new Error(message);
+    }
     const identity = samsungIdentity(this.apis);
     this.purchaseInProgress = true;
     this.update({
@@ -293,6 +305,32 @@ export class SamsungCheckoutPremiumService implements TelevisionPremiumService {
       if (!decision.product) {
         throw new Error("The verifier did not return the exact Samsung Checkout product offer.");
       }
+      if (!decision.checkoutAvailable) {
+        this.update({
+          access: evaluatePremiumAccess("store", false),
+          provider: "samsung-checkout",
+          status: "unavailable",
+          canBuy: false,
+          canRestore: true,
+          productTitle: decision.product.title,
+          localizedPrice: decision.product.localizedPrice,
+          message: "Samsung Checkout is not available in this television's service country. Existing purchases can still be restored."
+        });
+        return;
+      }
+      if (!await samsungBillingServiceAvailable(this.apis.billing)) {
+        this.update({
+          access: evaluatePremiumAccess("store", false),
+          provider: "samsung-checkout",
+          status: "unavailable",
+          canBuy: false,
+          canRestore: true,
+          productTitle: decision.product.title,
+          localizedPrice: decision.product.localizedPrice,
+          message: "Samsung Checkout is temporarily unavailable on this television. Existing purchases can still be restored."
+        });
+        return;
+      }
       this.update({
         access: evaluatePremiumAccess("store", false),
         provider: "samsung-checkout",
@@ -398,16 +436,57 @@ async function requestSamsungDecision(
     throw new Error("Samsung entitlement verifier returned invalid JSON.");
   }
   if (!isRecord(raw)
-    || !hasOnlyKeys(raw, ["schemaVersion", "verified", "productId", "product"])
+    || !hasOnlyKeys(raw, ["schemaVersion", "verified", "checkoutAvailable", "productId", "product"])
     || raw.schemaVersion !== 1
     || typeof raw.verified !== "boolean"
+    || typeof raw.checkoutAvailable !== "boolean"
     || raw.productId !== config.productId) {
     throw new Error("Samsung entitlement verifier returned an invalid or mismatched decision.");
   }
   const product = raw.product === undefined || raw.product === null
     ? null
     : parseSamsungProduct(raw.product, config.productId);
-  return { verified: raw.verified, product };
+  return { verified: raw.verified, checkoutAvailable: raw.checkoutAvailable, product };
+}
+
+async function samsungBillingServiceAvailable(billing: SamsungCheckoutApis["billing"]): Promise<boolean> {
+  if (!billing) return false;
+  // Samsung deprecated this device-level probe in favor of the authenticated
+  // DPI country check performed by our verifier. Use it as a second gate on
+  // televisions that still expose it, but do not reject newer implementations
+  // that rely only on the required server-side country decision.
+  const probe = billing.isServiceAvailable;
+  if (typeof probe !== "function") return true;
+  return new Promise<boolean>((resolve, reject) => {
+    try {
+      probe.call(
+        billing,
+        "PRD",
+        (data) => {
+          try {
+            const value = JSON.parse(data.apiResult) as unknown;
+            if (!isRecord(value)
+              || !hasOnlyKeys(value, ["status", "result", "serviceYn"])
+              || typeof value.status !== "string"
+              || typeof value.result !== "string"
+              || (value.serviceYn !== "Y" && value.serviceYn !== "N")) {
+              reject(new Error("Samsung Checkout returned an invalid service-availability response."));
+              return;
+            }
+            resolve(value.status === "100000" && value.serviceYn === "Y");
+          } catch {
+            reject(new Error("Samsung Checkout returned invalid service-availability JSON."));
+          }
+        },
+        (error) => reject(new Error(samsungErrorMessage(
+          error,
+          "Samsung Checkout could not confirm billing-service availability."
+        )))
+      );
+    } catch (error) {
+      reject(error);
+    }
+  });
 }
 
 function parseSamsungProduct(value: unknown, productId: string): SamsungProductOffer {

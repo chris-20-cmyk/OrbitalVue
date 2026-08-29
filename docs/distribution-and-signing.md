@@ -88,6 +88,10 @@ Samsung requires every TV application to be signed. Tizen Studio's Samsung Certi
 
 Back up the author `.p12` and its password securely. Samsung states that an update signed with a different author certificate can be treated as a different application. Public distribution uses [TV Seller Office](https://seller.samsungapps.com/tv/login) and Samsung review. The package format is a signed `.wgt`.
 
+StreamVue's manual **Build Samsung TV Store candidate** workflow keeps this boundary explicit. `store/samsung-distribution.json` must first be completed with the final package/widget/Checkout identities, original author-certificate SHA-256 fingerprint, Partner distributor readiness, Seller Office terms review, DPI product creation, and real-TV Checkout testing. The matching premium entry must name `samsung-dpi-purchase-history`. Put the signing secrets in the `samsung-store-signing` GitHub environment and protect it with a required reviewer. The workflow then verifies certificate validity/key strength and author continuity, creates a temporary Tizen profile, signs one `.wgt`, removes the certificates/profile, and publishes only a temporary manual-upload artifact. It serializes candidate jobs and does not send anything to Seller Office.
+
+For a personal TV, use the normal `pnpm tv:build` output and a locally created Samsung TV certificate profile whose distributor certificate contains that TV's DUID. The public-store candidate requires a Partner-level distributor because the app uses `sso.partner`; a personal DUID certificate is not evidence that Seller Office approval has been completed.
+
 ## LG webOS TV
 
 Personal testing uses an LG Developer account, the television's free Developer Mode app, and the webOS CLI. Developer Mode is time limited and must be extended while the TV is online; when it expires, developer-installed apps are removed. LG documents the process in [App Testing with Developer Mode](https://webostv.developer.lge.com/develop/getting-started/developer-mode-app).

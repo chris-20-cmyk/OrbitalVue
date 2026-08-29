@@ -33,7 +33,7 @@
         "appId": {
           "type": "string",
           "minLength": 3,
-          "maxLength": 128,
+          "maxLength": 30,
           "pattern": "^[A-Za-z0-9._-]+$"
         },
         "productId": { "$ref": "#/$defs/samsungProductId" },
@@ -52,10 +52,14 @@
     "statusResponse": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "verified", "productId"],
+      "required": ["schemaVersion", "verified", "checkoutAvailable", "productId"],
       "properties": {
         "schemaVersion": { "const": 1 },
         "verified": { "type": "boolean" },
+        "checkoutAvailable": {
+          "description": "Whether the request country is eligible for Samsung Checkout, computed server-side with DPI country-availability verification. Existing verified ownership remains valid when false.",
+          "type": "boolean"
+        },
         "productId": { "$ref": "#/$defs/samsungProductId" },
         "product": {
           "type": "object",

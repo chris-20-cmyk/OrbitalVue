@@ -213,6 +213,7 @@ assertExactKeys(
 if (samsungStatusRequest.schemaVersion !== 1
   || samsungStatusRequest.platform !== "samsung"
   || samsungStatusRequest.action !== "status"
+  || !/^[A-Za-z0-9._-]{3,30}$/.test(samsungStatusRequest.appId)
   || !samsungProductPattern.test(samsungStatusRequest.productId)
   || !/^[A-Z]{2}$/.test(samsungStatusRequest.countryCode)
   || !samsungStatusRequest.customId) {
@@ -220,11 +221,12 @@ if (samsungStatusRequest.schemaVersion !== 1
 }
 const validateSamsungResponse = (response, expectedVerified) => {
   const expectedKeys = expectedVerified
-    ? ["schemaVersion", "verified", "productId"]
-    : ["schemaVersion", "verified", "productId", "product"];
+    ? ["schemaVersion", "verified", "checkoutAvailable", "productId"]
+    : ["schemaVersion", "verified", "checkoutAvailable", "productId", "product"];
   assertExactKeys(response, expectedKeys, "Samsung status response");
   if (response.schemaVersion !== 1
     || response.verified !== expectedVerified
+    || typeof response.checkoutAvailable !== "boolean"
     || response.productId !== samsungStatusRequest.productId) {
     fail("Samsung status response fixture is invalid");
   }

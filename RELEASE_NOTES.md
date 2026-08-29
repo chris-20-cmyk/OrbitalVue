@@ -19,6 +19,8 @@ StreamVue 5.0 begins the move from a Windows-only player to one shared product f
 - Full-screen playback with real buffering state and Auto, Fit, Fill, Zoom, 16:9, 4:3, and 21:9 aspect modes
 - Samsung and LG package directories, store metadata, icons, splash artwork, and repeatable build scripts
 - Unsigned platform project archives ready for vendor SDK signing when certificates are available
+- Samsung Checkout country-availability enforcement with existing-owner restore behavior and fail-closed server verification
+- A separate readiness-gated, author/Partner-distributor-signed Samsung `.wgt` candidate for manual Seller Office upload
 
 ## Shared catalog contract
 
