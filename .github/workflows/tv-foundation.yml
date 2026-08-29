@@ -73,6 +73,9 @@ jobs:
           test -f platforms/tv-web/dist/webos/appinfo.json
           test -f platforms/tv-web/dist/webos/splash.png
           grep -q '\$WEBAPIS/webapis/webapis.js' platforms/tv-web/dist/samsung/index.html
+          grep -q 'http://developer.samsung.com/privilege/sso.partner' platforms/tv-web/dist/samsung/config.xml
+          grep -q 'http://developer.samsung.com/privilege/productinfo' platforms/tv-web/dist/samsung/config.xml
+          grep -q 'http://developer.samsung.com/privilege/billing' platforms/tv-web/dist/samsung/config.xml
           if find platforms/tv-web/dist/samsung platforms/tv-web/dist/webos -name '*.map' -print -quit | grep -q .; then exit 1; fi
       - name: Upload unsigned television projects
         uses: actions/upload-artifact@v7

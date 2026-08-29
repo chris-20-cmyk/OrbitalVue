@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "verified": false,
+  "productId": "streamvue-premium",
+  "product": {
+    "productId": "streamvue-premium",
+    "title": "StreamVue Personal Media Centers",
+    "localizedPrice": "$9.99",
+    "orderTotal": "9.99",
+    "currencyId": "USD"
+  }
+}

@@ -257,4 +257,51 @@ describe("television media-center repository", () => {
     await expect(repository.loadSaved()).rejects.toThrow("one-time store purchase");
     expect(requestCount).toBe(0);
   });
+
+  it("observes live entitlement grants and revocations without rebuilding the repository", async () => {
+    const connection = createMediaCenterConnection({
+      provider: "plex",
+      serverId: "dynamic-server",
+      displayName: "Dynamic Plex",
+      baseUrl: "https://dynamic.home:32400",
+      credentialId: "mc-plex-dynamic"
+    });
+    const snapshot: MediaCenterSnapshot = {
+      contractVersion: connection.contractVersion,
+      loadedAt: new Date().toISOString(),
+      connection,
+      libraries: [],
+      items: []
+    };
+    const cache = new MemoryCatalogStore();
+    cache.record = {
+      key: "active",
+      sourceUrl: null,
+      catalog: createMediaCenterCatalog(connection, [], [], snapshot.loadedAt),
+      savedAt: snapshot.loadedAt,
+      sourceKind: "media-center",
+      mediaCenterSnapshot: snapshot
+    };
+    let access = evaluatePremiumAccess("store", false);
+    let requestCount = 0;
+    const repository = new CatalogRepository(
+      cache,
+      new SessionCredentialVault(),
+      async () => {
+        requestCount += 1;
+        throw new Error("the network should remain untouched");
+      },
+      () => access
+    );
+
+    await expect(repository.loadSaved()).rejects.toThrow("one-time store purchase");
+    access = evaluatePremiumAccess("store", true, "streamvue-premium");
+    await expect(repository.loadSaved()).resolves.toMatchObject({
+      refreshed: false,
+      notice: expect.stringContaining("without credentials")
+    });
+    access = evaluatePremiumAccess("store", false);
+    await expect(repository.refreshCurrent()).rejects.toThrow("one-time store purchase");
+    expect(requestCount).toBe(0);
+  });
 });

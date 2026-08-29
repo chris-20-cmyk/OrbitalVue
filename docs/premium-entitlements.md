@@ -18,7 +18,8 @@ The repository defaults to the personal mode so current private builds remain fu
 | --- | --- | --- |
 | Windows | `-p:StreamVueDistributionMode=Store` | Compiles locked; an MSIX Store build can verify a configured durable add-on |
 | Android / Google TV | `-PstreamVueDistributionMode=store` | Compiles with Plex/Emby locked |
-| Samsung / LG television shell | `VITE_STREAMVUE_DISTRIBUTION_MODE=store` | Bundles with Plex/Emby locked |
+| Samsung television shell | `VITE_STREAMVUE_DISTRIBUTION_MODE=store` | Compiles locked; Samsung Checkout becomes available only with the exact seller IDs and HTTPS verifier below |
+| LG television shell | `VITE_STREAMVUE_DISTRIBUTION_MODE=store` | Remains explicitly locked because LG no longer provides native TV billing |
 | Apple | Xcode configuration `Store` (injects `StreamVueDistributionMode=store` into the app Info.plist) | Compiles with Plex/Emby locked |
 
 An unknown or misspelled mode is treated as store/unavailable by every runtime policy. This is intentional: an invalid release configuration must never become an accidental unlock.
@@ -55,7 +56,28 @@ The verifier endpoint receives a versioned JSON request containing `platform`, `
 
 The `Store` configuration reads the exact non-consumable identifier from the `STREAMVUE_PREMIUM_PRODUCT_ID` Xcode build setting. StoreKit 2 loads the localized product, processes `Transaction.updates`, and rebuilds access from cryptographically verified `Transaction.currentEntitlements`. Unverified, pending, revoked, missing, or mismatched transactions stay locked. `AppStore.sync()` is called only after the user selects **Restore purchase**, because that API can display an App Store account prompt.
 
-Official implementation references: [Microsoft Store purchases and trials](https://learn.microsoft.com/en-us/windows/uwp/monetize/in-app-purchases-and-trials), [Microsoft durable add-ons](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/add-on/create-app-submission), [Google Play Billing integration](https://developer.android.com/google/play/billing/integrate), [Google Play billing security](https://developer.android.com/google/play/billing/security), [StoreKit current entitlements](https://developer.apple.com/documentation/storekit/transaction/currententitlements), and [AppStore.sync](https://developer.apple.com/documentation/storekit/appstore/sync()).
+### Samsung Tizen TV
+
+Samsung store builds use Samsung Checkout on the television and the DPI purchase-history service on a protected StreamVue backend. Configure the Seller Office application for Billing/Samsung Checkout, create a **Non-Consumable** product in the DPI Portal, and supply only these non-secret build values:
+
+```text
+VITE_STREAMVUE_DISTRIBUTION_MODE=store
+VITE_STREAMVUE_SAMSUNG_APP_ID=<exact Samsung Checkout application ID>
+VITE_STREAMVUE_SAMSUNG_PRODUCT_ID=<exact DPI product ID>
+VITE_STREAMVUE_SAMSUNG_VERIFICATION_URL=https://<your verifier>/samsung/status
+```
+
+Samsung limits a DPI product ID to 20 ASCII letters, digits, `_`, or `-`; StreamVue enforces that rule before touching the TV API. The verifier URL must be HTTPS and contain no credentials, query, or fragment. `config.xml` requests the documented Billing, ProductInfo, and SSO privileges, while the packaged page loads Samsung's `webapis.js`.
+
+At startup, restore, foreground, and source-manager entry, StreamVue sends the versioned request defined by `contracts/samsung-checkout-verifier-v1.schema.json`. Its Samsung Account `customId` is transient purchase-verification data: the verifier must minimize it, never return it, and avoid retaining it beyond the required seller transaction purpose. The backend owns the DPI security key, generates/verifies every HMAC check value, pages the purchase history, validates the exact app/product/user/country, and treats canceled or refunded records as unowned. Neither the security key nor a DPI check value belongs in this repository, a Vite variable, or a television bundle.
+
+An unowned decision must include the exact server-validated localized product offer. StreamVue passes that offer to `webapis.billing.buyItem(..., "PRD", ...)`, then discards the native result as entitlement evidence and asks the verifier for purchase history again. Only `{ "schemaVersion": 1, "verified": true, "productId": "<exact ID>" }` unlocks Plex/Emby. A failed/mismatched recheck revokes access and stops protected playback; ordinary M3U playback is unaffected.
+
+### LG webOS TV
+
+LG's current developer documentation states that the LG Billing Service for in-app purchase is no longer provided and recommends a reliable third-party billing solution such as Paymentwall; LG may require a separate contract for another provider. The store build therefore reports **unavailable**, shows no fake Buy/Restore button, and performs no placeholder billing or verification request. A production LG unlock still requires a selected/approved provider, seller terms, a StreamVue user identity and recovery model, server-side webhook/API verification, refund handling, and an LG real-TV test matrix. A client-side payment success callback alone will never be accepted as entitlement proof.
+
+Official implementation references: [Microsoft Store purchases and trials](https://learn.microsoft.com/en-us/windows/uwp/monetize/in-app-purchases-and-trials), [Microsoft durable add-ons](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/add-on/create-app-submission), [Google Play Billing integration](https://developer.android.com/google/play/billing/integrate), [Google Play billing security](https://developer.android.com/google/play/billing/security), [StoreKit current entitlements](https://developer.apple.com/documentation/storekit/transaction/currententitlements), [AppStore.sync](https://developer.apple.com/documentation/storekit/appstore/sync()), [Samsung Checkout purchase process](https://developer.samsung.com/smarttv/develop/guides/samsung-checkout/implementing-the-purchase-process.html), [Samsung Billing API](https://developer.samsung.com/smarttv/develop/api-references/samsung-product-api-references/billing-api.html), and [LG webOS in-app purchase](https://webostv.developer.lge.com/develop/guides/in-app-purchase).
 
 ## What remains before charging for the feature
 
@@ -79,7 +101,7 @@ A future store workflow must also run `node tools/verify-premium-store-readiness
 
 Foundation CI exercises both modes. Direct-install test packages remain personal builds, while unsigned Google Play, Samsung, and LG artifacts are explicitly named `store-locked` and compile with media centers unavailable. They are verification artifacts, not sellable products; a future store-publish job must pass the platform-specific `--require-ready` gate first.
 
-Current adapters use StoreKit 2 on Apple, Google Play Billing on Android/Google TV, and the Microsoft Store licensing API for a future MSIX release. Samsung/LG will use only an applicable seller API that can verify the television account's entitlement; no local preference or build flag may stand in for proof of purchase. Direct-download Windows builds stay personal/included.
+Current adapters use StoreKit 2 on Apple, Google Play Billing on Android/Google TV, the Microsoft Store licensing API for a future MSIX release, and Samsung Checkout plus a server-side DPI verifier on Samsung TV. LG intentionally remains unavailable until a reviewed third-party billing provider and verifier are selected. No local preference or build flag may stand in for proof of purchase. Direct-download Windows builds stay personal/included.
 
 ## Portable contract
 

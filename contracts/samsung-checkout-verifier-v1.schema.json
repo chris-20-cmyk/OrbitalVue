@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamvue.app/contracts/samsung-checkout-verifier/v1/schema.json",
+  "title": "StreamVue Samsung Checkout Verifier Exchange",
+  "description": "The versioned, transient request and secret-free entitlement response exchanged between a Samsung television and the StreamVue server-side DPI verifier.",
+  "oneOf": [
+    { "$ref": "#/$defs/statusRequest" },
+    { "$ref": "#/$defs/statusResponse" }
+  ],
+  "$defs": {
+    "samsungProductId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "statusRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "platform",
+        "action",
+        "appId",
+        "productId",
+        "customId",
+        "countryCode"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "platform": { "const": "samsung" },
+        "action": { "const": "status" },
+        "appId": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "productId": { "$ref": "#/$defs/samsungProductId" },
+        "customId": {
+          "description": "Samsung Account UID used transiently to query purchase history. The verifier must not return, log, or persist it beyond the minimum purchase-verification purpose.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "countryCode": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}$"
+        }
+      }
+    },
+    "statusResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "verified", "productId"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "verified": { "type": "boolean" },
+        "productId": { "$ref": "#/$defs/samsungProductId" },
+        "product": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["productId", "title", "localizedPrice", "orderTotal", "currencyId"],
+          "properties": {
+            "productId": { "$ref": "#/$defs/samsungProductId" },
+            "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+            "localizedPrice": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "orderTotal": {
+              "type": "string",
+              "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,2})?$"
+            },
+            "currencyId": { "type": "string", "pattern": "^[A-Z]{3}$" }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "verified": { "const": false } },
+            "required": ["verified"]
+          },
+          "then": { "required": ["product"] }
+        }
+      ]
+    }
+  }
+}

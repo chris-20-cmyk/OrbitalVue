@@ -78,12 +78,18 @@ type MediaCenterClient = Pick<PlexClient, "getLibraries" | "getItems">
   | Pick<EmbyClient, "getLibraries" | "getItems">;
 
 export class CatalogRepository {
+  private readonly premiumAccessProvider: () => PremiumAccessSnapshot;
+
   constructor(
     private readonly cache: CatalogStore = new CatalogCache(),
     private readonly credentialVault: TelevisionCredentialVault = createTelevisionCredentialVault(),
     private readonly mediaTransport: MediaCenterHttpTransport = createFetchTransport(),
-    private readonly premiumAccess: PremiumAccessSnapshot = currentPremiumAccess()
-  ) {}
+    premiumAccess: PremiumAccessSnapshot | (() => PremiumAccessSnapshot) = currentPremiumAccess()
+  ) {
+    this.premiumAccessProvider = typeof premiumAccess === "function"
+      ? premiumAccess
+      : () => premiumAccess;
+  }
 
   get credentialSecurityLabel(): string {
     return this.credentialVault.securityLabel;
@@ -93,7 +99,7 @@ export class CatalogRepository {
     const saved = await this.cache.read();
     if (!saved) return null;
     if (saved.sourceKind === "media-center" || saved.mediaCenterSnapshot) {
-      requireMediaCenterAccess(this.premiumAccess);
+      this.requireMediaCenterAccess();
       return this.loadSavedMediaCenter(saved);
     }
     if (!saved.sourceUrl) return { catalog: saved.catalog, notice: null, refreshed: false };
@@ -125,7 +131,7 @@ export class CatalogRepository {
     const saved = await this.cache.read();
     if (!saved) throw new Error("Connect a source before refreshing.");
     if (saved.sourceKind === "media-center" || saved.mediaCenterSnapshot) {
-      requireMediaCenterAccess(this.premiumAccess);
+      this.requireMediaCenterAccess();
       const result = await this.loadSavedMediaCenter(saved, true);
       if (!result.refreshed) throw new Error(result.notice ?? "The media library could not be refreshed.");
       return result;
@@ -188,7 +194,7 @@ export class CatalogRepository {
   }
 
   async connectPlex(request: PlexConnectRequest): Promise<CatalogLoadResult> {
-    requireMediaCenterAccess(this.premiumAccess);
+    this.requireMediaCenterAccess();
     const baseUrl = normalizeMediaCenterBaseUrl(request.serverAddress);
     const identity = await probePlexServerIdentity(this.mediaTransport, {
       baseUrl,
@@ -222,7 +228,7 @@ export class CatalogRepository {
   }
 
   async connectEmby(request: EmbyConnectRequest): Promise<CatalogLoadResult> {
-    requireMediaCenterAccess(this.premiumAccess);
+    this.requireMediaCenterAccess();
     const baseUrl = normalizeMediaCenterBaseUrl(request.serverAddress);
     const device = televisionDeviceIdentity();
     const authenticated = await authenticateEmby(this.mediaTransport, {
@@ -261,7 +267,7 @@ export class CatalogRepository {
     if (!channel.stream.uri.startsWith("streamvue-media://")) {
       return { channel, startPositionMs: 0, method: "source" };
     }
-    requireMediaCenterAccess(this.premiumAccess);
+    this.requireMediaCenterAccess();
     const saved = await this.cache.read();
     const snapshot = saved?.mediaCenterSnapshot;
     if (!saved || !snapshot) {
@@ -300,6 +306,10 @@ export class CatalogRepository {
     await this.cache.clear();
     const credentialId = saved?.mediaCenterSnapshot?.connection.credentialId;
     if (credentialId) await this.credentialVault.remove(credentialId);
+  }
+
+  private requireMediaCenterAccess(): void {
+    requireMediaCenterAccess(this.premiumAccessProvider());
   }
 
   private async loadSavedMediaCenter(

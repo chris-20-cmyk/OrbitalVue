@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "platform": "samsung",
+  "action": "status",
+  "appId": "1234567890",
+  "productId": "streamvue-premium",
+  "customId": "fixture-samsung-user",
+  "countryCode": "US"
+}

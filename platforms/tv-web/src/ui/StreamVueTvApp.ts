@@ -13,7 +13,11 @@ import {
   type PlayerAdapter
 } from "../playback/PlayerAdapter.js";
 import { icon, type IconName } from "./icons.js";
-import { currentPremiumAccess } from "../premium/PremiumAccess.js";
+import {
+  createTelevisionPremiumService,
+  type TelevisionPremiumService,
+  type TelevisionPremiumSnapshot
+} from "../premium/TelevisionPremiumService.js";
 
 type Screen = "loading" | "onboarding" | "browse" | "player";
 type Modal = "source" | "search" | "confirm-clear" | null;
@@ -25,8 +29,10 @@ const FAVORITES_GROUP = "Favorites";
 const GROUP_WINDOW_SIZE = 8;
 
 export class StreamVueTvApp {
-  private readonly repository = new CatalogRepository();
-  private readonly premiumAccess = currentPremiumAccess();
+  private readonly repository: CatalogRepository;
+  private readonly premiumService: TelevisionPremiumService;
+  private premium: TelevisionPremiumSnapshot;
+  private readonly unsubscribePremium: () => void;
   private readonly navigator: SpatialNavigator;
   private catalog: StreamVueCatalog | null = null;
   private screen: Screen = "loading";
@@ -44,9 +50,24 @@ export class StreamVueTvApp {
   private hideChromeTimer: number | null = null;
   private noticeTimer: number | null = null;
   private playbackRequestSerial = 0;
+  private startupComplete = false;
 
-  constructor(private readonly root: HTMLElement) {
+  constructor(
+    private readonly root: HTMLElement,
+    premiumService: TelevisionPremiumService = createTelevisionPremiumService()
+  ) {
+    this.premiumService = premiumService;
+    this.premium = premiumService.snapshot;
+    this.repository = new CatalogRepository(
+      undefined,
+      undefined,
+      undefined,
+      () => this.premium.access
+    );
+    this.unsubscribePremium = premiumService.subscribe(this.onPremiumChanged);
     window.addEventListener("keydown", this.onAppKeyDown, { capture: true });
+    window.addEventListener("focus", this.onWindowFocus);
+    document.addEventListener("visibilitychange", this.onVisibilityChange);
     this.navigator = new SpatialNavigator(root, this.handleBack);
     this.root.addEventListener("click", this.onClick);
     this.root.addEventListener("focusin", this.onFocusIn);
@@ -58,6 +79,7 @@ export class StreamVueTvApp {
     registerPlatformRemoteKeys();
     this.render();
     try {
+      await this.premiumService.start();
       const useDemo = new URLSearchParams(window.location.search).get("demo") === "1";
       const loaded = useDemo ? await this.repository.useDemo() : await this.repository.loadSaved();
       if (loaded) this.applyCatalog(loaded);
@@ -66,6 +88,7 @@ export class StreamVueTvApp {
       this.screen = "onboarding";
       this.error = readableError(error, "The saved channel catalog could not be opened.");
     }
+    this.startupComplete = true;
     this.render();
     this.focusAfterRender();
   }
@@ -73,12 +96,16 @@ export class StreamVueTvApp {
   destroy(): void {
     this.player?.destroy();
     this.clearNoticeTimer();
+    this.unsubscribePremium();
+    this.premiumService.destroy();
     this.navigator.destroy();
     this.root.removeEventListener("click", this.onClick);
     this.root.removeEventListener("focusin", this.onFocusIn);
     this.root.removeEventListener("input", this.onInput);
     this.root.removeEventListener("change", this.onChange);
     window.removeEventListener("keydown", this.onAppKeyDown, { capture: true });
+    window.removeEventListener("focus", this.onWindowFocus);
+    document.removeEventListener("visibilitychange", this.onVisibilityChange);
   }
 
   private render(): void {
@@ -244,9 +271,13 @@ export class StreamVueTvApp {
       </div>`;
     }
     const provider = this.sourceMode === "plex" ? "Plex" : "Emby";
-    if (!this.premiumAccess.canUseMediaCenters) {
+    if (!this.premium.access.canUseMediaCenters) {
       return `<div class="source-form" role="tabpanel">
-        <p class="premium-copy"><strong>${provider} • ${escapeHtml(this.premiumAccess.badgeText)}</strong><span>${escapeHtml(this.premiumAccess.explanation)}</span></p>
+        <p class="premium-copy"><strong>${provider} • ${escapeHtml(this.premium.access.badgeText)}</strong><span>${escapeHtml(this.premium.message)}</span></p>
+        ${this.premium.productTitle || this.premium.localizedPrice
+          ? `<p class="premium-offer"><strong>${escapeHtml(this.premium.productTitle ?? "One-time premium unlock")}</strong>${this.premium.localizedPrice ? `<span>${escapeHtml(this.premium.localizedPrice)}</span>` : ""}</p>`
+          : ""}
+        ${this.premiumActionsTemplate()}
         <p class="vault-note">No media-server address or credential is collected while store verification is unavailable. Playlist sources remain available.</p>
       </div>`;
     }
@@ -254,7 +285,7 @@ export class StreamVueTvApp {
       ? `<label class="field-label" for="plex-access">Plex server token</label><input id="plex-access" class="tv-input" type="password" data-focusable="true" autocomplete="off" spellcheck="false" placeholder="Paste the token for this server" />`
       : `<div class="source-field-grid"><div><label class="field-label" for="emby-user">Emby username</label><input id="emby-user" class="tv-input" data-focusable="true" autocomplete="off" spellcheck="false" /></div><div><label class="field-label" for="emby-password">Emby password</label><input id="emby-password" class="tv-input" type="password" data-focusable="true" autocomplete="off" /></div></div>`;
     return `<div class="source-form" role="tabpanel">
-      <p class="premium-copy"><strong>${provider} • ${escapeHtml(this.premiumAccess.badgeText)}</strong><span>Credentials are verified against one server before protected requests begin. ${escapeHtml(this.premiumAccess.explanation)}</span></p>
+      <p class="premium-copy"><strong>${provider} • ${escapeHtml(this.premium.access.badgeText)}</strong><span>Credentials are verified against one server before protected requests begin. ${escapeHtml(this.premium.access.explanation)}</span></p>
       <label class="field-label" for="media-server">Server address</label>
       <input id="media-server" class="tv-input" data-focusable="true" data-autofocus="true" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://media-server.example:port" />
       ${providerFields}
@@ -268,6 +299,18 @@ export class StreamVueTvApp {
         <button class="button button-primary" data-action="connect-${this.sourceMode}" data-focusable="true">Connect ${provider}</button>
       </div>
     </div>`;
+  }
+
+  private premiumActionsTemplate(): string {
+    const actions: string[] = [];
+    if (this.premium.canBuy) {
+      const price = this.premium.localizedPrice ? ` • ${escapeHtml(this.premium.localizedPrice)}` : "";
+      actions.push(`<button class="button button-primary" data-action="buy-premium" data-focusable="true" data-autofocus="true">Buy once${price}</button>`);
+    }
+    if (this.premium.canRestore) {
+      actions.push(`<button class="button button-secondary" data-action="restore-premium" data-focusable="true">Restore purchase</button>`);
+    }
+    return actions.length > 0 ? `<div class="source-form-actions premium-actions">${actions.join("")}</div>` : "";
   }
 
   private searchModalTemplate(): string {
@@ -469,6 +512,30 @@ export class StreamVueTvApp {
     }
   }
 
+  private async buyPremium(): Promise<void> {
+    this.error = null;
+    try {
+      await this.premiumService.purchase();
+    } catch (error) {
+      this.error = readableError(error, "Samsung Checkout could not finish the purchase.");
+      this.render();
+      this.focusAfterRender("[data-action='buy-premium']");
+    }
+  }
+
+  private async restorePremium(): Promise<void> {
+    this.error = null;
+    try {
+      await this.premiumService.refresh();
+      this.render();
+      this.focusAfterRender("[data-action='restore-premium']");
+    } catch (error) {
+      this.error = readableError(error, "The television store purchase could not be restored.");
+      this.render();
+      this.focusAfterRender("[data-action='restore-premium']");
+    }
+  }
+
   private async importFile(file: File): Promise<void> {
     this.setBusy(true);
     this.error = null;
@@ -571,11 +638,13 @@ export class StreamVueTvApp {
     const scope = this.modalElement();
     if (scope) this.navigator.setScope(scope);
     this.focusAfterRender(`[data-source-mode='${mode}']`);
+    if (mode !== "playlist") void this.premiumService.refresh();
   }
 
   private openSourceMode(mode: SourceMode): void {
     this.sourceMode = mode;
     this.openModal("source");
+    if (mode !== "playlist") void this.premiumService.refresh();
   }
 
   private async playResolvedChannel(channel: CatalogChannel): Promise<void> {
@@ -621,6 +690,8 @@ export class StreamVueTvApp {
     else if (action === "connect-plex") void this.connectPlex();
     else if (action === "connect-emby") void this.connectEmby();
     else if (action === "refresh-source") void this.refreshSource();
+    else if (action === "buy-premium") void this.buyPremium();
+    else if (action === "restore-premium") void this.restorePremium();
     else if (action === "open-source-mode") this.openSourceMode(sourceMode(target.dataset.sourceMode));
     else if (action === "select-source-mode") this.selectSourceMode(sourceMode(target.dataset.sourceMode));
     else if (action === "choose-file") this.root.querySelector<HTMLInputElement>("#playlist-file")?.click();
@@ -647,6 +718,52 @@ export class StreamVueTvApp {
     } else if (action === "toggle-playback") this.player?.toggle();
     else if (action === "cycle-aspect") this.cycleAspect();
     else if (action === "close-player") this.closePlayer();
+  };
+
+  private readonly onPremiumChanged = (snapshot: TelevisionPremiumSnapshot): void => {
+    const hadAccess = this.premium.access.canUseMediaCenters;
+    this.premium = snapshot;
+    if (!this.startupComplete) {
+      this.render();
+      return;
+    }
+    void this.reconcilePremiumAccess(hadAccess, snapshot.access.canUseMediaCenters);
+  };
+
+  private async reconcilePremiumAccess(hadAccess: boolean, hasAccess: boolean): Promise<void> {
+    if (hadAccess && !hasAccess && this.catalog && isMediaCenterCatalog(this.catalog)) {
+      this.playbackRequestSerial += 1;
+      this.player?.destroy();
+      this.player = null;
+      this.catalog = null;
+      this.screen = "onboarding";
+      this.modal = null;
+      this.error = "Premium ownership is no longer verified. Protected media playback has stopped.";
+      this.render();
+      this.focusAfterRender();
+      return;
+    }
+
+    if (!hadAccess && hasAccess && !this.catalog) {
+      try {
+        const loaded = await this.repository.loadSaved();
+        if (loaded) this.applyCatalog(loaded);
+      } catch (error) {
+        this.error = readableError(error, "The saved media library could not be restored.");
+      }
+    }
+    this.render();
+    this.focusAfterRender();
+  }
+
+  private readonly onWindowFocus = (): void => {
+    if (this.startupComplete) void this.premiumService.refresh();
+  };
+
+  private readonly onVisibilityChange = (): void => {
+    if (this.startupComplete && document.visibilityState === "visible") {
+      void this.premiumService.refresh();
+    }
   };
 
   private readonly onFocusIn = (event: FocusEvent): void => {

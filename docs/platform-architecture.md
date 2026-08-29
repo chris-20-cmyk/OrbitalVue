@@ -91,6 +91,7 @@ TV file onboarding cannot assume that every model exposes a usable file picker, 
 - Inputs: mandatory arrows, Enter, and Back plus registered media keys.
 - Source headers: documented AVPlay streaming properties cover User-Agent and Cookie. Arbitrary Referer support is not promised, so channels requiring Referer are reported as unsupported instead of silently proxying credentials.
 - Lifecycle: stop/release AVPlay on termination and restore catalog/focus state on relaunch.
+- Premium commerce: Samsung Checkout opens the native one-time purchase surface; a protected backend owns the DPI security key and returns only the exact product offer plus purchase-history decision. Native callbacks never grant access, and foreground/history rechecks can revoke an active media-center session.
 - Signing: Samsung author plus distributor certificate; registered TV DUID for sideload tests.
 
 ### LG webOS adapter
@@ -100,6 +101,7 @@ TV file onboarding cannot assume that every model exposes a usable file picker, 
 - Inputs: pointer and complete 5-way focus navigation; Back unwinds StreamVue state before yielding to the platform.
 - Source headers: the native media element does not provide a portable arbitrary-request-header contract. Header-dependent streams are capability-gated and never routed through an untrusted proxy.
 - Lifecycle: persist catalog and navigation state before suspension and rebuild media state explicitly after resume.
+- Premium commerce: LG's native billing service is discontinued. Store builds remain visibly unavailable—with no fake purchase action or client-side entitlement—until a reviewed third-party provider, identity/recovery flow, backend verification, and refund handling are implemented.
 - Testing: Developer Mode device test is mandatory because emulator playback support differs by webOS generation.
 
 ### Television acceptance gates

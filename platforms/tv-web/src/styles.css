@@ -857,6 +857,34 @@ kbd {
   text-align: right;
 }
 
+.premium-offer {
+  margin: -8px 0 4px !important;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border: 1px solid rgba(45, 229, 218, 0.26);
+  border-radius: 9px;
+  background: rgba(45, 229, 218, 0.07);
+}
+
+.premium-offer strong {
+  color: var(--text);
+  font-size: clamp(18px, 1.1vw, 23px);
+}
+
+.premium-offer span {
+  color: var(--accent);
+  font-size: clamp(19px, 1.2vw, 25px);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.premium-actions {
+  margin-top: 18px;
+}
+
 .consent-row {
   margin-top: 24px;
   padding: 18px;

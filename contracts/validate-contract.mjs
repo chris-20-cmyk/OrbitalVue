@@ -24,6 +24,18 @@ const lockedStorePremiumAccess = JSON.parse(
 const lockedUnknownPremiumAccess = JSON.parse(
   await readFile(join(here, "fixtures", "premium-access.unknown-locked.expected.json"), "utf8")
 );
+const samsungVerifierSchema = JSON.parse(
+  await readFile(join(here, "samsung-checkout-verifier-v1.schema.json"), "utf8")
+);
+const samsungStatusRequest = JSON.parse(
+  await readFile(join(here, "fixtures", "samsung-checkout.status.request.json"), "utf8")
+);
+const samsungAvailableResponse = JSON.parse(
+  await readFile(join(here, "fixtures", "samsung-checkout.status.available.json"), "utf8")
+);
+const samsungVerifiedResponse = JSON.parse(
+  await readFile(join(here, "fixtures", "samsung-checkout.status.verified.json"), "utf8")
+);
 
 const fail = (message) => {
   throw new Error(`Contract validation failed: ${message}`);
@@ -182,6 +194,60 @@ validatePremiumDecision(lockedUnknownPremiumAccess, {
   receiptVerification: "unavailable"
 });
 
+if (samsungVerifierSchema.$schema !== "https://json-schema.org/draft/2020-12/schema") {
+  fail("the Samsung Checkout verifier schema must remain on JSON Schema Draft 2020-12");
+}
+const samsungProductPattern = /^[A-Za-z0-9_-]{1,20}$/;
+const assertExactKeys = (value, expectedKeys, label) => {
+  const keys = Object.keys(value).sort();
+  const expected = [...expectedKeys].sort();
+  if (JSON.stringify(keys) !== JSON.stringify(expected)) {
+    fail(`${label} fields are not exact`);
+  }
+};
+assertExactKeys(
+  samsungStatusRequest,
+  ["schemaVersion", "platform", "action", "appId", "productId", "customId", "countryCode"],
+  "Samsung status request"
+);
+if (samsungStatusRequest.schemaVersion !== 1
+  || samsungStatusRequest.platform !== "samsung"
+  || samsungStatusRequest.action !== "status"
+  || !samsungProductPattern.test(samsungStatusRequest.productId)
+  || !/^[A-Z]{2}$/.test(samsungStatusRequest.countryCode)
+  || !samsungStatusRequest.customId) {
+  fail("Samsung status request fixture is invalid");
+}
+const validateSamsungResponse = (response, expectedVerified) => {
+  const expectedKeys = expectedVerified
+    ? ["schemaVersion", "verified", "productId"]
+    : ["schemaVersion", "verified", "productId", "product"];
+  assertExactKeys(response, expectedKeys, "Samsung status response");
+  if (response.schemaVersion !== 1
+    || response.verified !== expectedVerified
+    || response.productId !== samsungStatusRequest.productId) {
+    fail("Samsung status response fixture is invalid");
+  }
+  if (!expectedVerified) {
+    assertExactKeys(
+      response.product,
+      ["productId", "title", "localizedPrice", "orderTotal", "currencyId"],
+      "Samsung product offer"
+    );
+    if (response.product.productId !== response.productId
+      || !/^[A-Z]{3}$/.test(response.product.currencyId)
+      || !/^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/.test(response.product.orderTotal)) {
+      fail("Samsung product offer fixture is invalid");
+    }
+  }
+  const serialized = JSON.stringify(response).toLowerCase();
+  for (const secretName of ["checkvalue", "securitykey", "receipt", "password", "token", "customid"]) {
+    if (serialized.includes(secretName)) fail(`Samsung response contains forbidden ${secretName}`);
+  }
+};
+validateSamsungResponse(samsungAvailableResponse, false);
+validateSamsungResponse(samsungVerifiedResponse, true);
+
 console.log(
-  `StreamVue contracts 1.0 are valid (${catalog.channels.length} playlist channels, ${mediaCenter.items.length} media-center items, personal/store/unknown premium access).`
+  `StreamVue contracts 1.0 are valid (${catalog.channels.length} playlist channels, ${mediaCenter.items.length} media-center items, personal/store/unknown premium access, Samsung verifier exchange).`
 );

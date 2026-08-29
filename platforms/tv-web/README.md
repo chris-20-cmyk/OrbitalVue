@@ -15,12 +15,26 @@ This project is the shared television UI for StreamVue 5.0. It deliberately uses
 - Native HTML5/HLS playback for LG webOS and browser development
 - Auto, Fit, Fill, Zoom, 16:9, 4:3, and 21:9 framing
 - Buffering shown only while the native player reports buffering
+- Samsung Checkout one-time Buy/Restore UI with localized verifier-owned product metadata, server-side DPI purchase-history verification, and live revocation handling
+- An explicit LG billing-unavailable state with no placeholder payment flow, because LG has discontinued its native television billing service
 
 Raw playlist locations never appear in normal browsing; only the provider host and optional port are displayed. The full source URL remains in app-private television storage so it can refresh at launch.
 
 Plex and Emby credentials are kept outside the catalog database. Samsung builds use Tizen KeyManager. LG webOS 24 and newer use Key Manager 3 backed by the television's trusted execution environment; older or unsupported televisions intentionally keep the credential for the current app session only and ask the user to reconnect after a restart. Public server identity is verified before a protected request is sent, and cached media snapshots contain only opaque StreamVue locators.
 
-Personal builds include media-center access. Setting `VITE_STREAMVUE_DISTRIBUTION_MODE=store` produces the fail-closed store surface: it shows the locked premium state, renders no credential inputs, and blocks refresh and playback before the credential vault or network is touched. A one-time store product must be created and verified through the applicable seller API before this mode can unlock. See [premium access and store readiness](../../docs/premium-entitlements.md).
+Personal builds include media-center access. Setting `VITE_STREAMVUE_DISTRIBUTION_MODE=store` produces the fail-closed store surface: it shows the locked premium state, renders no credential inputs, and blocks refresh and playback before the credential vault or media-server network is touched. Samsung packages can unlock after an exact Seller Office/DPI non-consumable and HTTPS entitlement verifier are configured; the DPI security key must remain on that backend. LG packages stay locked until a reviewed third-party billing provider is contracted and server-side verification is implemented. See [premium access and store readiness](../../docs/premium-entitlements.md).
+
+For a Samsung store-candidate build, provide the three non-secret seller/verifier values with the store mode:
+
+```powershell
+$env:VITE_STREAMVUE_DISTRIBUTION_MODE = "store"
+$env:VITE_STREAMVUE_SAMSUNG_APP_ID = "<Seller Office Checkout app ID>"
+$env:VITE_STREAMVUE_SAMSUNG_PRODUCT_ID = "<DPI non-consumable product ID>"
+$env:VITE_STREAMVUE_SAMSUNG_VERIFICATION_URL = "https://<verifier>/samsung/status"
+pnpm tv:build
+```
+
+The exact request/response boundary is committed in [`contracts/samsung-checkout-verifier-v1.schema.json`](../../contracts/samsung-checkout-verifier-v1.schema.json). The normal unsigned CI artifact does not set these values and remains visibly store-locked.
 
 The television's native player cannot attach arbitrary authorization headers. StreamVue therefore materializes the provider token into the native playback URL only for the active playback request, clears that URL when playback stops, and never stores it in source metadata or offline snapshots.
 

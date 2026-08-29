@@ -26,7 +26,31 @@ interface SamsungAvPlay {
 }
 
 interface SamsungWebApis {
-  avplay: SamsungAvPlay;
+  avplay?: SamsungAvPlay;
+  billing?: SamsungBilling;
+  productinfo?: SamsungProductInfo;
+  sso?: SamsungSso;
+}
+
+interface SamsungBilling {
+  buyItem(
+    appId: string,
+    serverType: "DEV" | "PRD",
+    paymentDetails: string,
+    successCallback: (data: { payResult?: string; payDetail?: string }) => void,
+    errorCallback?: (error: { name?: string; message?: string }) => void
+  ): void;
+}
+
+interface SamsungProductInfo {
+  ProductInfoConfigKey: {
+    CONFIG_KEY_SERVICE_COUNTRY: string;
+  };
+  getSystemConfig(key: string): string;
+}
+
+interface SamsungSso {
+  getLoginUid(): string | null;
 }
 
 interface SamsungTizen {
