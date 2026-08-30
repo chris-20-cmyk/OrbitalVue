@@ -25,27 +25,28 @@ struct MediaCenterConnectView: View {
                 PlexAccountConnectSection(model: plexAccount, onConnected: onConnected)
 
                 Section {
+                    #if os(tvOS)
+                    Button {
+                        isShowingManualPlex.toggle()
+                    } label: {
+                        HStack {
+                            Text("Connect with a server address and token")
+                            Spacer()
+                            Image(systemName: isShowingManualPlex ? "chevron.up" : "chevron.down")
+                                .foregroundStyle(theme.muted)
+                        }
+                    }
+                    if isShowingManualPlex {
+                        manualPlexFields
+                    }
+                    #else
                     DisclosureGroup(
                         "Connect with a server address and token",
                         isExpanded: $isShowingManualPlex
                     ) {
-                        TextField("https://media-server.example:port", text: $serverAddress)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .focused($focusedField, equals: .serverAddress)
-                            #if os(iOS)
-                            .keyboardType(.URL)
-                            #endif
-                        TextField("Server nickname (optional)", text: $displayName)
-                            .focused($focusedField, equals: .displayName)
-                        SecureField("Plex server token", text: $plexToken)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .focused($focusedField, equals: .plexToken)
-                        Text("Use this only when account discovery is unavailable. Enter a server-scoped token, never a Plex password.")
-                            .font(.footnote)
-                            .foregroundStyle(theme.muted)
+                        manualPlexFields
                     }
+                    #endif
                 } header: {
                     Text("Advanced manual connection")
                 }
@@ -141,6 +142,26 @@ struct MediaCenterConnectView: View {
         .onChange(of: usesCleartextHTTP) { _, usesHTTP in
             if !usesHTTP { allowInsecureHTTP = false }
         }
+    }
+
+    @ViewBuilder
+    private var manualPlexFields: some View {
+        TextField("https://media-server.example:port", text: $serverAddress)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .focused($focusedField, equals: .serverAddress)
+            #if os(iOS)
+            .keyboardType(.URL)
+            #endif
+        TextField("Server nickname (optional)", text: $displayName)
+            .focused($focusedField, equals: .displayName)
+        SecureField("Plex server token", text: $plexToken)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .focused($focusedField, equals: .plexToken)
+        Text("Use this only when account discovery is unavailable. Enter a server-scoped token, never a Plex password.")
+            .font(.footnote)
+            .foregroundStyle(theme.muted)
     }
 
     private var usesCleartextHTTP: Bool {
