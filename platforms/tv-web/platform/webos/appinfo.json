@@ -1,6 +1,6 @@
 {
   "id": "com.streamvue.player.tv",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "vendor": "StreamVue",
   "type": "web",
   "main": "index.html",

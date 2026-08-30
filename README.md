@@ -34,13 +34,14 @@ See [TV build and sideload instructions](platforms/tv-web/README.md) and the [te
 - KSPlayer 2.3.4 as the default Metal/FFmpeg engine, with hardware decoding, adaptive frame cadence, deinterlacing, configurable buffering/subtitle size, request headers, and transparent AVKit fallback
 - Direct AVFoundation/AVKit fallback with system-managed hardware decoding, compatible spatial audio/Atmos paths, Picture in Picture, AirPlay, and Apple TV display matching
 - Keychain-protected URL secrets, complete file protection for the cached playlist, launch refresh, and last-working-copy recovery
+- Signed Plex PIN login with QR approval, automatic secure/local server discovery, and token-free SwiftUI state
 - Xcode 26.6 CI that tests the shared Swift catalog, validates Apple TV layered artwork, and analyzes both app targets without publishing a license-incompatible binary
 
 The Apple milestone is a source/simulator foundation plus a locked signed-candidate lane, not a published App Store package. Physical-device installation requires Xcode signing. Personal source builds include pinned GPL-3.0 KSPlayer, while the audited Store package graph is AVKit-only and excludes that dependency. Adding KSPlayer to a public binary would still require a GPL-compatible or separately licensed route. App Store and TestFlight distribution also require Apple Developer Program enrollment, privacy answers, and signed archives. The candidate lane uses one bundle ID and StoreKit product across iOS and tvOS, validates protected signing material, and stops before upload. See [Apple build instructions](platforms/apple/README.md) and [KSPlayer licensing gate](docs/ksplayer-licensing.md).
 
 ## 5.1 protected personal libraries
 
-- Plex token and Emby account connections alongside M3U and Xtream sources on Windows, Android/Google TV, Samsung/LG TV, and the Apple foundation
+- Plex token and Emby account connections alongside M3U and Xtream sources on Windows, Android/Google TV, Samsung/LG TV, and the Apple foundation; Apple also supports signed Plex account discovery
 - A shared `streamvue-media://` catalog contract that stores provider, verified server identity, and item identity—but never a playable token URL
 - Public server-identity verification before credentials are sent, explicit consent for cleartext local HTTP, same-origin playback-path enforcement, and bounded provider responses
 - Platform-protected credential storage with a separate encrypted last-working catalog; passwords are exchanged for provider tokens and are not retained

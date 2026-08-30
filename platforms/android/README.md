@@ -1,6 +1,6 @@
 # StreamVue for Android and Google TV
 
-This is the native Kotlin/Compose StreamVue 5.0 foundation for Android phones, tablets, Android TV, and Google TV. It uses AndroidX Media3 instead of embedding the Windows player or a browser playback engine.
+This is the native Kotlin/Compose StreamVue 5.1 foundation for Android phones, tablets, Android TV, and Google TV. It uses AndroidX Media3 instead of embedding the Windows player or a browser playback engine.
 
 ## Build
 

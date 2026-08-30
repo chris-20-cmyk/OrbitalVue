@@ -60,6 +60,8 @@ The committed Cloudflare Worker adapter remains route-disabled and uses `.invali
 
 The `Store` configuration reads the exact non-consumable identifier from the `STREAMVUE_PREMIUM_PRODUCT_ID` Xcode build setting. StoreKit 2 loads the localized product, processes `Transaction.updates`, and rebuilds access from cryptographically verified `Transaction.currentEntitlements`. Unverified, pending, revoked, missing, or mismatched transactions stay locked. `AppStore.sync()` is called only after the user selects **Restore purchase**, because that API can display an App Store account prompt.
 
+Only after that premium decision allows media centers can Apple start Plex signed-PIN discovery. Every create, poll, selection, connection, saved refresh, artwork, and playback operation re-enters the premium-protected repository boundary. A revoked StoreKit entitlement stops protected playback, removes the active media-center catalog, and prevents an outstanding PIN or discovery lease from being used. Plex account tokens remain session-only; the chosen server token is stored in Keychain only after server identity and origin validation.
+
 ### Samsung Tizen TV
 
 Samsung store builds use Samsung Checkout on the television and the DPI purchase-history service on a protected StreamVue backend. Configure the Seller Office application for Billing/Samsung Checkout, create a **Non-Consumable** product in the DPI Portal, and supply only these non-secret build values:

@@ -116,6 +116,46 @@ struct PremiumAccessTests {
         }
         #expect(await http.requestCount() == 1)
     }
+
+    @Test("Plex account discovery fails closed when premium access is revoked in flight")
+    func accountDiscoveryRechecksRuntimeEntitlement() async throws {
+        let unlocked = PremiumAccessPolicy.evaluate(
+            distributionMode: "store",
+            hasVerifiedStorePurchase: true,
+            productID: "com.streamvue.personal-media-centers"
+        )
+        let locked = PremiumAccessPolicy.evaluate(
+            distributionMode: "store",
+            hasVerifiedStorePurchase: false
+        )
+        let runtime = PremiumAccessRuntime(initial: unlocked)
+        let http = PausingPlexResourcesHTTPClient()
+        let service = MediaCenterService(
+            httpClient: http,
+            secretStore: PremiumAccessMemorySecretStore(),
+            plexClientIdentifier: "streamvue-premium-race-test"
+        )
+        let repository = MediaCenterRepository(
+            service: service,
+            premiumAccessRuntime: runtime
+        )
+        let challenge = try await repository.createPlexSignInChallenge()
+        let completionTask = Task {
+            try await repository.completePlexSignIn(challenge: challenge)
+        }
+
+        await http.waitUntilResourcesRequested()
+        await runtime.update(locked)
+        await http.releaseResources()
+
+        do {
+            _ = try await completionTask.value
+            Issue.record("Discovery completed after premium access was revoked.")
+        } catch is PremiumAccessError {
+        } catch {
+            Issue.record("Discovery returned the wrong revocation error: \(error)")
+        }
+    }
 }
 
 private actor PremiumAccessNetworkProbe: MediaCenterHTTPClient {
@@ -127,4 +167,69 @@ private actor PremiumAccessNetworkProbe: MediaCenterHTTPClient {
     }
 
     func requestCount() -> Int { count }
+}
+
+private actor PausingPlexResourcesHTTPClient: MediaCenterHTTPClient {
+    private var resourcesRequested = false
+    private var resourcesReleased = false
+    private var resourcesContinuation: CheckedContinuation<Void, Never>?
+
+    func send(_ request: MediaCenterHTTPRequest) async throws -> MediaCenterHTTPResponse {
+        switch (request.url.host, request.url.path) {
+        case ("clients.plex.tv", "/api/v2/pins"):
+            return response(#"{"id":91,"code":"PREMIUM","expiresIn":300}"#)
+        case ("clients.plex.tv", "/api/v2/pins/91"):
+            return response(#"{"authToken":"transient-premium-test-token","expiresIn":604800}"#)
+        case ("plex.tv", "/api/v2/user"):
+            return response(#"{"id":1}"#)
+        case ("clients.plex.tv", "/api/v2/resources"):
+            resourcesRequested = true
+            if !resourcesReleased {
+                await withCheckedContinuation { continuation in
+                    resourcesContinuation = continuation
+                }
+            }
+            return response(
+                #"[{"name":"Home Plex","clientIdentifier":"plex-premium-race","provides":"server","owned":true,"accessToken":"server-token","connections":[{"uri":"https://plex.premium:32400","local":true,"relay":false,"IPv6":false}]}]"#
+            )
+        default:
+            return MediaCenterHTTPResponse(statusCode: 404, body: Data())
+        }
+    }
+
+    func waitUntilResourcesRequested() async {
+        while !resourcesRequested {
+            await Task.yield()
+        }
+    }
+
+    func releaseResources() {
+        resourcesReleased = true
+        resourcesContinuation?.resume()
+        resourcesContinuation = nil
+    }
+
+    private func response(_ json: String) -> MediaCenterHTTPResponse {
+        MediaCenterHTTPResponse(
+            statusCode: 200,
+            headers: ["Content-Type": "application/json"],
+            body: Data(json.utf8)
+        )
+    }
+}
+
+private actor PremiumAccessMemorySecretStore: SourceSecretStore {
+    private var values: [String: String] = [:]
+
+    func save(_ value: String, for key: String) {
+        values[key] = value
+    }
+
+    func value(for key: String) -> String? {
+        values[key]
+    }
+
+    func removeValue(for key: String) {
+        values.removeValue(forKey: key)
+    }
 }

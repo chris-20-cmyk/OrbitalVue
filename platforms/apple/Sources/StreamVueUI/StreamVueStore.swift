@@ -90,6 +90,37 @@ public final class StreamVueStore {
         }
     }
 
+    public func createPlexSignInChallenge() async throws -> PlexPinChallenge {
+        try await mediaCenterRepository.createPlexSignInChallenge()
+    }
+
+    public func completePlexSignIn(
+        challenge: PlexPinChallenge
+    ) async throws -> PlexServerDiscovery? {
+        try await mediaCenterRepository.completePlexSignIn(challenge: challenge)
+    }
+
+    @discardableResult
+    public func connectDiscoveredPlexServer(
+        discovery: PlexServerDiscovery,
+        serverID: String,
+        connectionURL: URL,
+        allowInsecureHTTP: Bool = false
+    ) async -> Bool {
+        await perform(label: "Connecting discovered Plex server…", sourceKind: .mediaCenter) {
+            try await mediaCenterRepository.connectDiscoveredPlexServer(
+                discovery: discovery,
+                serverID: serverID,
+                connectionURL: connectionURL,
+                allowInsecureHTTP: allowInsecureHTTP
+            )
+        }
+    }
+
+    public func cancelPlexDiscovery(sessionID: String) async {
+        await mediaCenterRepository.cancelPlexDiscovery(sessionID: sessionID)
+    }
+
     @discardableResult
     public func connectEmby(
         serverAddress: String,
@@ -182,7 +213,9 @@ public final class StreamVueStore {
         from previous: PremiumAccessSnapshot,
         to current: PremiumAccessSnapshot
     ) async {
-        if previous.canUseMediaCenters, !current.canUseMediaCenters, isMediaCenterSource {
+        if previous.canUseMediaCenters, !current.canUseMediaCenters {
+            await mediaCenterRepository.cancelAllPlexDiscovery()
+            guard isMediaCenterSource else { return }
             catalog = nil
             groups = []
             visibleSections = []
@@ -252,9 +285,17 @@ public final class StreamVueStore {
         loadingLabel = label
         errorMessage = nil
         do {
-            apply(try await operation())
+            let loaded = try await operation()
+            if sourceKind == .mediaCenter {
+                try await mediaCenterRepository.ensurePremiumAccess()
+            }
+            apply(loaded)
             activeSourceKind = sourceKind
             return true
+        } catch is CancellationError {
+            isLoading = false
+            loadingLabel = ""
+            return false
         } catch {
             show(error)
             return false

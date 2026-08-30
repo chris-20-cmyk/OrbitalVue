@@ -14,6 +14,10 @@ public enum MediaCenterError: LocalizedError, Equatable, Sendable {
     case providerMismatch
     case noPlayableMedia
     case invalidPage
+    case accountSignInExpired
+    case noDiscoveredServers
+    case discoverySessionExpired
+    case discoveryConnectionInProgress
 
     public var errorDescription: String? {
         switch self {
@@ -43,6 +47,14 @@ public enum MediaCenterError: LocalizedError, Equatable, Sendable {
             "The media center did not provide a compatible playback source."
         case .invalidPage:
             "The requested media-center page is outside the supported bounds."
+        case .accountSignInExpired:
+            "The Plex sign-in request expired. Start a new sign-in and approve it again."
+        case .noDiscoveredServers:
+            "Plex sign-in succeeded, but this account did not return a reachable Plex Media Server."
+        case .discoverySessionExpired:
+            "The protected Plex server-selection session expired. Sign in again to continue."
+        case .discoveryConnectionInProgress:
+            "This Plex server-selection session is already connecting."
         }
     }
 }

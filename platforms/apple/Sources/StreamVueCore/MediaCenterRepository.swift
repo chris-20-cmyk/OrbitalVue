@@ -80,6 +80,60 @@ public actor MediaCenterRepository {
         )
     }
 
+    public func createPlexSignInChallenge() async throws -> PlexPinChallenge {
+        try await requirePremiumAccess()
+        return try await service.createPlexSignInChallenge()
+    }
+
+    public func completePlexSignIn(
+        challenge: PlexPinChallenge
+    ) async throws -> PlexServerDiscovery? {
+        try await requirePremiumAccess()
+        let discovery = try await service.completePlexSignIn(challenge: challenge)
+        do {
+            try await requirePremiumAccess()
+            return discovery
+        } catch {
+            if let discovery {
+                await service.cancelPlexDiscovery(sessionID: discovery.sessionID)
+            }
+            throw error
+        }
+    }
+
+    public func connectDiscoveredPlexServer(
+        discovery: PlexServerDiscovery,
+        serverID: String,
+        connectionURL: URL,
+        allowInsecureHTTP: Bool = false
+    ) async throws -> LoadedCatalog {
+        try await requirePremiumAccess()
+        let previousConnection = try? currentSnapshot()?.connection
+        let connection = try await service.connectDiscoveredPlexServer(
+            sessionID: discovery.sessionID,
+            serverID: serverID,
+            connectionURL: connectionURL,
+            allowInsecureHTTP: allowInsecureHTTP
+        )
+        return try await activate(
+            connection,
+            previousConnection: previousConnection,
+            notice: "Plex account server connected"
+        )
+    }
+
+    public func cancelPlexDiscovery(sessionID: String) async {
+        await service.cancelPlexDiscovery(sessionID: sessionID)
+    }
+
+    public func cancelAllPlexDiscovery() async {
+        await service.cancelAllPlexDiscovery()
+    }
+
+    public func ensurePremiumAccess() async throws {
+        try await requirePremiumAccess()
+    }
+
     public func connectEmby(
         serverAddress: String,
         username: String,
@@ -183,6 +237,7 @@ public actor MediaCenterRepository {
     ) async throws -> LoadedCatalog {
         do {
             let snapshot = try await service.snapshot(for: connection)
+            try await requirePremiumAccess()
             try persist(snapshot)
             cachedSnapshot = snapshot
             if let previousConnection,

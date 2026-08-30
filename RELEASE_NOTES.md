@@ -1,10 +1,29 @@
-# StreamVue 5.0.0 Cross-platform Foundation
+# StreamVue 5.1.0 Apple & Personal Media Foundation
 
-StreamVue 5.0 begins the move from a Windows-only player to one shared product family. This preview adds native Android/Google TV foundations plus dedicated Samsung Tizen and LG webOS television clients while preserving the proven Windows 4.0 application.
+StreamVue 5.1 adds the native iPhone, iPad, and Apple TV foundation and a protected Plex/Emby personal-library layer across the product family. It builds on the Android/Google TV, Samsung Tizen, and LG webOS foundations while preserving the proven Windows 4.0 application and updater.
 
 - One machine-checked release contract now locks all five application identities, native entitlement providers, manual candidate triggers, Store modes, and artifact types
 - Foundation and candidate workflows reject cross-platform release drift before signing material or vendor submission becomes relevant
 - A dedicated lightweight CI gate reruns the full release contract whenever a seller manifest, candidate workflow, app identity, billing boundary, or reviewed store asset changes
+
+## iPhone, iPad, and Apple TV
+
+- Native SwiftUI touch and remote-first surfaces sharing one contract-compatible catalog
+- KSPlayer/Metal personal-build path plus a separately verified AVKit-only Store graph
+- Hardware decode, adaptive frame presentation, deinterlacing, aspect controls, embedded track support, Picture in Picture, AirPlay, and Apple TV display matching where the selected engine and media allow it
+- M3U/M3U8 URL and file onboarding, exact source groups, favorites, search, protected launch refresh, and last-working-copy recovery
+- Signed Plex PIN login with QR/external-browser approval and automatic account server discovery
+- Server selections contain no account or server token; the chosen credential moves directly into Keychain only after the responding server ID matches the selected resource
+- Lifecycle cancellation and premium-revocation rollback prevent an abandoned discovery session from leaving a usable credential
+- Apple source and simulator validation only in this prerelease: no signed IPA is published, and KSPlayer licensing remains an explicit release gate
+
+## Protected Plex and Emby libraries
+
+- Versioned token-free `streamvue-media://` catalog locators shared across platform implementations
+- Public server identity verification before a credential is sent, origin-bound protected storage, bounded provider responses, same-origin playback paths, and explicit HTTP consent
+- Plex server-token and Emby account onboarding with paged library browsing and ephemeral playback resolution
+- One-time premium product contracts for Store builds, with personal builds remaining included and every unverified Store path failing closed
+- StoreKit 2, Google Play, Microsoft Store, and Samsung entitlement adapters plus a route-disabled verifier Worker foundation; no production entitlement service is claimed or deployed
 
 ## Android and Google TV
 

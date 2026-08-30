@@ -7,7 +7,11 @@ public actor MediaCenterService {
     private let httpClient: any MediaCenterHTTPClient
     private let secretStore: any SourceSecretStore
     private let device: MediaCenterDeviceIdentity
-    private let plexClientIdentifier: String
+    private let configuredPlexClientIdentifier: String?
+    private var cachedPlexClientIdentifier: String?
+    private var plexDiscoverySessions: [String: PlexAccountDiscoverySecret] = [:]
+    private var plexDiscoveryConnectionsInFlight: Set<String> = []
+    private var cancelledPlexDiscoverySessions: Set<String> = []
 
     public init(
         httpClient: any MediaCenterHTTPClient = URLSessionMediaCenterHTTPClient(),
@@ -15,12 +19,12 @@ public actor MediaCenterService {
             service: "com.streamvue.player.media-center"
         ),
         device: MediaCenterDeviceIdentity = .appleDefault,
-        plexClientIdentifier: String = "streamvue-apple"
+        plexClientIdentifier: String? = nil
     ) {
         self.httpClient = httpClient
         self.secretStore = secretStore
         self.device = device
-        self.plexClientIdentifier = plexClientIdentifier
+        self.configuredPlexClientIdentifier = plexClientIdentifier
     }
 
     /// Connects directly to one Plex Media Server with a user-supplied server
@@ -30,7 +34,8 @@ public actor MediaCenterService {
         serverAddress: String,
         token rawToken: String,
         displayName: String? = nil,
-        allowInsecureHTTP: Bool = false
+        allowInsecureHTTP: Bool = false,
+        expectedServerID: String? = nil
     ) async throws -> MediaCenterConnection {
         let baseURL = try MediaCenterURLPolicy.normalizeBaseURL(serverAddress)
         try MediaCenterURLPolicy.requireAllowedTransport(
@@ -38,16 +43,22 @@ public actor MediaCenterService {
             allowInsecureHTTP: allowInsecureHTTP
         )
         let token = try MediaCenterHeaderPolicy.credential(rawToken)
-        let clientIdentifier = try MediaCenterURLPolicy.requireIdentifier(
-            plexClientIdentifier,
-            label: "Plex client"
-        )
+        let clientIdentifier = try await plexClientIdentifier()
         let identity = try await PlexMediaCenterClient.discoverIdentity(
             httpClient: httpClient,
             baseURL: baseURL,
             clientIdentifier: clientIdentifier,
             device: device
         )
+        if let expectedServerID {
+            let expected = try MediaCenterURLPolicy.requireIdentifier(
+                expectedServerID,
+                label: "Plex server"
+            )
+            guard identity.serverID == expected else {
+                throw MediaCenterError.providerMismatch
+            }
+        }
         let requestedName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = MediaCenterTextPolicy.metadata(
             requestedName?.isEmpty == false ? requestedName! : identity.name,
@@ -73,6 +84,111 @@ public actor MediaCenterService {
             allowInsecureHTTP: allowInsecureHTTP
         )
         return connection
+    }
+
+    /// Starts Plex's strong PIN flow with a stable Ed25519 device-registration
+    /// key held in Keychain. The returned challenge contains no account or
+    /// server token.
+    public func createPlexSignInChallenge() async throws -> PlexPinChallenge {
+        purgeExpiredPlexDiscoverySessions()
+        let signer = try await plexDeviceSigner()
+        let client = try await plexAccountClient()
+        return try await client.createPin(signer: signer)
+    }
+
+    /// Polls a PIN once. A nil result means the user has not approved it yet.
+    /// Once approved, the Plex account token is verified and discarded after
+    /// server-scoped resources have been converted into an opaque session.
+    public func completePlexSignIn(
+        challenge: PlexPinChallenge
+    ) async throws -> PlexServerDiscovery? {
+        purgeExpiredPlexDiscoverySessions()
+        let signer = try await plexDeviceSigner()
+        let client = try await plexAccountClient()
+        guard let accountToken = try await client.claimPin(challenge, signer: signer) else {
+            return nil
+        }
+        try await client.verifyAccountToken(accountToken.value)
+        let servers = try await client.discoverServers(accountToken: accountToken.value)
+        guard !servers.isEmpty else { throw MediaCenterError.noDiscoveredServers }
+
+        let expiresAt = min(
+            accountToken.expiresAt ?? .distantFuture,
+            Date().addingTimeInterval(10 * 60)
+        )
+        let sessionID = "plex-discovery-\(UUID().uuidString.lowercased())"
+        plexDiscoverySessions[sessionID] = PlexAccountDiscoverySecret(
+            servers: servers,
+            expiresAt: expiresAt
+        )
+        return PlexServerDiscovery(
+            sessionID: sessionID,
+            servers: servers.map(\.server),
+            expiresAt: expiresAt
+        )
+    }
+
+    /// Moves one server-scoped token from the in-memory discovery lease into
+    /// the existing origin-bound Keychain credential only after the selected
+    /// server's public identity has been verified.
+    public func connectDiscoveredPlexServer(
+        sessionID: String,
+        serverID: String,
+        connectionURL: URL,
+        allowInsecureHTTP: Bool = false
+    ) async throws -> MediaCenterConnection {
+        purgeExpiredPlexDiscoverySessions()
+        guard let session = plexDiscoverySessions[sessionID], session.expiresAt > Date() else {
+            plexDiscoverySessions.removeValue(forKey: sessionID)
+            throw MediaCenterError.discoverySessionExpired
+        }
+        guard !plexDiscoveryConnectionsInFlight.contains(sessionID) else {
+            throw MediaCenterError.discoveryConnectionInProgress
+        }
+        guard let secret = session.servers.first(where: { $0.server.serverID == serverID }),
+              let selected = secret.server.connections.first(where: {
+                  $0.url.absoluteString == connectionURL.absoluteString
+              }) else {
+            throw MediaCenterError.providerMismatch
+        }
+        plexDiscoveryConnectionsInFlight.insert(sessionID)
+        defer {
+            plexDiscoveryConnectionsInFlight.remove(sessionID)
+            cancelledPlexDiscoverySessions.remove(sessionID)
+        }
+        let connection = try await connectPlex(
+            serverAddress: selected.url.absoluteString,
+            token: secret.accessToken,
+            displayName: secret.server.name,
+            allowInsecureHTTP: selected.isSecure ? false : allowInsecureHTTP,
+            expectedServerID: secret.server.serverID
+        )
+        do {
+            try Task.checkCancellation()
+            if cancelledPlexDiscoverySessions.contains(sessionID) {
+                throw CancellationError()
+            }
+            guard plexDiscoverySessions[sessionID] != nil else {
+                throw MediaCenterError.discoverySessionExpired
+            }
+        } catch {
+            try? await disconnect(connection)
+            throw error
+        }
+        plexDiscoverySessions.removeValue(forKey: sessionID)
+        return connection
+    }
+
+    public func cancelPlexDiscovery(sessionID: String) {
+        plexDiscoverySessions.removeValue(forKey: sessionID)
+        if plexDiscoveryConnectionsInFlight.contains(sessionID) {
+            cancelledPlexDiscoverySessions.insert(sessionID)
+        }
+    }
+
+    public func cancelAllPlexDiscovery() {
+        cancelledPlexDiscoverySessions.formUnion(plexDiscoveryConnectionsInFlight)
+        plexDiscoverySessions.removeAll(keepingCapacity: false)
     }
 
     /// Authenticates by name once. Only the returned access token is saved in
@@ -134,7 +250,8 @@ public actor MediaCenterService {
         let token = try await credential(for: connection)
         switch connection.provider {
         case .plex:
-            return try await plexClient(connection: connection, token: token).libraries()
+            let client = try await plexClient(connection: connection, token: token)
+            return try await client.libraries()
         case .emby:
             return try await embyClient(connection: connection, token: token).libraries()
         }
@@ -150,8 +267,8 @@ public actor MediaCenterService {
         let token = try await credential(for: connection)
         switch connection.provider {
         case .plex:
-            return try await plexClient(connection: connection, token: token)
-                .items(in: library, page: page)
+            let client = try await plexClient(connection: connection, token: token)
+            return try await client.items(in: library, page: page)
         case .emby:
             return try await embyClient(connection: connection, token: token)
                 .items(in: library, page: page)
@@ -213,8 +330,8 @@ public actor MediaCenterService {
         let token = try await credential(for: connection)
         switch connection.provider {
         case .plex:
-            return try plexClient(connection: connection, token: token)
-                .playbackPlan(for: item, mediaSourceID: mediaSourceID)
+            let client = try await plexClient(connection: connection, token: token)
+            return try client.playbackPlan(for: item, mediaSourceID: mediaSourceID)
         case .emby:
             return try await embyClient(connection: connection, token: token).playbackPlan(
                 for: item,
@@ -234,8 +351,8 @@ public actor MediaCenterService {
         let token = try await credential(for: connection)
         switch connection.provider {
         case .plex:
-            return try plexClient(connection: connection, token: token)
-                .artworkPlan(for: item, maximumWidth: maximumWidth)
+            let client = try await plexClient(connection: connection, token: token)
+            return try client.artworkPlan(for: item, maximumWidth: maximumWidth)
         case .emby:
             return try embyClient(connection: connection, token: token)
                 .artworkPlan(for: item, maximumWidth: maximumWidth)
@@ -295,17 +412,77 @@ public actor MediaCenterService {
         try MediaCenterURLPolicy.normalizeBaseURL(connection.baseURL).absoluteString
     }
 
-    private func plexClient(connection: MediaCenterConnection, token: String) throws -> PlexMediaCenterClient {
-        try PlexMediaCenterClient(
+    private func plexClient(
+        connection: MediaCenterConnection,
+        token: String
+    ) async throws -> PlexMediaCenterClient {
+        let clientIdentifier = try await plexClientIdentifier()
+        return try PlexMediaCenterClient(
             httpClient: httpClient,
             connection: connection,
             token: token,
-            clientIdentifier: MediaCenterURLPolicy.requireIdentifier(
-                plexClientIdentifier,
-                label: "Plex client"
-            ),
+            clientIdentifier: clientIdentifier,
             device: device
         )
+    }
+
+    private func plexAccountClient() async throws -> PlexAccountClient {
+        let clientIdentifier = try await plexClientIdentifier()
+        return try PlexAccountClient(
+            httpClient: httpClient,
+            clientIdentifier: clientIdentifier,
+            product: device.client,
+            version: device.version
+        )
+    }
+
+    private func plexClientIdentifier() async throws -> String {
+        if let configuredPlexClientIdentifier {
+            return try MediaCenterURLPolicy.requireIdentifier(
+                configuredPlexClientIdentifier,
+                label: "Plex client"
+            )
+        }
+        if let cachedPlexClientIdentifier { return cachedPlexClientIdentifier }
+        let reference = "plex-account-client-identifier-v1"
+        if let stored = try await secretStore.value(for: reference) {
+            let identifier = try MediaCenterURLPolicy.requireIdentifier(
+                stored,
+                label: "Plex client"
+            )
+            cachedPlexClientIdentifier = identifier
+            return identifier
+        }
+        let identifier = "streamvue-apple-\(UUID().uuidString.lowercased())"
+        let validated = try MediaCenterURLPolicy.requireIdentifier(identifier, label: "Plex client")
+        try await secretStore.save(validated, for: reference)
+        cachedPlexClientIdentifier = validated
+        return validated
+    }
+
+    private func plexDeviceSigner() async throws -> PlexDeviceSigner {
+        let identifier = try await plexClientIdentifier()
+        let digest = SHA256.hash(data: Data(identifier.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        let reference = "plex-account-ed25519-v1-\(digest.prefix(32))"
+        if let encoded = try await secretStore.value(for: reference) {
+            guard let data = Data(base64Encoded: encoded), data.count == 32,
+                  let signer = try? PlexDeviceSigner(rawRepresentation: data) else {
+                throw MediaCenterError.invalidCredential
+            }
+            return signer
+        }
+        let signer = PlexDeviceSigner()
+        try await secretStore.save(
+            signer.rawRepresentation.base64EncodedString(),
+            for: reference
+        )
+        return signer
+    }
+
+    private func purgeExpiredPlexDiscoverySessions(now: Date = Date()) {
+        plexDiscoverySessions = plexDiscoverySessions.filter { $0.value.expiresAt > now }
     }
 
     private func embyClient(connection: MediaCenterConnection, token: String) throws -> EmbyMediaCenterClient {

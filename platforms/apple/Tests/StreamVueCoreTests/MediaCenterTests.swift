@@ -4,6 +4,218 @@ import Testing
 
 @Suite("Media-center security and mapping")
 struct MediaCenterTests {
+    @Test("Completes signed Plex account discovery without exposing account tokens")
+    func signedPlexAccountDiscovery() async throws {
+        let accountToken = "plex-account-token-never-in-url-or-ui"
+        let serverToken = "plex-server-token-never-in-public-discovery"
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-08-30T12:00:00Z"))
+        let signer = try PlexDeviceSigner(rawRepresentation: Data((0..<32).map { UInt8($0) }))
+        let http = StubMediaCenterHTTPClient { request in
+            let components = URLComponents(url: request.url, resolvingAgainstBaseURL: false)
+            #expect(!request.url.absoluteString.contains(accountToken))
+            #expect(!request.url.absoluteString.contains(serverToken))
+            switch (request.url.host, request.url.path) {
+            case ("clients.plex.tv", "/api/v2/pins"):
+                let body = try? JSONSerialization.jsonObject(with: request.body ?? Data()) as? [String: Any]
+                let jwk = body?["jwk"] as? [String: Any]
+                #expect(request.method == .post)
+                #expect(body?["strong"] as? Bool == true)
+                #expect(jwk?["kty"] as? String == "OKP")
+                #expect(jwk?["crv"] as? String == "Ed25519")
+                #expect(jwk?["alg"] as? String == "EdDSA")
+                #expect(jwk?["d"] == nil)
+                return jsonResponse(#"{"id":42,"code":"SAFE-CODE","expiresIn":300}"#)
+            case ("clients.plex.tv", "/api/v2/pins/42"):
+                let proof = components?.queryItems?.first { $0.name == "deviceJWT" }?.value
+                let segments = proof?.split(separator: ".") ?? []
+                #expect(request.method == .get)
+                #expect(segments.count == 3)
+                if segments.count == 3,
+                   let claimsData = Data(base64URLString: String(segments[1])),
+                   let claims = try? JSONSerialization.jsonObject(with: claimsData) as? [String: Any] {
+                    #expect(claims["aud"] as? String == "plex.tv")
+                    #expect(claims["iss"] as? String == "streamvue-test-device")
+                    #expect(claims["exp"] as? Int == (claims["iat"] as? Int ?? 0) + 300)
+                }
+                return jsonResponse(#"{"authToken":"plex-account-token-never-in-url-or-ui","expiresIn":604800}"#)
+            case ("plex.tv", "/api/v2/user"):
+                #expect(request.headers["X-Plex-Token"] == accountToken)
+                return jsonResponse(#"{"id":1}"#)
+            case ("clients.plex.tv", "/api/v2/resources"):
+                #expect(request.headers["X-Plex-Token"] == accountToken)
+                return jsonResponse(
+                    #"[{"name":"Home Plex","clientIdentifier":"plex-server-1","provides":"server","owned":true,"accessToken":"plex-server-token-never-in-public-discovery","connections":[{"uri":"https://relay.example.invalid:443","local":false,"relay":true,"IPv6":false},{"uri":"http://192.168.1.8:32400","local":true,"relay":false,"IPv6":false},{"uri":"https://192-168-1-8.example.plex.direct:32400","local":true,"relay":false,"IPv6":false}]},{"name":"Living Room Player","clientIdentifier":"plex-player-1","provides":"player","accessToken":"ignored","connections":[{"uri":"https://player.example.invalid"}]},{"name":"Malicious resource","clientIdentifier":"plex-server-leak","provides":"server","accessToken":"server-secret","connections":[{"uri":"https://malicious.example.invalid/plex-account-token-never-in-url-or-ui"}]}]"#
+                )
+            default:
+                return MediaCenterHTTPResponse(statusCode: 404, body: Data())
+            }
+        }
+        let client = try PlexAccountClient(
+            httpClient: http,
+            clientIdentifier: "streamvue-test-device",
+            product: "StreamVue\r\nX-Injected: blocked",
+            version: "5.1-test",
+            now: { now }
+        )
+
+        let challenge = try await client.createPin(signer: signer)
+        let claimedToken = try await client.claimPin(challenge, signer: signer)
+        let token = try #require(claimedToken)
+        try await client.verifyAccountToken(token.value)
+        let secrets = try await client.discoverServers(accountToken: token.value)
+        let server = try #require(secrets.first?.server)
+
+        #expect(challenge.authorizationURL.host == "app.plex.tv")
+        #expect(challenge.authorizationURL.fragment?.contains("clientID=streamvue-test-device") == true)
+        #expect(secrets.count == 1)
+        #expect(server.serverID == "plex-server-1")
+        #expect(server.preferredConnection?.url.absoluteString == "https://192-168-1-8.example.plex.direct:32400")
+        #expect(!Mirror(reflecting: server).children.contains { $0.label == "accessToken" })
+        let requests = await http.requests()
+        #expect(requests.allSatisfy {
+            !$0.url.absoluteString.contains(accountToken)
+                && !$0.url.absoluteString.contains(serverToken)
+                && $0.headers["X-Plex-Product"]?.contains("\r") != true
+        })
+    }
+
+    @Test("Moves a discovered Plex server token directly into an origin-bound credential")
+    func connectsDiscoveredPlexServerSecurely() async throws {
+        let accountToken = "plex-account-transient-token"
+        let serverToken = "plex-discovered-server-token"
+        let http = StubMediaCenterHTTPClient { request in
+            switch (request.url.host, request.url.path) {
+            case ("clients.plex.tv", "/api/v2/pins"):
+                return jsonResponse(#"{"id":7,"code":"DISCOVER","expiresIn":300}"#)
+            case ("clients.plex.tv", "/api/v2/pins/7"):
+                return jsonResponse(#"{"authToken":"plex-account-transient-token","expiresIn":604800}"#)
+            case ("plex.tv", "/api/v2/user"):
+                #expect(request.headers["X-Plex-Token"] == accountToken)
+                return jsonResponse(#"{"id":1}"#)
+            case ("clients.plex.tv", "/api/v2/resources"):
+                #expect(request.headers["X-Plex-Token"] == accountToken)
+                return jsonResponse(
+                    #"[{"name":"Home Plex","clientIdentifier":"plex-server-7","provides":"server","owned":true,"accessToken":"plex-discovered-server-token","connections":[{"uri":"https://plex.home:32400","local":true,"relay":false,"IPv6":false}]}]"#
+                )
+            case ("plex.home", "/identity"):
+                #expect(request.headers["X-Plex-Token"] == nil)
+                return jsonResponse(#"{"MediaContainer":{"machineIdentifier":"plex-server-7","friendlyName":"Home Plex"}}"#)
+            case ("plex.home", "/library/sections"):
+                #expect(request.headers["X-Plex-Token"] == serverToken)
+                return jsonResponse(#"{"MediaContainer":{"Directory":[]}}"#)
+            default:
+                return MediaCenterHTTPResponse(statusCode: 404, body: Data())
+            }
+        }
+        let secrets = MediaCenterMemorySecretStore()
+        let service = MediaCenterService(
+            httpClient: http,
+            secretStore: secrets,
+            plexClientIdentifier: "streamvue-test-device"
+        )
+
+        let challenge = try await service.createPlexSignInChallenge()
+        let completedDiscovery = try await service.completePlexSignIn(challenge: challenge)
+        let discovery = try #require(completedDiscovery)
+        let server = try #require(discovery.servers.first)
+        let selected = try #require(server.preferredConnection)
+        let connection = try await service.connectDiscoveredPlexServer(
+            sessionID: discovery.sessionID,
+            serverID: server.serverID,
+            connectionURL: selected.url
+        )
+        let libraries = try await service.libraries(for: connection)
+        let serializedConnection = String(
+            data: try JSONEncoder().encode(connection),
+            encoding: .utf8
+        ) ?? ""
+        let storedValues = await secrets.allValues()
+
+        #expect(libraries.isEmpty)
+        #expect(!serializedConnection.contains(accountToken))
+        #expect(!serializedConnection.contains(serverToken))
+        #expect(!String(reflecting: discovery).contains(accountToken))
+        #expect(!String(reflecting: discovery).contains(serverToken))
+        #expect(storedValues.values.allSatisfy { !$0.contains(accountToken) })
+        #expect(storedValues.values.contains { $0.contains(serverToken) })
+
+        await #expect(throws: MediaCenterError.discoverySessionExpired) {
+            try await service.connectDiscoveredPlexServer(
+                sessionID: discovery.sessionID,
+                serverID: server.serverID,
+                connectionURL: selected.url
+            )
+        }
+    }
+
+    @Test("Rejects a Plex connection when the selected server identity changes")
+    func rejectsMismatchedDiscoveredPlexIdentity() async throws {
+        let token = "must-not-be-saved-for-the-wrong-server"
+        let http = StubMediaCenterHTTPClient { request in
+            #expect(request.url.path == "/identity")
+            #expect(request.headers["X-Plex-Token"] == nil)
+            return jsonResponse(
+                #"{"MediaContainer":{"machineIdentifier":"different-server","friendlyName":"Wrong Plex"}}"#
+            )
+        }
+        let secrets = MediaCenterMemorySecretStore()
+        let service = MediaCenterService(
+            httpClient: http,
+            secretStore: secrets,
+            plexClientIdentifier: "streamvue-test-device"
+        )
+
+        await #expect(throws: MediaCenterError.providerMismatch) {
+            try await service.connectPlex(
+                serverAddress: "https://plex.home:32400",
+                token: token,
+                expectedServerID: "selected-server"
+            )
+        }
+
+        let storedValues = await secrets.allValues()
+        #expect(storedValues.values.allSatisfy { !$0.contains(token) })
+    }
+
+    @Test("Cancelling a Plex discovery connection rolls back its credential")
+    func cancelledDiscoveryConnectionRollsBackCredential() async throws {
+        let serverToken = "cancelled-discovery-server-token"
+        let http = PausingPlexIdentityHTTPClient(serverToken: serverToken)
+        let secrets = MediaCenterMemorySecretStore()
+        let service = MediaCenterService(
+            httpClient: http,
+            secretStore: secrets,
+            plexClientIdentifier: "streamvue-test-device"
+        )
+        let challenge = try await service.createPlexSignInChallenge()
+        let completedDiscovery = try await service.completePlexSignIn(challenge: challenge)
+        let discovery = try #require(completedDiscovery)
+        let server = try #require(discovery.servers.first)
+        let selected = try #require(server.preferredConnection)
+
+        let connectionTask = Task {
+            try await service.connectDiscoveredPlexServer(
+                sessionID: discovery.sessionID,
+                serverID: server.serverID,
+                connectionURL: selected.url
+            )
+        }
+        await http.waitUntilIdentityRequested()
+        await service.cancelPlexDiscovery(sessionID: discovery.sessionID)
+        connectionTask.cancel()
+        await http.releaseIdentity()
+
+        do {
+            _ = try await connectionTask.value
+            Issue.record("The cancelled discovery connection completed unexpectedly.")
+        } catch is CancellationError {
+        } catch {
+            Issue.record("The cancelled discovery connection returned the wrong error: \(error)")
+        }
+        let storedValues = await secrets.allValues()
+        #expect(storedValues.values.allSatisfy { !$0.contains(serverToken) })
+    }
+
     @Test("Persists a cache-safe media source and resolves playback after restart")
     func persistsMediaCenterSource() async throws {
         let token = "plex-repository-token-never-cache"
@@ -246,6 +458,56 @@ private actor StubMediaCenterHTTPClient: MediaCenterHTTPClient {
     }
 }
 
+private actor PausingPlexIdentityHTTPClient: MediaCenterHTTPClient {
+    private let serverToken: String
+    private var identityRequested = false
+    private var identityContinuation: CheckedContinuation<Void, Never>?
+    private var identityReleased = false
+
+    init(serverToken: String) {
+        self.serverToken = serverToken
+    }
+
+    func send(_ request: MediaCenterHTTPRequest) async throws -> MediaCenterHTTPResponse {
+        switch (request.url.host, request.url.path) {
+        case ("clients.plex.tv", "/api/v2/pins"):
+            return jsonResponse(#"{"id":8,"code":"CANCEL","expiresIn":300}"#)
+        case ("clients.plex.tv", "/api/v2/pins/8"):
+            return jsonResponse(#"{"authToken":"transient-account-token","expiresIn":604800}"#)
+        case ("plex.tv", "/api/v2/user"):
+            return jsonResponse(#"{"id":1}"#)
+        case ("clients.plex.tv", "/api/v2/resources"):
+            return jsonResponse(
+                #"[{"name":"Home Plex","clientIdentifier":"plex-server-cancel","provides":"server","owned":true,"accessToken":"\#(serverToken)","connections":[{"uri":"https://plex.cancel:32400","local":true,"relay":false,"IPv6":false}]}]"#
+            )
+        case ("plex.cancel", "/identity"):
+            identityRequested = true
+            if !identityReleased {
+                await withCheckedContinuation { continuation in
+                    identityContinuation = continuation
+                }
+            }
+            return jsonResponse(
+                #"{"MediaContainer":{"machineIdentifier":"plex-server-cancel","friendlyName":"Home Plex"}}"#
+            )
+        default:
+            return MediaCenterHTTPResponse(statusCode: 404, body: Data())
+        }
+    }
+
+    func waitUntilIdentityRequested() async {
+        while !identityRequested {
+            await Task.yield()
+        }
+    }
+
+    func releaseIdentity() {
+        identityReleased = true
+        identityContinuation?.resume()
+        identityContinuation = nil
+    }
+}
+
 private actor MediaCenterMemorySecretStore: SourceSecretStore {
     private var values: [String: String] = [:]
 
@@ -260,6 +522,10 @@ private actor MediaCenterMemorySecretStore: SourceSecretStore {
     func removeValue(for key: String) {
         values.removeValue(forKey: key)
     }
+
+    func allValues() -> [String: String] {
+        values
+    }
 }
 
 private func jsonResponse(_ value: String) -> MediaCenterHTTPResponse {
@@ -268,4 +534,14 @@ private func jsonResponse(_ value: String) -> MediaCenterHTTPResponse {
         headers: ["Content-Type": "application/json"],
         body: Data(value.utf8)
     )
+}
+
+private extension Data {
+    init?(base64URLString: String) {
+        var value = base64URLString
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        value.append(String(repeating: "=", count: (4 - value.count % 4) % 4))
+        self.init(base64Encoded: value)
+    }
 }

@@ -39,6 +39,8 @@ The normal Debug and Release configurations are personal builds and include Plex
 
 The iOS and tvOS clients now include a StoreKit 2 purchase controller. Set the exact App Store Connect non-consumable identifier as the `STREAMVUE_PREMIUM_PRODUCT_ID` Xcode build setting for a Store build. The controller loads localized product information, listens for transaction changes, accepts only StoreKit-verified current entitlements, and exposes explicit **Buy once** and **Restore purchase** actions. `AppStore.sync()` is called only from the user's restore action.
 
+Plex onboarding uses Plex's strong signed-PIN flow. StreamVue creates a stable device-registration Ed25519 signing key and client identifier in Keychain, presents the Plex authorization page as both a QR code and an external link, polls only while the connection screen is alive, and discovers the account's available Plex Media Servers. Keychain records can survive app deletion when the operating system retains them, so this identity is not described as an install-lifetime value. Account tokens and server-scoped tokens never enter SwiftUI or a cached catalog: the core actor returns an expiring opaque discovery lease plus sanitized server choices, then moves only the selected server token into an origin-bound Keychain credential after a public `/identity` check that must match the selected server ID. HTTPS/local connections are preferred, relay is deprioritized, and a discovered HTTP connection still requires an explicit cleartext warning. Direct address/token entry remains available as an advanced fallback.
+
 Because IPTV providers are user-selected and some still expose only HTTP endpoints, both app targets include the global ATS exception intended for apps that connect to arbitrary user-specified servers. StreamVue defaults an address without a scheme to HTTPS, warns before connecting to explicit HTTP sources, keeps normal server-trust evaluation for HTTPS, and refuses HTTPS-to-HTTP redirects. Public App Store submissions must include this provider-compatibility justification in review notes.
 
 ## Playlist and privacy behavior
@@ -48,6 +50,8 @@ Because IPTV providers are user-selected and some still expose only HTTP endpoin
 - Exact `group-title` browsing in source order
 - Automatic URL refresh at launch and protected last-working-copy recovery
 - URL credentials stored in Keychain, never in `source.json`
+- Signed Plex account discovery with QR approval, automatic server selection, and session-only account tokens
+- Plex device private key and final server token stored in Keychain; neither is written to the media catalog
 - Protected Application Support cache excluded from device backup
 - 64 MiB source limit and 250,000-channel parser limit
 - Contract-compatible IDs, guide metadata, catch-up data, User-Agent, and Referer parsing

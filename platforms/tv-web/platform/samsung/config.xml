@@ -2,7 +2,7 @@
 <widget xmlns="http://www.w3.org/ns/widgets"
         xmlns:tizen="http://tizen.org/ns/widgets"
         id="https://streamvue.app/tv"
-        version="5.0.0"
+        version="5.1.0"
         viewmodes="maximized">
   <tizen:application id="SvTvPlayer.StreamVue" package="SvTvPlayer" required_version="5.0" />
   <content src="index.html" />

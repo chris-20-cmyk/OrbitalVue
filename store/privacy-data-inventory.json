@@ -1,7 +1,7 @@
 {
   "contractVersion": "1.0",
   "status": "draft-unpublished",
-  "technicalReviewDate": "2026-08-29",
+  "technicalReviewDate": "2026-08-30",
   "privacyContact": null,
   "policyEffectiveDate": null,
   "policyOwnerApproved": false,
@@ -20,7 +20,8 @@
         "provider-server-address",
         "provider-username",
         "provider-password-during-authentication",
-        "provider-access-token",
+        "provider-account-token-during-authentication",
+        "provider-server-access-token",
         "user-supplied-request-headers"
       ],
       "purpose": "app-functionality",
@@ -48,10 +49,11 @@
     {
       "id": "provider-client-identity",
       "data": [
-        "random-app-installation-client-identifier"
+        "random-provider-client-identifier-that-may-persist-in-platform-secure-storage",
+        "plex-device-public-signing-key"
       ],
       "purpose": "identify-the-player-to-the-user-selected-media-server",
-      "storage": "on-device",
+      "storage": "on-device; Apple keeps the Plex client identifier and matching private signing key in Keychain, and the private key is never transmitted",
       "transmittedTo": [
         "user-selected-plex-or-emby-provider"
       ],

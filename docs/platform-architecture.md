@@ -29,6 +29,8 @@ Each client follows the same security sequence:
 4. Fetch and cache a token-free catalog in platform-private storage.
 5. Resolve a playable provider URL only when the user selects an item, strip any credential query supplied by catalog metadata, reject cross-origin paths, and inject the locally protected token at the final playback boundary.
 
+Apple additionally supports Plex's strong signed-PIN account flow. A stable device-registration Ed25519 private key and random Plex client identifier stay in Keychain; only the public JWK is sent while creating the PIN. These Keychain records may outlive an app uninstall when the operating system retains them. The transient account token is used in memory to verify the Plex account and fetch server-scoped resources, then discarded. SwiftUI receives only sanitized server choices and an opaque ten-minute discovery lease. The chosen server token moves directly from the core actor into the existing origin-bound Keychain record after an unauthenticated identity probe whose server ID must match the selected account resource; token-bearing resource fields are rejected from server IDs, names, and connection URLs.
+
 Windows protects media-center credentials with current-user DPAPI and plays the resolved URL through LibVLC. Android uses its platform-protected credential store and Media3. Apple stores secrets in Keychain and hands the short-lived plan to KSPlayer or AVKit. Samsung and LG use the shared contract and capability-gate playback when the television API cannot safely express a provider requirement. No platform routes personal-library traffic through a StreamVue proxy.
 
 ## Android 5.0 foundation
@@ -75,6 +77,8 @@ Windows has two deliberately separate distribution graphs. Personal/direct-downl
 The touch client adapts through `NavigationSplitView`; compact devices move selected playback into a true fullscreen cover. Apple TV uses a remote-first, focus-aware three-column group/channel/player workspace. Both clients consume the same source-ordered catalog, exact `group-title` sections, search, favorites, playback settings, and privacy-safe repository.
 
 The Swift parser enforces the shared 64 MiB input and 250,000-channel ceilings. URL credentials are separated from the non-secret source manifest and stored in Keychain. The last working playlist is written to protected Application Support storage and excluded from backup, then used only when launch refresh fails.
+
+The Apple Plex connector provides QR/external-browser approval, lifecycle-bound automatic PIN polling, account-wide server discovery, preferred secure/local connection selection, and a manual server-token fallback. Account and server tokens never become SwiftUI state; an expiring opaque lease is the only bridge between discovery and server selection.
 
 Playback is engine-neutral above the surface layer. KSPlayer 2.3.4 is the default KSMEPlayer/Metal path for broader demuxing, arbitrary provider headers, hardware decode, adaptive presentation, and embedded tracks; AVURLAsset, AVPlayerItem, AVPlayer, and AVPlayerViewController provide a selectable native path and two-way fallback. Neither path sends credentials through a StreamVue proxy.
 

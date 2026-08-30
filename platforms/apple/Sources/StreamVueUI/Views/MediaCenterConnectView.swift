@@ -15,49 +15,57 @@ struct MediaCenterConnectView: View {
     @State private var password = ""
     @State private var allowInsecureHTTP = false
     @State private var isSubmitting = false
+    @State private var isShowingManualPlex = false
+    @State private var plexAccount = PlexAccountConnectModel()
     @FocusState private var focusedField: Field?
 
     var body: some View {
         Form {
-            Section {
-                TextField("https://media-server.example:port", text: $serverAddress)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .focused($focusedField, equals: .serverAddress)
-                    #if os(iOS)
-                    .keyboardType(.URL)
-                    #endif
-                TextField("Server nickname (optional)", text: $displayName)
-                    .focused($focusedField, equals: .displayName)
-            } header: {
-                Text("Server")
-            } footer: {
-                Text("Use the full address of a server you control. HTTPS is required unless you explicitly approve local unencrypted HTTP below.")
-            }
-
-            if usesCleartextHTTP {
-                Section {
-                    Toggle("Allow unencrypted local connection", isOn: $allowInsecureHTTP)
-                } header: {
-                    Label("Security warning", systemImage: "exclamationmark.shield.fill")
-                        .foregroundStyle(theme.warning)
-                } footer: {
-                    Text("HTTP can expose your sign-in and viewing activity to devices on this network. StreamVue saves this approval only for the verified server.")
-                }
-            }
-
             if provider == .plex {
+                PlexAccountConnectSection(model: plexAccount, onConnected: onConnected)
+
                 Section {
-                    SecureField("Plex server token", text: $plexToken)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .focused($focusedField, equals: .plexToken)
+                    DisclosureGroup(
+                        "Connect with a server address and token",
+                        isExpanded: $isShowingManualPlex
+                    ) {
+                        TextField("https://media-server.example:port", text: $serverAddress)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .focused($focusedField, equals: .serverAddress)
+                            #if os(iOS)
+                            .keyboardType(.URL)
+                            #endif
+                        TextField("Server nickname (optional)", text: $displayName)
+                            .focused($focusedField, equals: .displayName)
+                        SecureField("Plex server token", text: $plexToken)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .focused($focusedField, equals: .plexToken)
+                        Text("Use this only when account discovery is unavailable. Enter a server-scoped token, never a Plex password.")
+                            .font(.footnote)
+                            .foregroundStyle(theme.muted)
+                    }
                 } header: {
-                    Text("Plex access")
-                } footer: {
-                    Text("This first premium checkpoint accepts a token for the selected Plex server. Plex account sign-in and automatic server discovery are the next connection upgrade.")
+                    Text("Advanced manual connection")
                 }
             } else {
+                Section {
+                    TextField("https://media-server.example:port", text: $serverAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .focused($focusedField, equals: .serverAddress)
+                        #if os(iOS)
+                        .keyboardType(.URL)
+                        #endif
+                    TextField("Server nickname (optional)", text: $displayName)
+                        .focused($focusedField, equals: .displayName)
+                } header: {
+                    Text("Server")
+                } footer: {
+                    Text("Use the full address of a server you control. HTTPS is required unless you explicitly approve local unencrypted HTTP below.")
+                }
+
                 Section {
                     TextField("Username", text: $username)
                         .textInputAutocapitalization(.never)
@@ -70,6 +78,17 @@ struct MediaCenterConnectView: View {
                 }
             }
 
+            if usesCleartextHTTP && (provider == .emby || isShowingManualPlex) {
+                Section {
+                    Toggle("Allow unencrypted local connection", isOn: $allowInsecureHTTP)
+                } header: {
+                    Label("Security warning", systemImage: "exclamationmark.shield.fill")
+                        .foregroundStyle(theme.warning)
+                } footer: {
+                    Text("HTTP can expose your sign-in and viewing activity to devices on this network. StreamVue saves this approval only for the verified server.")
+                }
+            }
+
             Section {
                 Label(
                     "Credentials stay in Apple Keychain. Saved library data contains only a protected credential reference.",
@@ -79,20 +98,22 @@ struct MediaCenterConnectView: View {
                 .foregroundStyle(theme.muted)
             }
 
-            Section {
-                Button(action: connect) {
-                    HStack(spacing: 10) {
-                        if isSubmitting { ProgressView() }
-                        Label(
-                            isSubmitting ? "Verifying server…" : "Connect \(provider.displayName)",
-                            systemImage: "link"
-                        )
-                        .frame(maxWidth: .infinity)
+            if provider == .emby || isShowingManualPlex {
+                Section {
+                    Button(action: connect) {
+                        HStack(spacing: 10) {
+                            if isSubmitting { ProgressView() }
+                            Label(
+                                isSubmitting ? "Verifying server…" : "Connect \(provider.displayName) manually",
+                                systemImage: "link"
+                            )
+                            .frame(maxWidth: .infinity)
+                        }
                     }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(!canConnect || isSubmitting || store.isLoading)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(!canConnect || isSubmitting || store.isLoading)
             }
         }
         #if os(iOS)
@@ -104,8 +125,19 @@ struct MediaCenterConnectView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         #if os(iOS)
-        .onAppear { focusedField = .serverAddress }
+        .onAppear {
+            if provider == .emby { focusedField = .serverAddress }
+        }
         #endif
+        .onChange(of: isShowingManualPlex) { _, isShowing in
+            if !isShowing {
+                serverAddress = ""
+                displayName = ""
+                plexToken = ""
+                allowInsecureHTTP = false
+                focusedField = nil
+            }
+        }
         .onChange(of: usesCleartextHTTP) { _, usesHTTP in
             if !usesHTTP { allowInsecureHTTP = false }
         }

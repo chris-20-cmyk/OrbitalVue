@@ -14,6 +14,7 @@ on:
       - "tools/verify-cross-platform-release-contract.mjs"
       - "tools/verify-apple-brand-assets.mjs"
       - "tools/verify-apple-distribution-readiness.mjs"
+      - "tools/verify-apple-plex-account-foundation.mjs"
       - ".github/workflows/apple-foundation.yml"
   pull_request:
     paths:
@@ -24,6 +25,7 @@ on:
       - "tools/verify-cross-platform-release-contract.mjs"
       - "tools/verify-apple-brand-assets.mjs"
       - "tools/verify-apple-distribution-readiness.mjs"
+      - "tools/verify-apple-plex-account-foundation.mjs"
       - ".github/workflows/apple-foundation.yml"
 
 permissions:
@@ -43,6 +45,7 @@ jobs:
           node tools/verify-cross-platform-release-contract.mjs
           node tools/verify-apple-brand-assets.mjs
           node tools/verify-apple-distribution-readiness.mjs
+          node tools/verify-apple-plex-account-foundation.mjs
 
   apple:
     name: iPhone, iPad, and Apple TV

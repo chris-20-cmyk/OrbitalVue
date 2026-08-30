@@ -93,7 +93,7 @@ jobs:
       - name: Upload unsigned television projects
         uses: actions/upload-artifact@v7
         with:
-          name: streamvue-tv-5.0-store-locked-foundation
+          name: streamvue-tv-5.1-store-locked-foundation
           if-no-files-found: error
           retention-days: 14
           path: |

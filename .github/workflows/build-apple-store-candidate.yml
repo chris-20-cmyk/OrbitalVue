@@ -64,6 +64,7 @@ jobs:
             --expect-product-id apple "$APPLE_PREMIUM_PRODUCT_ID" \
             --expect-verification-provider apple storekit2-verified-transactions
           node tools/verify-apple-brand-assets.mjs
+          node tools/verify-apple-plex-account-foundation.mjs
           node tools/verify-apple-distribution-readiness.mjs \
             --require-ready \
             --expect-bundle-id "$APPLE_BUNDLE_ID"
@@ -89,6 +90,7 @@ jobs:
         shell: bash
         run: |
           node tools/verify-apple-brand-assets.mjs
+          node tools/verify-apple-plex-account-foundation.mjs
           cd platforms/apple
           test "$(grep -c "PRODUCT_BUNDLE_IDENTIFIER: $APPLE_BUNDLE_ID" project.yml)" = "2"
           cp Package.store.swift Package.swift
