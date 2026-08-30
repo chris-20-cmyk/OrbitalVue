@@ -19,18 +19,19 @@ The lightweight **Cross-platform Store release contract** CI workflow runs the s
 | Platform | Candidate output | Premium state today | Remaining external work |
 | --- | --- | --- | --- |
 | Windows | unsigned MSIX for Partner Center | locked | reserve the package identity, create the durable add-on, fill the public manifest/variables, and test Store license changes |
-| Android / Google TV | upload-key-signed AAB | locked | finish Play registration/testing, create the one-time product and verifier, register the upload certificate, and complete Play review data |
+| Android / Google TV | upload-key-signed AAB | locked | finish Play registration/testing, create the one-time product, deploy the implemented verifier with protected service-account access, register the upload certificate, and complete Play review data |
 | iPhone / iPad / Apple TV | Apple-distribution-signed AVKit-only IPA set | locked | complete App Store terms/privacy review, enroll, create the shared non-consumable, supply profiles/certificate, and finish device/review evidence; personal builds retain KSPlayer |
 | Samsung TV | author/Partner-distributor-signed WGT | locked | finish Seller Office/DPI setup, preserve the author identity, deploy the verifier, and test Checkout on real TVs |
 | LG webOS TV | webOS IPK plus 400×400 store icon | free app; Plex/Emby locked | finish Seller Lounge account/terms, listing assets, UX scenario, mandatory checklist, privacy review, and real-TV testing |
 
-No row is marked ready merely because its code compiles. `store/premium-products.json` stays authoritative for purchasable premium products; the Apple, Samsung, and LG distribution manifests add their platform-specific legal, identity, signing, or review gates.
+No row is marked ready merely because its code compiles. `store/premium-products.json` stays authoritative for purchasable premium products; `store/premium-verifier-readiness.json` separately gates Android and Samsung production hosting, secrets, controls, and provider/device evidence; the Apple, Samsung, and LG distribution manifests add their platform-specific legal, identity, signing, or review gates.
 
 ## What the verifier proves
 
 - All five candidates use the same feature ID and one-time purchase model.
 - Android and Apple retain `com.streamvue.player`; Samsung and LG retain their reviewed television identities; Windows accepts only the identity reserved in Partner Center.
 - A ready paid lane uses its exact native verification provider: Microsoft Store license, Google Play Developer API, StoreKit 2 verified transactions, or Samsung DPI purchase history.
+- Android and Samsung candidate URLs exactly match a production verifier deployment whose credentials are secret-manager bound, rate-limited, privacy-reviewed, and proven with real purchase and refund tests.
 - LG remains a free Store build with premium media centers locked until a reviewed third-party commerce integration is implemented.
 - Every platform remains privacy-locked until a public policy and support page, owner approval, Store disclosures, retention/deletion decisions, and third-party review agree with the technical inventory.
 - Every candidate carries the same reviewed listing manifest and matching platform assets; owner identity, rights/trademark checks, rating questionnaires, and real-device captures must all be complete.

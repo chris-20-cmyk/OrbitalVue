@@ -303,19 +303,22 @@ describe("television premium store adapters", () => {
   }
 
   function unverifiedDecision(checkoutAvailable = true): unknown {
-    return {
+    const decision: Record<string, unknown> = {
       schemaVersion: 1,
       verified: false,
       checkoutAvailable,
-      productId: config.productId,
-      product: {
+      productId: config.productId
+    };
+    if (checkoutAvailable) {
+      decision.product = {
         productId: config.productId,
         title: "StreamVue Personal Media Centers",
         localizedPrice: "$9.99",
         orderTotal: "9.99",
         currencyId: "USD"
-      }
-    };
+      };
+    }
+    return decision;
   }
 
   function verifiedDecision(checkoutAvailable = true): unknown {

@@ -64,6 +64,9 @@ jobs:
             --require-ready samsung \
             --expect-product-id samsung "$SAMSUNG_PREMIUM_PRODUCT_ID" \
             --expect-verification-provider samsung samsung-dpi-purchase-history
+          node tools/verify-premium-verifier-readiness.mjs \
+            --require-ready samsung \
+            --expect-url samsung "$SAMSUNG_VERIFICATION_URL"
           node tools/verify-samsung-distribution-readiness.mjs \
             --require-ready \
             --expect-checkout-application-id "$SAMSUNG_CHECKOUT_APP_ID" \
@@ -124,6 +127,9 @@ jobs:
             --require-ready samsung \
             --expect-product-id samsung "$SAMSUNG_PREMIUM_PRODUCT_ID" \
             --expect-verification-provider samsung samsung-dpi-purchase-history
+          node tools/verify-premium-verifier-readiness.mjs \
+            --require-ready samsung \
+            --expect-url samsung "$SAMSUNG_VERIFICATION_URL"
           node tools/verify-samsung-distribution-readiness.mjs \
             --require-ready \
             --expect-checkout-application-id "$SAMSUNG_CHECKOUT_APP_ID" \
@@ -142,6 +148,8 @@ jobs:
           VITE_STREAMVUE_SAMSUNG_VERIFICATION_URL: ${{ env.SAMSUNG_VERIFICATION_URL }}
         run: |
           node contracts/validate-contract.mjs
+          pnpm entitlements:build
+          pnpm entitlements:test
           pnpm media-centers:test
           pnpm tv:check
           pnpm tv:test

@@ -80,10 +80,20 @@
       "allOf": [
         {
           "if": {
-            "properties": { "verified": { "const": false } },
-            "required": ["verified"]
+            "properties": {
+              "verified": { "const": false },
+              "checkoutAvailable": { "const": true }
+            },
+            "required": ["verified", "checkoutAvailable"]
           },
           "then": { "required": ["product"] }
+        },
+        {
+          "if": {
+            "properties": { "checkoutAvailable": { "const": false } },
+            "required": ["checkoutAvailable"]
+          },
+          "then": { "not": { "required": ["product"] } }
         }
       ]
     }

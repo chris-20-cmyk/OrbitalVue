@@ -302,9 +302,6 @@ export class SamsungCheckoutPremiumService implements TelevisionPremiumService {
         });
         return;
       }
-      if (!decision.product) {
-        throw new Error("The verifier did not return the exact Samsung Checkout product offer.");
-      }
       if (!decision.checkoutAvailable) {
         this.update({
           access: evaluatePremiumAccess("store", false),
@@ -312,11 +309,12 @@ export class SamsungCheckoutPremiumService implements TelevisionPremiumService {
           status: "unavailable",
           canBuy: false,
           canRestore: true,
-          productTitle: decision.product.title,
-          localizedPrice: decision.product.localizedPrice,
           message: "Samsung Checkout is not available in this television's service country. Existing purchases can still be restored."
         });
         return;
+      }
+      if (!decision.product) {
+        throw new Error("The verifier did not return the exact Samsung Checkout product offer.");
       }
       if (!await samsungBillingServiceAvailable(this.apis.billing)) {
         this.update({
@@ -446,6 +444,12 @@ async function requestSamsungDecision(
   const product = raw.product === undefined || raw.product === null
     ? null
     : parseSamsungProduct(raw.product, config.productId);
+  if (!raw.checkoutAvailable && product !== null) {
+    throw new Error("Samsung entitlement verifier returned product metadata where Checkout is unavailable.");
+  }
+  if (!raw.verified && raw.checkoutAvailable && product === null) {
+    throw new Error("Samsung entitlement verifier did not return the exact available product offer.");
+  }
   return { verified: raw.verified, checkoutAvailable: raw.checkoutAvailable, product };
 }
 

@@ -70,6 +70,9 @@ jobs:
             --require-ready android \
             --expect-product-id android "$ANDROID_PREMIUM_PRODUCT_ID" \
             --expect-verification-provider android google-play-developer-api
+          node tools/verify-premium-verifier-readiness.mjs \
+            --require-ready android \
+            --expect-url android "$ANDROID_PREMIUM_VERIFICATION_URL"
 
       - name: Restore the protected upload keystore
         shell: bash

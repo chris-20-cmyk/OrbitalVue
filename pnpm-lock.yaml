@@ -23,6 +23,8 @@ importers:
 
   packages/catalog-js: {}
 
+  packages/entitlement-verifier: {}
+
   packages/media-centers:
     dependencies:
       '@streamvue/catalog':

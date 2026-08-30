@@ -78,4 +78,33 @@ class PremiumBillingStateTest {
         assertTrue(response.verified)
         assertEquals("premium.once", response.productId)
     }
+
+    @Test
+    fun `verification response rejects extra or mistyped fields`() {
+        val valid = parsePremiumVerificationResponse(
+            """{"schemaVersion":1,"verified":true,"productId":"premium.once"}"""
+        )
+        assertTrue(valid.verified)
+
+        val extra = runCatching {
+            parsePremiumVerificationResponse(
+                """{"schemaVersion":1,"verified":true,"productId":"premium.once","purchaseToken":"leak"}"""
+            )
+        }
+        assertTrue(extra.isFailure)
+
+        val mistyped = runCatching {
+            parsePremiumVerificationResponse(
+                """{"schemaVersion":1,"verified":"true","productId":"premium.once"}"""
+            )
+        }
+        assertTrue(mistyped.isFailure)
+
+        val fractionalVersion = runCatching {
+            parsePremiumVerificationResponse(
+                """{"schemaVersion":1.5,"verified":true,"productId":"premium.once"}"""
+            )
+        }
+        assertTrue(fractionalVersion.isFailure)
+    }
 }

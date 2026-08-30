@@ -24,6 +24,18 @@ const lockedStorePremiumAccess = JSON.parse(
 const lockedUnknownPremiumAccess = JSON.parse(
   await readFile(join(here, "fixtures", "premium-access.unknown-locked.expected.json"), "utf8")
 );
+const googlePlayVerifierSchema = JSON.parse(
+  await readFile(join(here, "google-play-verifier-v1.schema.json"), "utf8")
+);
+const googlePlayVerificationRequest = JSON.parse(
+  await readFile(join(here, "fixtures", "google-play.verify.request.json"), "utf8")
+);
+const googlePlayVerifiedResponse = JSON.parse(
+  await readFile(join(here, "fixtures", "google-play.verify.verified.json"), "utf8")
+);
+const googlePlayUnverifiedResponse = JSON.parse(
+  await readFile(join(here, "fixtures", "google-play.verify.unverified.json"), "utf8")
+);
 const samsungVerifierSchema = JSON.parse(
   await readFile(join(here, "samsung-checkout-verifier-v1.schema.json"), "utf8")
 );
@@ -35,6 +47,9 @@ const samsungAvailableResponse = JSON.parse(
 );
 const samsungVerifiedResponse = JSON.parse(
   await readFile(join(here, "fixtures", "samsung-checkout.status.verified.json"), "utf8")
+);
+const samsungUnavailableResponse = JSON.parse(
+  await readFile(join(here, "fixtures", "samsung-checkout.status.unavailable.json"), "utf8")
 );
 
 const fail = (message) => {
@@ -194,17 +209,48 @@ validatePremiumDecision(lockedUnknownPremiumAccess, {
   receiptVerification: "unavailable"
 });
 
+if (googlePlayVerifierSchema.$schema !== "https://json-schema.org/draft/2020-12/schema") {
+  fail("the Google Play verifier schema must remain on JSON Schema Draft 2020-12");
+}
+assertExactKeys(
+  googlePlayVerificationRequest,
+  ["schemaVersion", "platform", "packageName", "productId", "purchaseToken"],
+  "Google Play verification request"
+);
+if (googlePlayVerificationRequest.schemaVersion !== 1
+  || googlePlayVerificationRequest.platform !== "google-play"
+  || !/^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+$/.test(googlePlayVerificationRequest.packageName)
+  || !/^[A-Za-z0-9._-]{3,256}$/.test(googlePlayVerificationRequest.productId)
+  || typeof googlePlayVerificationRequest.purchaseToken !== "string"
+  || googlePlayVerificationRequest.purchaseToken.length === 0) {
+  fail("Google Play verification request fixture is invalid");
+}
+const validateGooglePlayResponse = (response, expectedVerified) => {
+  assertExactKeys(response, ["schemaVersion", "verified", "productId"], "Google Play verification response");
+  if (response.schemaVersion !== 1
+    || response.verified !== expectedVerified
+    || response.productId !== googlePlayVerificationRequest.productId) {
+    fail("Google Play verification response fixture is invalid");
+  }
+  const serialized = JSON.stringify(response).toLowerCase();
+  for (const secretName of ["purchasetoken", "receipt", "password", "access-token", "accountid"]) {
+    if (serialized.includes(secretName)) fail(`Google Play response contains forbidden ${secretName}`);
+  }
+};
+validateGooglePlayResponse(googlePlayVerifiedResponse, true);
+validateGooglePlayResponse(googlePlayUnverifiedResponse, false);
+
 if (samsungVerifierSchema.$schema !== "https://json-schema.org/draft/2020-12/schema") {
   fail("the Samsung Checkout verifier schema must remain on JSON Schema Draft 2020-12");
 }
 const samsungProductPattern = /^[A-Za-z0-9_-]{1,20}$/;
-const assertExactKeys = (value, expectedKeys, label) => {
+function assertExactKeys(value, expectedKeys, label) {
   const keys = Object.keys(value).sort();
   const expected = [...expectedKeys].sort();
   if (JSON.stringify(keys) !== JSON.stringify(expected)) {
     fail(`${label} fields are not exact`);
   }
-};
+}
 assertExactKeys(
   samsungStatusRequest,
   ["schemaVersion", "platform", "action", "appId", "productId", "customId", "countryCode"],
@@ -220,7 +266,7 @@ if (samsungStatusRequest.schemaVersion !== 1
   fail("Samsung status request fixture is invalid");
 }
 const validateSamsungResponse = (response, expectedVerified) => {
-  const expectedKeys = expectedVerified
+  const expectedKeys = expectedVerified || response.checkoutAvailable === false
     ? ["schemaVersion", "verified", "checkoutAvailable", "productId"]
     : ["schemaVersion", "verified", "checkoutAvailable", "productId", "product"];
   assertExactKeys(response, expectedKeys, "Samsung status response");
@@ -230,7 +276,7 @@ const validateSamsungResponse = (response, expectedVerified) => {
     || response.productId !== samsungStatusRequest.productId) {
     fail("Samsung status response fixture is invalid");
   }
-  if (!expectedVerified) {
+  if (!expectedVerified && response.checkoutAvailable) {
     assertExactKeys(
       response.product,
       ["productId", "title", "localizedPrice", "orderTotal", "currencyId"],
@@ -249,7 +295,8 @@ const validateSamsungResponse = (response, expectedVerified) => {
 };
 validateSamsungResponse(samsungAvailableResponse, false);
 validateSamsungResponse(samsungVerifiedResponse, true);
+validateSamsungResponse(samsungUnavailableResponse, false);
 
 console.log(
-  `StreamVue contracts 1.0 are valid (${catalog.channels.length} playlist channels, ${mediaCenter.items.length} media-center items, personal/store/unknown premium access, Samsung verifier exchange).`
+  `StreamVue contracts 1.0 are valid (${catalog.channels.length} playlist channels, ${mediaCenter.items.length} media-center items, personal/store/unknown premium access, Google Play and Samsung verifier exchanges).`
 );

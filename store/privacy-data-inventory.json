@@ -70,10 +70,10 @@
       "storage": "store-controlled plus minimal on-device entitlement state",
       "transmittedTo": [
         "platform-store-service",
-        "future-streamvue-android-or-samsung-verifier"
+        "streamvue-android-or-samsung-entitlement-verifier-when-enabled"
       ],
-      "developerAccess": "future-verifier-only-for-android-or-samsung",
-      "availability": "store-builds-only-and-currently-release-locked"
+      "developerAccess": "transient-verifier-processing-only-for-android-or-samsung; no request-body logging",
+      "availability": "implementation-present-but-production-deployment-and-store-builds-currently-release-locked"
     },
     {
       "id": "diagnostics",

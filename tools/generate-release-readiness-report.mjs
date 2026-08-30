@@ -47,10 +47,11 @@ function titleCasePath(value) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-const [pkg, release, premium, privacy, listing, accessibility, publicSite, apple, samsung, lg] = await Promise.all([
+const [pkg, release, premium, premiumVerifier, privacy, listing, accessibility, publicSite, apple, samsung, lg] = await Promise.all([
   json("package.json"),
   json("store/cross-platform-release.json"),
   json("store/premium-products.json"),
+  json("store/premium-verifier-readiness.json"),
   json("store/privacy-data-inventory.json"),
   json("store/store-listing.json"),
   json("store/accessibility-readiness.json"),
@@ -63,6 +64,9 @@ const [pkg, release, premium, privacy, listing, accessibility, publicSite, apple
 for (const manifest of [release, premium, privacy, listing, accessibility]) {
   const keys = Object.keys(manifest.platforms ?? {}).sort();
   if (JSON.stringify(keys) !== JSON.stringify([...platforms].sort())) fail("a shared manifest does not contain exactly five platforms");
+}
+if (JSON.stringify(Object.keys(premiumVerifier.platforms ?? {}).sort()) !== JSON.stringify(["android", "samsung"])) {
+  fail("premium verifier manifest must contain exactly Android and Samsung");
 }
 
 const privacyShared = incomplete({
@@ -89,6 +93,18 @@ for (const platform of platforms) {
   const premiumGate = paidPremium
     ? gate(premium.platforms[platform].ready, incomplete(premium.platforms[platform], "premium"))
     : { ready: true, blockers: [], note: "Free Store lane; personal media centers remain intentionally locked." };
+  const verifierGate = platform === "android" || platform === "samsung"
+    ? gate(
+      premiumVerifier.platforms[platform].ready,
+      incomplete(premiumVerifier.platforms[platform], "premiumVerifier")
+    )
+    : {
+      ready: true,
+      blockers: [],
+      note: platform === "lg"
+        ? "No verifier is enabled in the free premium-locked lane."
+        : "Entitlement verification is native to this Store platform."
+    };
 
   const privacyGate = gate(
     privacy.platforms[platform].ready,
@@ -119,6 +135,7 @@ for (const platform of platforms) {
 
   const gates = {
     premium: premiumGate,
+    verifier: verifierGate,
     privacy: privacyGate,
     listing: listingGate,
     accessibility: accessibilityGate,

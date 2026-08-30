@@ -76,6 +76,8 @@ const expectedPlatforms = {
       "store/accessibility-readiness.json",
       "--require-ready android",
       "--expect-verification-provider android google-play-developer-api",
+      "node tools/verify-premium-verifier-readiness.mjs",
+      "--expect-url android \"$ANDROID_PREMIUM_VERIFICATION_URL\"",
       "-PstreamVueDistributionMode=store",
       "-PstreamVueRequireStoreSigning=true"
     ]
@@ -120,6 +122,8 @@ const expectedPlatforms = {
       "store/accessibility-readiness.json",
       "--require-ready samsung",
       "--expect-verification-provider samsung samsung-dpi-purchase-history",
+      "node tools/verify-premium-verifier-readiness.mjs",
+      "--expect-url samsung \"$SAMSUNG_VERIFICATION_URL\"",
       "tools/verify-samsung-distribution-readiness.mjs",
       "VITE_STREAMVUE_DISTRIBUTION_MODE: store"
     ]

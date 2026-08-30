@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "platform": "google-play",
+  "packageName": "com.streamvue.player",
+  "productId": "streamvue.personal_media_centers",
+  "purchaseToken": "transient-google-play-token"
+}

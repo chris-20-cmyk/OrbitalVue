@@ -1,9 +1,11 @@
 package com.streamvue.player.premium
 
 import com.google.gson.Gson
+import com.google.gson.JsonParser
 import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.math.BigDecimal
 import java.net.URI
 import javax.net.ssl.HttpsURLConnection
 
@@ -87,8 +89,7 @@ class HttpsPremiumVerificationTransport(
                     require(count <= MAX_RESPONSE_BYTES) { "Premium verification response is too large." }
                     buffer.copyOf(count)
                 }
-                gson.fromJson(responseBytes.toString(Charsets.UTF_8), PremiumVerificationResponse::class.java)
-                    ?: PremiumVerificationResponse()
+                parsePremiumVerificationResponse(responseBytes.toString(Charsets.UTF_8))
             } finally {
                 connection.disconnect()
             }
@@ -99,4 +100,33 @@ class HttpsPremiumVerificationTransport(
         const val MAX_REQUEST_BYTES = 32 * 1024
         const val MAX_RESPONSE_BYTES = 64 * 1024
     }
+}
+
+internal fun parsePremiumVerificationResponse(json: String): PremiumVerificationResponse {
+    val root = JsonParser.parseString(json)
+    require(root.isJsonObject) { "Premium verification response must be a JSON object." }
+    val value = root.asJsonObject
+    require(value.keySet() == setOf("schemaVersion", "verified", "productId")) {
+        "Premium verification response fields are not exact."
+    }
+    val schemaVersion = value.get("schemaVersion")
+    val verified = value.get("verified")
+    val productId = value.get("productId")
+    require(schemaVersion.isJsonPrimitive && schemaVersion.asJsonPrimitive.isNumber) {
+        "Premium verification schemaVersion is invalid."
+    }
+    require(runCatching { schemaVersion.asBigDecimal.compareTo(BigDecimal.ONE) == 0 }.getOrDefault(false)) {
+        "Premium verification schemaVersion is unsupported."
+    }
+    require(verified.isJsonPrimitive && verified.asJsonPrimitive.isBoolean) {
+        "Premium verification verified value is invalid."
+    }
+    require(productId.isJsonPrimitive && productId.asJsonPrimitive.isString) {
+        "Premium verification productId is invalid."
+    }
+    return PremiumVerificationResponse(
+        schemaVersion = schemaVersion.asInt,
+        verified = verified.asBoolean,
+        productId = productId.asString
+    )
 }

@@ -16,6 +16,7 @@ on:
       - ".github/workflows/release-contract.yml"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-premium-verifier-readiness.mjs"
       - "tools/verify-privacy-readiness.mjs"
       - "tools/verify-store-listing-readiness.mjs"
       - "tools/verify-accessibility-readiness.mjs"
@@ -40,6 +41,13 @@ on:
       - "platforms/tv-web/scripts/package-platforms.mjs"
       - "platforms/tv-web/src/**"
       - "platforms/tv-web/package.json"
+      - "packages/entitlement-verifier/**"
+      - "contracts/google-play-verifier-v1.schema.json"
+      - "contracts/samsung-checkout-verifier-v1.schema.json"
+      - "contracts/validate-contract.mjs"
+      - "contracts/fixtures/google-play.verify.*.json"
+      - "contracts/fixtures/samsung-checkout.status.*.json"
+      - "pnpm-lock.yaml"
       - "src/StreamVue.Player/App.xaml.cs"
       - "src/StreamVue.Player/Services/**"
       - "src/StreamVue.Player/StreamVue.Player.csproj"
@@ -55,6 +63,7 @@ on:
       - ".github/workflows/release-contract.yml"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-premium-verifier-readiness.mjs"
       - "tools/verify-privacy-readiness.mjs"
       - "tools/verify-store-listing-readiness.mjs"
       - "tools/verify-accessibility-readiness.mjs"
@@ -79,6 +88,13 @@ on:
       - "platforms/tv-web/scripts/package-platforms.mjs"
       - "platforms/tv-web/src/**"
       - "platforms/tv-web/package.json"
+      - "packages/entitlement-verifier/**"
+      - "contracts/google-play-verifier-v1.schema.json"
+      - "contracts/samsung-checkout-verifier-v1.schema.json"
+      - "contracts/validate-contract.mjs"
+      - "contracts/fixtures/google-play.verify.*.json"
+      - "contracts/fixtures/samsung-checkout.status.*.json"
+      - "pnpm-lock.yaml"
       - "src/StreamVue.Player/App.xaml.cs"
       - "src/StreamVue.Player/Services/**"
       - "src/StreamVue.Player/StreamVue.Player.csproj"
@@ -96,14 +112,28 @@ jobs:
       - name: Check out StreamVue
         uses: actions/checkout@v7
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+          run_install: false
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: "24"
+          cache: pnpm
+
+      - name: Install locked verifier dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Verify every Store release boundary
         run: |
+          pnpm entitlements:build
+          pnpm entitlements:test
+          node contracts/validate-contract.mjs
           node tools/verify-premium-store-readiness.mjs
+          node tools/verify-premium-verifier-readiness.mjs
           node tools/verify-privacy-readiness.mjs
           node tools/verify-store-listing-readiness.mjs
           node tools/verify-accessibility-readiness.mjs
