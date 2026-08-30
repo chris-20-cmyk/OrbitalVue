@@ -23,6 +23,13 @@ public struct StreamVueApplicationRoot: View {
     }
 
     public var body: some View {
+        lifecycleContent
+    }
+
+    /// Opaque view boundaries keep Swift's type checker from treating every
+    /// environment, task, and observation modifier as one giant expression.
+    @ViewBuilder
+    private var platformContent: some View {
         Group {
             #if os(tvOS)
             AppleTVRootView()
@@ -30,6 +37,10 @@ public struct StreamVueApplicationRoot: View {
             MobileRootView()
             #endif
         }
+    }
+
+    private var environmentContent: some View {
+        platformContent
         .environment(store)
         .environment(settings)
         .environment(player)
@@ -37,6 +48,10 @@ public struct StreamVueApplicationRoot: View {
         .environment(premiumPurchases)
         .tint(theme.accent)
         .preferredColorScheme(.dark)
+    }
+
+    private var playbackContent: some View {
+        environmentContent
         .task { await store.start() }
         .task { await premiumPurchases.start() }
         .task(id: store.selectedChannel?.id) {
@@ -64,6 +79,10 @@ public struct StreamVueApplicationRoot: View {
         .onChange(of: settings.ksAdaptiveFrameRate) { _, _ in scheduleKSRetune() }
         .onChange(of: settings.ksHardwareDecode) { _, _ in scheduleKSRetune() }
         .onChange(of: settings.ksAsynchronousDecompression) { _, _ in scheduleKSRetune() }
+    }
+
+    private var lifecycleContent: some View {
+        playbackContent
         .onChange(of: settings.ksAutomaticDeinterlacing) { _, _ in scheduleKSRetune() }
         .onChange(of: settings.preferredAudioLanguage) { _, _ in scheduleKSRetune() }
         .onChange(of: settings.preferredSubtitleLanguage) { _, _ in scheduleKSRetune() }
