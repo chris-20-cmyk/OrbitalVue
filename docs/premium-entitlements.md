@@ -52,7 +52,9 @@ Google recommends verifying purchase tokens with the Google Play Developer API o
 -PstreamVuePremiumVerificationUrl=https://<your verifier>/google-play/verify
 ```
 
-The verifier endpoint receives the exchange in `contracts/google-play-verifier-v1.schema.json`: `platform`, `packageName`, `productId`, and the transient `purchaseToken`. `@streamvue/entitlement-verifier` obtains a short-lived OAuth token from a secret-manager-provided service-account key, calls `purchases.productsv2.getproductpurchasev2`, and returns `{ "schemaVersion": 1, "verified": true, "productId": "<same ID>" }` only for one matching completed, non-consumed, non-refunded line item. Test purchases are rejected by default. The purchase token, service-account key, and OAuth token are never copied into the response, `PremiumAccessSnapshot`, logs, catalogs, or local settings. The endpoint must be HTTPS and cannot be configured with URL credentials, a query, or a fragment.
+The verifier endpoint receives the exchange in `contracts/google-play-verifier-v1.schema.json`: `platform`, `packageName`, `productId`, and the transient `purchaseToken`. `@streamvue/entitlement-verifier` obtains a short-lived OAuth token from a secret-manager-provided service-account key, calls `purchases.productsv2.getproductpurchasev2`, and returns `{ "schemaVersion": 1, "verified": true, "productId": "<same ID>" }` only for one matching completed, non-consumed, non-refunded line item. Test purchases are rejected by default and cannot be enabled in the production Worker environment. The purchase token, service-account key, and OAuth token are never copied into the response, `PremiumAccessSnapshot`, logs, catalogs, or local settings. The endpoint must be HTTPS and cannot be configured with URL credentials, a query, or a fragment.
+
+The committed Cloudflare Worker adapter remains route-disabled and uses `.invalid`/`REPLACE_` values. It declares the Google service-account identity/private key, Samsung DPI key, and a separate rate-key secret through `secrets.required`; disables `workers.dev` and preview URLs; checks the exact deployment host; caps provider-wide traffic at 600 requests/minute per Cloudflare location; and separately applies a 30-request/minute binding to an HMAC of the purchaser identity. It never uses the raw identifier as the limiter key. See the [deployment runbook](../packages/entitlement-verifier-worker/README.md).
 
 ### Apple iOS and tvOS
 
@@ -104,10 +106,11 @@ Android and Samsung also use `store/premium-verifier-readiness.json`. Its struct
 ```text
 pnpm entitlements:build
 pnpm entitlements:test
+pnpm verifier-worker:check
 node tools/verify-premium-verifier-readiness.mjs
 ```
 
-Marking either verifier deployment ready requires its exact production URL plus secret-manager configuration, provider API access, edge rate limiting, approved transient-data retention, and real purchase/pending-or-country/refund evidence. The Store candidate repeats `--require-ready` and `--expect-url`, so a random HTTPS endpoint cannot satisfy release control.
+`verifier-worker:check` verifies Wrangler-generated bindings, TypeScript, ten Workers-runtime boundary tests, and a local deployment dry run; it does not authenticate to Cloudflare or deploy. Marking either verifier deployment ready still requires its exact production URL plus secret-manager configuration, provider API access, observed production rate limiting, approved transient-data retention, and real purchase/pending-or-country/refund evidence. The Store candidate repeats `--require-ready` and `--expect-url`, so a random HTTPS endpoint cannot satisfy release control.
 
 Every candidate that claims the premium feature is purchasable must also run `node tools/verify-premium-store-readiness.mjs --require-ready <platform>` with the exact product and approved verification provider. That command intentionally fails for every currently unconfigured platform, preventing a paid feature from being represented as purchasable. LG's separate free candidate is the explicit exception: it proves that the LG product/provider remain null and unready, packages the Store surface with Plex/Emby locked, and makes no premium purchase claim.
 

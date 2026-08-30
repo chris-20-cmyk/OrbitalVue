@@ -6,7 +6,26 @@
     "googlePlayRoute": "/google-play/verify",
     "googlePlayApiMethod": "purchases.productsv2.getproductpurchasev2",
     "samsungRoute": "/samsung/status",
-    "samsungDpiOrigin": "https://checkoutapi.samsungcheckout.com"
+    "samsungDpiOrigin": "https://checkoutapi.samsungcheckout.com",
+    "hosting": {
+      "packageName": "@streamvue/entitlement-verifier-worker",
+      "sourceRoot": "packages/entitlement-verifier-worker",
+      "runtime": "cloudflare-workers",
+      "configurationPath": "packages/entitlement-verifier-worker/wrangler.jsonc",
+      "healthRoute": "/healthz",
+      "workersDevEnabled": false,
+      "previewUrlsEnabled": false,
+      "requiredSecrets": [
+        "GOOGLE_SERVICE_ACCOUNT_EMAIL",
+        "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY",
+        "SAMSUNG_DPI_SECURITY_KEY",
+        "RATE_LIMIT_KEY_SECRET"
+      ],
+      "rateLimiterBindings": [
+        "VERIFICATION_RATE_LIMITER",
+        "PROVIDER_RATE_LIMITER"
+      ]
+    }
   },
   "platforms": {
     "android": {

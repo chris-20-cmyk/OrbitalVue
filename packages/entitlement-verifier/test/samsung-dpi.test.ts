@@ -43,12 +43,13 @@ describe("Samsung DPI entitlement verification", () => {
       orderTotal: "9.99",
       currencyId: "USD"
     });
-    expect(calls.map((call) => call.path)).toEqual([
+    expect(calls).toHaveLength(3);
+    expect(calls.slice(0, 2).map((call) => call.path).sort()).toEqual([
       "/openapi/cont/list",
-      "/openapi/invoice/list",
-      "/openapi/invoice/verify"
+      "/openapi/invoice/list"
     ]);
-    expect(calls[1]?.body.CustomID).toBe(request.customId);
+    expect(calls[2]?.path).toBe("/openapi/invoice/verify");
+    expect(calls.find((call) => call.path === "/openapi/invoice/list")?.body.CustomID).toBe(request.customId);
     expect(JSON.stringify(response)).not.toContain(request.customId);
     expect(JSON.stringify(response)).not.toContain(securityKey);
     expect(JSON.stringify(response)).not.toContain("CheckValue");

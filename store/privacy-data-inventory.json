@@ -72,7 +72,7 @@
         "platform-store-service",
         "streamvue-android-or-samsung-entitlement-verifier-when-enabled"
       ],
-      "developerAccess": "transient-verifier-processing-only-for-android-or-samsung; no request-body logging",
+      "developerAccess": "transient-verifier-processing-only-for-android-or-samsung; no request-body logging; purchaser rate-limit binding receives only a keyed hmac identifier",
       "availability": "implementation-present-but-production-deployment-and-store-builds-currently-release-locked"
     },
     {

@@ -42,6 +42,7 @@ on:
       - "platforms/tv-web/src/**"
       - "platforms/tv-web/package.json"
       - "packages/entitlement-verifier/**"
+      - "packages/entitlement-verifier-worker/**"
       - "contracts/google-play-verifier-v1.schema.json"
       - "contracts/samsung-checkout-verifier-v1.schema.json"
       - "contracts/validate-contract.mjs"
@@ -89,6 +90,7 @@ on:
       - "platforms/tv-web/src/**"
       - "platforms/tv-web/package.json"
       - "packages/entitlement-verifier/**"
+      - "packages/entitlement-verifier-worker/**"
       - "contracts/google-play-verifier-v1.schema.json"
       - "contracts/samsung-checkout-verifier-v1.schema.json"
       - "contracts/validate-contract.mjs"
@@ -131,6 +133,7 @@ jobs:
         run: |
           pnpm entitlements:build
           pnpm entitlements:test
+          pnpm verifier-worker:check
           node contracts/validate-contract.mjs
           node tools/verify-premium-store-readiness.mjs
           node tools/verify-premium-verifier-readiness.mjs

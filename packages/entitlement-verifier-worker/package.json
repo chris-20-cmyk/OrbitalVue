@@ -1,0 +1,22 @@
+{
+  "name": "@streamvue/entitlement-verifier-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "types": "wrangler types --config wrangler.jsonc --strict-vars=false",
+    "types:check": "wrangler types --config wrangler.jsonc --strict-vars=false --check",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --config vitest.config.ts",
+    "dry-run": "wrangler deploy --config wrangler.jsonc --env=\"\" --dry-run --outdir dist",
+    "check": "pnpm types:check && pnpm typecheck && pnpm test && pnpm dry-run"
+  },
+  "dependencies": {
+    "@streamvue/entitlement-verifier": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.1.2",
+    "@types/node": "24.13.3",
+    "wrangler": "4.127.1"
+  }
+}

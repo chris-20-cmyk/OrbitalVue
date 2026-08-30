@@ -24,7 +24,7 @@ The lightweight **Cross-platform Store release contract** CI workflow runs the s
 | Samsung TV | author/Partner-distributor-signed WGT | locked | finish Seller Office/DPI setup, preserve the author identity, deploy the verifier, and test Checkout on real TVs |
 | LG webOS TV | webOS IPK plus 400×400 store icon | free app; Plex/Emby locked | finish Seller Lounge account/terms, listing assets, UX scenario, mandatory checklist, privacy review, and real-TV testing |
 
-No row is marked ready merely because its code compiles. `store/premium-products.json` stays authoritative for purchasable premium products; `store/premium-verifier-readiness.json` separately gates Android and Samsung production hosting, secrets, controls, and provider/device evidence; the Apple, Samsung, and LG distribution manifests add their platform-specific legal, identity, signing, or review gates.
+No row is marked ready merely because its code compiles. `store/premium-products.json` stays authoritative for purchasable premium products; `store/premium-verifier-readiness.json` records the route-disabled Cloudflare Worker adapter and separately gates Android and Samsung production hosting, secrets, controls, and provider/device evidence; the Apple, Samsung, and LG distribution manifests add their platform-specific legal, identity, signing, or review gates.
 
 ## What the verifier proves
 
@@ -32,6 +32,7 @@ No row is marked ready merely because its code compiles. `store/premium-products
 - Android and Apple retain `com.streamvue.player`; Samsung and LG retain their reviewed television identities; Windows accepts only the identity reserved in Partner Center.
 - A ready paid lane uses its exact native verification provider: Microsoft Store license, Google Play Developer API, StoreKit 2 verified transactions, or Samsung DPI purchase history.
 - Android and Samsung candidate URLs exactly match a production verifier deployment whose credentials are secret-manager bound, rate-limited, privacy-reviewed, and proven with real purchase and refund tests.
+- The committed verifier Worker has no public route, disables `workers.dev` and preview URLs, requires four secret bindings, rejects unapproved browser origins, accepts Samsung's documented origin-less TV requests, caps provider-wide bursts, and uses only an HMAC-derived key for per-purchaser limits. A successful dry-run bundle is implementation evidence, not deployment evidence.
 - LG remains a free Store build with premium media centers locked until a reviewed third-party commerce integration is implemented.
 - Every platform remains privacy-locked until a public policy and support page, owner approval, Store disclosures, retention/deletion decisions, and third-party review agree with the technical inventory.
 - Every candidate carries the same reviewed listing manifest and matching platform assets; owner identity, rights/trademark checks, rating questionnaires, and real-device captures must all be complete.
