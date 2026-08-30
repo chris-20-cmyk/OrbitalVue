@@ -45,7 +45,7 @@ struct PlexAccountConnectSection: View {
                     .accessibilityLabel("Plex sign-in error: \(failure)")
             }
             Button {
-                runAction { await model.start(using: store) }
+                startSignIn()
             } label: {
                 HStack(spacing: 10) {
                     if model.isCreating { ProgressView() }
@@ -95,7 +95,7 @@ struct PlexAccountConnectSection: View {
             .font(.footnote.weight(.medium))
 
             Button("Cancel sign-in", role: .cancel) {
-                runAction { await model.cancel(using: store) }
+                cancelSignIn()
             }
         }
         .frame(maxWidth: .infinity)
@@ -110,7 +110,7 @@ struct PlexAccountConnectSection: View {
                 "Server",
                 selection: Binding(
                     get: { model.selectedServerID ?? selectedServer.serverID },
-                    set: model.selectServer
+                    set: { selectedID in model.selectServer(selectedID) }
                 )
             ) {
                 ForEach(discovery.servers) { server in
@@ -124,7 +124,7 @@ struct PlexAccountConnectSection: View {
                     "Connection",
                     selection: Binding(
                         get: { model.selectedConnectionID ?? selectedConnection.id },
-                        set: model.selectConnection
+                        set: { selectedID in model.selectConnection(selectedID) }
                     )
                 ) {
                     ForEach(selectedServer.connections) { connection in
@@ -150,7 +150,8 @@ struct PlexAccountConnectSection: View {
             }
 
             Button {
-                runAction {
+                actionTask?.cancel()
+                actionTask = Task { @MainActor in
                     await model.connect(using: store, onConnected: onConnected)
                 }
             } label: {
@@ -168,7 +169,7 @@ struct PlexAccountConnectSection: View {
             .disabled(!model.canConnect || store.isLoading)
 
             Button("Use another Plex account") {
-                runAction { await model.start(using: store) }
+                startSignIn()
             }
             .disabled(model.isConnecting)
         } else {
@@ -188,10 +189,17 @@ struct PlexAccountConnectSection: View {
         return details.joined(separator: " · ")
     }
 
-    private func runAction(_ action: @escaping @MainActor () async -> Void) {
+    private func startSignIn() {
         actionTask?.cancel()
         actionTask = Task { @MainActor in
-            await action()
+            await model.start(using: store)
+        }
+    }
+
+    private func cancelSignIn() {
+        actionTask?.cancel()
+        actionTask = Task { @MainActor in
+            await model.cancel(using: store)
         }
     }
 }
