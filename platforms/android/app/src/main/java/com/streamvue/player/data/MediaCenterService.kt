@@ -8,23 +8,37 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.util.Locale
+import java.util.UUID
+import java.util.concurrent.CancellationException
 
 internal class MediaCenterService(
     private val transport: MediaCenterTransport,
     private val credentialVault: MediaCenterCredentialVault,
     private val device: MediaCenterDeviceIdentity,
-    private val gson: Gson = Gson()
+    private val gson: Gson = Gson(),
+    private val plexAccountClient: PlexAccountClient? = null
 ) {
+    private val plexDiscoveryLock = Any()
+    private val plexDiscoverySessions = HashMap<String, PlexAccountDiscoverySecret>()
+    private val plexDiscoveryConnectionsInFlight = HashSet<String>()
+    private val cancelledPlexDiscoverySessions = HashSet<String>()
+
     fun connectPlex(
         serverAddress: String,
         rawToken: String,
         displayName: String? = null,
-        allowInsecureHttp: Boolean = false
+        allowInsecureHttp: Boolean = false,
+        expectedServerId: String? = null
     ): MediaCenterConnection {
         val baseUrl = MediaCenterUrlPolicy.normalizeBaseUrl(serverAddress)
         MediaCenterUrlPolicy.requireAllowedTransport(baseUrl, allowInsecureHttp)
         val token = MediaCenterUrlPolicy.credential(rawToken)
         val identity = discoverPlexIdentity(baseUrl)
+        expectedServerId?.let {
+            require(identity.serverId == MediaCenterUrlPolicy.requireIdentifier(it, "Plex server")) {
+                "The selected Plex server identity changed before connection."
+            }
+        }
         val name = MediaCenterUrlPolicy.safeMetadata(displayName)
             ?: MediaCenterUrlPolicy.safeMetadata(identity.name, token)
             ?: "Plex"
@@ -44,6 +58,98 @@ internal class MediaCenterService(
         )
         saveCredential(connection, token, allowInsecureHttp)
         return connection
+    }
+
+    fun createPlexSignInChallenge(): PlexPinChallenge = accountClient().createPin()
+
+    fun completePlexSignIn(challenge: PlexPinChallenge): PlexServerDiscovery? {
+        val client = accountClient()
+        val accountToken = client.claimPin(challenge) ?: return null
+        client.verifyAccountToken(accountToken.value)
+        val servers = client.discoverServers(accountToken.value)
+        require(servers.isNotEmpty()) { "Plex did not provide a usable personal media server." }
+        val maximumExpiry = Instant.now().plusSeconds(PLEX_DISCOVERY_LIFETIME_SECONDS)
+        val expiresAt = accountToken.expiresAt?.takeIf { it.isBefore(maximumExpiry) } ?: maximumExpiry
+        require(expiresAt.isAfter(Instant.now())) { "The Plex account session expired." }
+        val sessionId = "plex-discovery-${UUID.randomUUID().toString().lowercase(Locale.ROOT)}"
+        synchronized(plexDiscoveryLock) {
+            purgeExpiredPlexDiscoverySessions()
+            plexDiscoverySessions[sessionId] = PlexAccountDiscoverySecret(servers, expiresAt)
+        }
+        return PlexServerDiscovery(
+            sessionId = sessionId,
+            servers = servers.map(PlexAccountServerSecret::server),
+            expiresAt = expiresAt
+        )
+    }
+
+    fun connectDiscoveredPlexServer(
+        sessionId: String,
+        serverId: String,
+        connectionUrl: String,
+        allowInsecureHttp: Boolean = false
+    ): MediaCenterConnection {
+        val normalizedSessionId = MediaCenterUrlPolicy.requireIdentifier(sessionId, "Plex discovery session")
+        val normalizedServerId = MediaCenterUrlPolicy.requireIdentifier(serverId, "Plex server")
+        val selection = synchronized(plexDiscoveryLock) {
+            purgeExpiredPlexDiscoverySessions()
+            val session = plexDiscoverySessions[normalizedSessionId]
+                ?: error("The Plex server discovery session expired. Sign in again.")
+            require(normalizedSessionId !in plexDiscoveryConnectionsInFlight) {
+                "This Plex server is already connecting."
+            }
+            val secret = session.servers.firstOrNull { it.server.serverId == normalizedServerId }
+                ?: error("The selected Plex server was not part of this discovery session.")
+            val connection = secret.server.connections.firstOrNull { it.url == connectionUrl }
+                ?: error("The selected Plex connection was not part of this discovery session.")
+            plexDiscoveryConnectionsInFlight += normalizedSessionId
+            secret to connection
+        }
+
+        try {
+            val (secret, selected) = selection
+            require(selected.isSecure || allowInsecureHttp) {
+                "Approve the unencrypted local HTTP connection before continuing."
+            }
+            val connection = connectPlex(
+                serverAddress = selected.url,
+                rawToken = secret.accessToken,
+                displayName = secret.server.name,
+                allowInsecureHttp = !selected.isSecure && allowInsecureHttp,
+                expectedServerId = secret.server.serverId
+            )
+            val wasCancelled = synchronized(plexDiscoveryLock) {
+                normalizedSessionId in cancelledPlexDiscoverySessions ||
+                    normalizedSessionId !in plexDiscoverySessions
+            }
+            if (wasCancelled) {
+                disconnect(connection)
+                throw CancellationException("Plex server connection was cancelled.")
+            }
+            synchronized(plexDiscoveryLock) {
+                plexDiscoverySessions.remove(normalizedSessionId)
+            }
+            return connection
+        } finally {
+            synchronized(plexDiscoveryLock) {
+                plexDiscoveryConnectionsInFlight.remove(normalizedSessionId)
+                cancelledPlexDiscoverySessions.remove(normalizedSessionId)
+            }
+        }
+    }
+
+    fun cancelPlexDiscovery(sessionId: String) {
+        val normalized = runCatching {
+            MediaCenterUrlPolicy.requireIdentifier(sessionId, "Plex discovery session")
+        }.getOrNull() ?: return
+        synchronized(plexDiscoveryLock) {
+            plexDiscoverySessions.remove(normalized)
+            if (normalized in plexDiscoveryConnectionsInFlight) {
+                cancelledPlexDiscoverySessions += normalized
+            } else {
+                cancelledPlexDiscoverySessions.remove(normalized)
+            }
+        }
     }
 
     fun connectEmby(
@@ -169,6 +275,20 @@ internal class MediaCenterService(
 
     fun disconnect(connection: MediaCenterConnection) {
         credentialVault.remove(connection.credentialId)
+    }
+
+    private fun accountClient(): PlexAccountClient = plexAccountClient
+        ?: error("Secure Plex account sign-in is unavailable on this device.")
+
+    private fun purgeExpiredPlexDiscoverySessions() {
+        val current = Instant.now()
+        plexDiscoverySessions.entries.removeAll { (sessionId, value) ->
+            val expired = !value.expiresAt.isAfter(current)
+            if (expired && sessionId !in plexDiscoveryConnectionsInFlight) {
+                cancelledPlexDiscoverySessions.remove(sessionId)
+            }
+            expired
+        }
     }
 
     private fun plexLibraries(
@@ -726,5 +846,6 @@ internal class MediaCenterService(
     private companion object {
         const val PAGE_SIZE = 200
         const val MAX_TOTAL_ITEMS = 20_000
+        const val PLEX_DISCOVERY_LIFETIME_SECONDS = 10 * 60L
     }
 }

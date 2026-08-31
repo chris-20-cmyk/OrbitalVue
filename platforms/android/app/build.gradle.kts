@@ -196,6 +196,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.gson)
     implementation(libs.google.play.billing)
+    implementation(libs.tink.android)
+    implementation(libs.zxing.core)
 
     testImplementation(libs.junit)
     debugImplementation(libs.androidx.compose.ui.tooling)

@@ -88,6 +88,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.streamvue.player.AppUiState
 import com.streamvue.player.ChannelSection
 import com.streamvue.player.GroupSummary
+import com.streamvue.player.PlexSignInPhase
+import com.streamvue.player.PlexSignInUiState
 import com.streamvue.player.data.Channel
 import com.streamvue.player.playback.PlaybackSignal
 import com.streamvue.player.playback.StreamPlayerSurface
@@ -112,6 +114,9 @@ fun StreamVueApp(
     onChooseFile: () -> Unit,
     onImportUrl: (String) -> Unit,
     onConnectPlex: (String, String, String?, Boolean) -> Unit,
+    onStartPlexAccountSignIn: () -> Unit,
+    onCancelPlexAccountSignIn: () -> Unit,
+    onConnectDiscoveredPlexServer: (String, String, String, Boolean) -> Unit,
     onConnectEmby: (String, String, String, String?, Boolean) -> Unit,
     onPurchasePremium: () -> Unit,
     onRestorePremium: () -> Unit,
@@ -239,6 +244,10 @@ fun StreamVueApp(
                 showImport = false
                 onConnectPlex(address, token, name, allowHttp)
             },
+            plexSignIn = state.plexSignIn,
+            onStartPlexAccountSignIn = onStartPlexAccountSignIn,
+            onCancelPlexAccountSignIn = onCancelPlexAccountSignIn,
+            onConnectDiscoveredPlexServer = onConnectDiscoveredPlexServer,
             onConnectEmby = { address, username, password, name, allowHttp ->
                 showImport = false
                 onConnectEmby(address, username, password, name, allowHttp)
@@ -1035,6 +1044,10 @@ private fun ImportSourceDialog(
     onChooseFile: () -> Unit,
     onImportUrl: (String) -> Unit,
     onConnectPlex: (String, String, String?, Boolean) -> Unit,
+    plexSignIn: PlexSignInUiState,
+    onStartPlexAccountSignIn: () -> Unit,
+    onCancelPlexAccountSignIn: () -> Unit,
+    onConnectDiscoveredPlexServer: (String, String, String, Boolean) -> Unit,
     onConnectEmby: (String, String, String, String?, Boolean) -> Unit,
     onPurchasePremium: () -> Unit,
     onRestorePremium: () -> Unit
@@ -1048,13 +1061,26 @@ private fun ImportSourceDialog(
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var allowInsecureHttp by remember { mutableStateOf(false) }
+    var showManualPlex by remember { mutableStateOf(false) }
+    var accountConnectSubmitted by remember { mutableStateOf(false) }
     val usesCleartextHttp = serverAddress.trim().startsWith("http://", ignoreCase = true)
     val canConnect = when (mode) {
         SourceImportMode.Playlist -> playlistUrl.isNotBlank()
-        SourceImportMode.Plex -> premiumAccess.canUseMediaCenters && serverAddress.isNotBlank() && plexToken.isNotBlank() &&
+        SourceImportMode.Plex -> showManualPlex && premiumAccess.canUseMediaCenters &&
+            serverAddress.isNotBlank() && plexToken.isNotBlank() &&
             (!usesCleartextHttp || allowInsecureHttp)
         SourceImportMode.Emby -> premiumAccess.canUseMediaCenters && serverAddress.isNotBlank() && username.isNotBlank() &&
             password.isNotEmpty() && (!usesCleartextHttp || allowInsecureHttp)
+    }
+
+    LaunchedEffect(mode) {
+        if (mode != SourceImportMode.Plex) onCancelPlexAccountSignIn()
+    }
+    LaunchedEffect(plexSignIn.phase) {
+        if (accountConnectSubmitted && plexSignIn.phase == PlexSignInPhase.Idle) onDismiss()
+    }
+    DisposableEffect(Unit) {
+        onDispose { onCancelPlexAccountSignIn() }
     }
 
     AlertDialog(
@@ -1164,8 +1190,35 @@ private fun ImportSourceDialog(
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedTextField(
+                    if (mode == SourceImportMode.Plex && !showManualPlex) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        PlexAccountConnectPanel(
+                            state = plexSignIn,
+                            enabled = premiumAccess.canUseMediaCenters,
+                            onStart = {
+                                accountConnectSubmitted = false
+                                onStartPlexAccountSignIn()
+                            },
+                            onCancel = onCancelPlexAccountSignIn,
+                            onConnect = { sessionId, serverId, connectionUrl, allowHttp ->
+                                accountConnectSubmitted = true
+                                onConnectDiscoveredPlexServer(sessionId, serverId, connectionUrl, allowHttp)
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedButton(
+                            onClick = {
+                                onCancelPlexAccountSignIn()
+                                showManualPlex = true
+                            },
+                            enabled = premiumAccess.canUseMediaCenters,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Advanced: connect with server token")
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
                         value = serverAddress,
                         onValueChange = {
                             serverAddress = it
@@ -1177,19 +1230,19 @@ private fun ImportSourceDialog(
                         leadingIcon = { Icon(Icons.Rounded.Tv, contentDescription = null) },
                         enabled = premiumAccess.canUseMediaCenters,
                         singleLine = true
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedTextField(
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
                         value = displayName,
                         onValueChange = { displayName = it },
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Server nickname (optional)") },
                         enabled = premiumAccess.canUseMediaCenters,
                         singleLine = true
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    if (mode == SourceImportMode.Plex) {
-                        OutlinedTextField(
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        if (mode == SourceImportMode.Plex) {
+                            OutlinedTextField(
                             value = plexToken,
                             onValueChange = { plexToken = it },
                             modifier = Modifier.fillMaxWidth(),
@@ -1197,24 +1250,24 @@ private fun ImportSourceDialog(
                             visualTransformation = PasswordVisualTransformation(),
                             enabled = premiumAccess.canUseMediaCenters,
                             singleLine = true
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "This checkpoint accepts a token for one Plex server. Plex account sign-in and automatic discovery are the next connection upgrade.",
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                            "Manual connection stores only this server-scoped token. Plex account sign-in remains the recommended option.",
                             color = StreamVueMuted,
                             fontSize = 9.sp
-                        )
-                    } else {
-                        OutlinedTextField(
+                            )
+                        } else {
+                            OutlinedTextField(
                             value = username,
                             onValueChange = { username = it },
                             modifier = Modifier.fillMaxWidth(),
                             label = { Text("Emby username") },
                             enabled = premiumAccess.canUseMediaCenters,
                             singleLine = true
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        OutlinedTextField(
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            OutlinedTextField(
                             value = password,
                             onValueChange = { password = it },
                             modifier = Modifier.fillMaxWidth(),
@@ -1222,10 +1275,10 @@ private fun ImportSourceDialog(
                             visualTransformation = PasswordVisualTransformation(),
                             enabled = premiumAccess.canUseMediaCenters,
                             singleLine = true
-                        )
-                    }
+                            )
+                        }
 
-                    if (usesCleartextHttp) {
+                        if (usesCleartextHttp) {
                         Spacer(modifier = Modifier.height(14.dp))
                         HorizontalDivider(color = StreamVueBorder)
                         Row(
@@ -1251,19 +1304,32 @@ private fun ImportSourceDialog(
                                 enabled = premiumAccess.canUseMediaCenters
                             )
                         }
-                    }
+                        }
 
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Text(
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
                         "The server is verified before credentials are sent. Tokens are encrypted by Android Keystore and never written into the saved library.",
                         color = StreamVueMuted,
                         fontSize = 9.sp
-                    )
+                        )
+                        if (mode == SourceImportMode.Plex) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            TextButton(
+                                onClick = {
+                                    showManualPlex = false
+                                    accountConnectSubmitted = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Use Plex account sign-in")
+                            }
+                        }
+                    }
                 }
             }
         },
         confirmButton = {
-            Button(
+            if (mode != SourceImportMode.Plex || showManualPlex) Button(
                 onClick = {
                     val name = displayName.trim().takeIf(String::isNotEmpty)
                     when (mode) {

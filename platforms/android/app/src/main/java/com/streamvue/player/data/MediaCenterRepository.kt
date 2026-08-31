@@ -17,11 +17,7 @@ import java.util.UUID
 class MediaCenterRepository internal constructor(
     private val context: Context,
     private val gson: Gson = GsonBuilder().disableHtmlEscaping().create(),
-    private val service: MediaCenterService = MediaCenterService(
-        transport = UrlConnectionMediaCenterTransport(),
-        credentialVault = AndroidKeystoreCredentialVault(context, gson),
-        device = deviceIdentity(context)
-    ),
+    private val service: MediaCenterService = defaultService(context, gson),
     private val premiumAccess: PremiumAccessSnapshot = PremiumAccessPolicy.current(),
     private val premiumAccessProvider: (() -> PremiumAccessSnapshot)? = null
 ) {
@@ -67,6 +63,51 @@ class MediaCenterRepository internal constructor(
         val previous = runCatching { currentSnapshot()?.connection }.getOrNull()
         val connection = service.connectPlex(serverAddress, token, displayName, allowInsecureHttp)
         activate(connection, previous, "Plex library connected")
+    }
+
+    suspend fun createPlexSignInChallenge(): PlexPinChallenge = withContext(Dispatchers.IO) {
+        currentPremiumAccess().requireMediaCenters()
+        service.createPlexSignInChallenge().also {
+            currentPremiumAccess().requireMediaCenters()
+        }
+    }
+
+    suspend fun completePlexSignIn(challenge: PlexPinChallenge): PlexServerDiscovery? =
+        withContext(Dispatchers.IO) {
+            currentPremiumAccess().requireMediaCenters()
+            val discovery = service.completePlexSignIn(challenge)
+            if (!currentPremiumAccess().canUseMediaCenters) {
+                discovery?.let { service.cancelPlexDiscovery(it.sessionId) }
+                currentPremiumAccess().requireMediaCenters()
+            }
+            discovery
+        }
+
+    suspend fun connectDiscoveredPlexServer(
+        sessionId: String,
+        serverId: String,
+        connectionUrl: String,
+        allowInsecureHttp: Boolean = false
+    ): LoadedCatalog = withContext(Dispatchers.IO) {
+        currentPremiumAccess().requireMediaCenters()
+        val previous = runCatching { currentSnapshot()?.connection }.getOrNull()
+        val connection = service.connectDiscoveredPlexServer(
+            sessionId = sessionId,
+            serverId = serverId,
+            connectionUrl = connectionUrl,
+            allowInsecureHttp = allowInsecureHttp
+        )
+        try {
+            currentPremiumAccess().requireMediaCenters()
+            activate(connection, previous, "Plex account server connected")
+        } catch (error: Throwable) {
+            runCatching { service.disconnect(connection) }
+            throw error
+        }
+    }
+
+    suspend fun cancelPlexDiscovery(sessionId: String) = withContext(Dispatchers.IO) {
+        service.cancelPlexDiscovery(sessionId)
     }
 
     suspend fun connectEmby(
@@ -143,7 +184,10 @@ class MediaCenterRepository internal constructor(
         notice: String
     ): LoadedCatalog {
         return runCatching {
-            service.snapshot(connection).also(::persist)
+            val snapshot = service.snapshot(connection)
+            currentPremiumAccess().requireMediaCenters()
+            persist(snapshot)
+            snapshot
         }.fold(
             onSuccess = { snapshot ->
                 cachedSnapshot = snapshot
@@ -317,6 +361,22 @@ class MediaCenterRepository internal constructor(
                 device = "Android",
                 deviceId = id,
                 version = "5.1.0"
+            )
+        }
+
+        fun defaultService(context: Context, gson: Gson): MediaCenterService {
+            val device = deviceIdentity(context)
+            return MediaCenterService(
+                transport = UrlConnectionMediaCenterTransport(),
+                credentialVault = AndroidKeystoreCredentialVault(context, gson),
+                device = device,
+                gson = gson,
+                plexAccountClient = PlexAccountClient(
+                    transport = UrlConnectionMediaCenterTransport(),
+                    signer = AndroidPlexDeviceSigner(context, gson),
+                    device = device,
+                    gson = gson
+                )
             )
         }
     }

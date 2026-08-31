@@ -11,6 +11,8 @@ coroutines = "1.11.0"
 junit = "4.13.2"
 gson = "2.14.0"
 play-billing = "9.1.0"
+tink = "1.23.0"
+zxing = "3.5.4"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
@@ -34,6 +36,8 @@ kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutine
 junit = { module = "junit:junit", version.ref = "junit" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 google-play-billing = { module = "com.android.billingclient:billing", version.ref = "play-billing" }
+tink-android = { module = "com.google.crypto.tink:tink-android", version.ref = "tink" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

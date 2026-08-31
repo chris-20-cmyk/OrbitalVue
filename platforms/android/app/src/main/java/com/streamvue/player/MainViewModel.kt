@@ -10,18 +10,34 @@ import com.streamvue.player.data.Channel
 import com.streamvue.player.data.LoadedCatalog
 import com.streamvue.player.data.MediaCenterRepository
 import com.streamvue.player.data.PlaylistRepository
+import com.streamvue.player.data.PlexPinChallenge
+import com.streamvue.player.data.PlexServerDiscovery
 import com.streamvue.player.premium.PremiumBillingState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.net.URI
+import java.time.Instant
 import java.util.Locale
 
 data class GroupSummary(val name: String, val count: Int)
 data class ChannelSection(val name: String, val channels: List<Channel>)
+
+enum class PlexSignInPhase { Idle, Preparing, Waiting, Ready, Connecting, Failed }
+
+data class PlexSignInUiState(
+    val phase: PlexSignInPhase = PlexSignInPhase.Idle,
+    val challenge: PlexPinChallenge? = null,
+    val discovery: PlexServerDiscovery? = null,
+    val error: String? = null
+)
 
 data class AppUiState(
     val isLoading: Boolean = true,
@@ -36,6 +52,7 @@ data class AppUiState(
     val playbackChannel: Channel? = null,
     val isResolvingPlayback: Boolean = false,
     val premiumBilling: PremiumBillingState = PremiumBillingState.initial(),
+    val plexSignIn: PlexSignInUiState = PlexSignInUiState(),
     val notice: String? = null,
     val error: String? = null
 ) {
@@ -55,6 +72,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         Context.MODE_PRIVATE
     )
     private var playbackResolutionJob: Job? = null
+    private var plexSignInJob: Job? = null
     val state: StateFlow<AppUiState> = mutableState.asStateFlow()
 
     private val premiumAccess
@@ -96,6 +114,87 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 displayName = displayName,
                 allowInsecureHttp = allowInsecureHttp
             )
+        }
+    }
+
+    fun startPlexAccountSignIn() {
+        if (!requireMediaCenterAccess()) return
+        val previousSession = mutableState.value.plexSignIn.discovery?.sessionId
+        plexSignInJob?.cancel()
+        plexSignInJob = viewModelScope.launch {
+            previousSession?.let { mediaCenterRepository.cancelPlexDiscovery(it) }
+            mutableState.update {
+                it.copy(plexSignIn = PlexSignInUiState(PlexSignInPhase.Preparing))
+            }
+            try {
+                val challenge = mediaCenterRepository.createPlexSignInChallenge()
+                mutableState.update {
+                    it.copy(
+                        plexSignIn = PlexSignInUiState(
+                            phase = PlexSignInPhase.Waiting,
+                            challenge = challenge
+                        )
+                    )
+                }
+                pollPlexSignIn(challenge)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                showPlexSignInFailure()
+            }
+        }
+    }
+
+    fun cancelPlexAccountSignIn() {
+        val sessionId = mutableState.value.plexSignIn.discovery?.sessionId
+        plexSignInJob?.cancel()
+        plexSignInJob = null
+        mutableState.update { it.copy(plexSignIn = PlexSignInUiState()) }
+        sessionId?.let { id ->
+            viewModelScope.launch { mediaCenterRepository.cancelPlexDiscovery(id) }
+        }
+    }
+
+    fun connectDiscoveredPlexServer(
+        sessionId: String,
+        serverId: String,
+        connectionUrl: String,
+        allowInsecureHttp: Boolean
+    ) {
+        if (!requireMediaCenterAccess()) return
+        val discovery = mutableState.value.plexSignIn.discovery
+        if (discovery?.sessionId != sessionId) {
+            showPlexSignInFailure()
+            return
+        }
+        plexSignInJob?.cancel()
+        plexSignInJob = viewModelScope.launch {
+            mutableState.update { current ->
+                current.copy(
+                    isLoading = true,
+                    loadingLabel = "Connecting your Plex server…",
+                    error = null,
+                    plexSignIn = current.plexSignIn.copy(phase = PlexSignInPhase.Connecting, error = null)
+                )
+            }
+            try {
+                val loaded = mediaCenterRepository.connectDiscoveredPlexServer(
+                    sessionId = sessionId,
+                    serverId = serverId,
+                    connectionUrl = connectionUrl,
+                    allowInsecureHttp = allowInsecureHttp
+                )
+                activeSource = ActiveSource.MediaCenter
+                applyLoaded(loaded)
+            } catch (cancelled: CancellationException) {
+                mutableState.update {
+                    it.copy(isLoading = false, loadingLabel = "", plexSignIn = PlexSignInUiState())
+                }
+                throw cancelled
+            } catch (error: Throwable) {
+                showFailure(error)
+                showPlexSignInFailure()
+            }
         }
     }
 
@@ -203,6 +302,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updatePremiumBilling(billing: PremiumBillingState) {
         val previousAccess = mutableState.value.premiumBilling.access
+        val revokedPlexSession = if (previousAccess.canUseMediaCenters &&
+            !billing.access.canUseMediaCenters) {
+            plexSignInJob?.cancel()
+            mutableState.value.plexSignIn.discovery?.sessionId
+        } else {
+            null
+        }
         mutableState.update { current ->
             if (current.premiumBilling == billing) return@update current
             if (current.premiumBilling.access.canUseMediaCenters &&
@@ -218,12 +324,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     playbackChannel = null,
                     isResolvingPlayback = false,
                     premiumBilling = billing,
+                    plexSignIn = PlexSignInUiState(),
                     notice = null,
                     error = "Premium media-center access is no longer verified. Playlist sources remain available."
                 )
+            } else if (previousAccess.canUseMediaCenters && !billing.access.canUseMediaCenters) {
+                current.copy(premiumBilling = billing, plexSignIn = PlexSignInUiState())
             } else {
                 current.copy(premiumBilling = billing)
             }
+        }
+        revokedPlexSession?.let { sessionId ->
+            viewModelScope.launch { mediaCenterRepository.cancelPlexDiscovery(sessionId) }
         }
         if (!previousAccess.canUseMediaCenters && billing.access.canUseMediaCenters &&
             activeSource == ActiveSource.MediaCenter && mutableState.value.catalog == null) {
@@ -286,6 +398,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             selectedChannel = selectedChannel,
             playbackChannel = selectedChannel?.takeUnless { it.isProtectedMediaLocator },
             isResolvingPlayback = false,
+            plexSignIn = PlexSignInUiState(),
             notice = loaded.notice,
             error = null
         )
@@ -299,6 +412,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 loadingLabel = "",
                 isResolvingPlayback = false,
                 error = error.message ?: "StreamVue could not load that source."
+            )
+        }
+    }
+
+    private suspend fun pollPlexSignIn(challenge: PlexPinChallenge) {
+        var consecutiveFailures = 0
+        while (currentCoroutineContext().isActive && Instant.now().isBefore(challenge.expiresAt)) {
+            try {
+                val discovery = mediaCenterRepository.completePlexSignIn(challenge)
+                if (discovery != null) {
+                    if (!premiumAccess.canUseMediaCenters) {
+                        mediaCenterRepository.cancelPlexDiscovery(discovery.sessionId)
+                        premiumAccess.requireMediaCenters()
+                    }
+                    mutableState.update {
+                        it.copy(
+                            plexSignIn = PlexSignInUiState(
+                                phase = PlexSignInPhase.Ready,
+                                discovery = discovery
+                            )
+                        )
+                    }
+                    return
+                }
+                consecutiveFailures = 0
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                consecutiveFailures += 1
+                if (consecutiveFailures >= 3) {
+                    showPlexSignInFailure()
+                    return
+                }
+            }
+            delay(PLEX_PIN_POLL_INTERVAL_MS)
+        }
+        if (currentCoroutineContext().isActive) {
+            mutableState.update {
+                it.copy(
+                    plexSignIn = PlexSignInUiState(
+                        phase = PlexSignInPhase.Failed,
+                        error = "The Plex sign-in request expired. Start a new sign-in."
+                    )
+                )
+            }
+        }
+    }
+
+    private fun showPlexSignInFailure() {
+        mutableState.update {
+            it.copy(
+                isLoading = false,
+                loadingLabel = "",
+                plexSignIn = PlexSignInUiState(
+                    phase = PlexSignInPhase.Failed,
+                    error = "Plex sign-in could not be completed. Check the connection and try again."
+                )
             )
         }
     }
@@ -373,5 +543,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val KEY_ACTIVE_SOURCE = "active_source"
+        const val PLEX_PIN_POLL_INTERVAL_MS = 2_000L
     }
 }
