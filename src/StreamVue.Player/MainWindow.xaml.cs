@@ -89,6 +89,9 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _updateCancellation;
     private CancellationTokenSource? _guideCancellation;
     private CancellationTokenSource? _mediaPlaybackCancellation;
+    private CancellationTokenSource? _plexAccountCancellation;
+    private PlexPinChallenge? _plexAccountChallenge;
+    private PlexServerDiscovery? _plexAccountDiscovery;
     private ChannelItem? _currentChannel;
     private ChannelItem? _activeSignalFeed;
     private ChannelItem? _previousChannel;
@@ -259,6 +262,7 @@ public partial class MainWindow : Window
             EmbyConnectButton.Content = "Connect Emby";
             PlexConnectButton.Opacity = 1;
             EmbyConnectButton.Opacity = 1;
+            PlexAccountPanel.IsEnabled = true;
             foreach (var control in MediaCenterCredentialControls()) control.IsEnabled = true;
             PlexConnectButton.IsEnabled = true;
             EmbyConnectButton.IsEnabled = true;
@@ -274,6 +278,8 @@ public partial class MainWindow : Window
         EmbyConnectButton.IsEnabled = false;
         PlexConnectButton.Opacity = 0.48;
         EmbyConnectButton.Opacity = 0.48;
+        CancelPlexAccountSignInCore(lockedMessage);
+        PlexAccountPanel.IsEnabled = false;
         foreach (var control in MediaCenterCredentialControls()) control.IsEnabled = false;
     }
 
@@ -303,6 +309,7 @@ public partial class MainWindow : Window
             return;
         }
         if (!previous.CanUseMediaCenters || state.Access.CanUseMediaCenters) return;
+        CancelPlexAccountSignInCore("Premium access is no longer verified. Plex account sign-in was canceled.");
         if (_currentChannel?.IsProtectedMedia == true)
         {
             CancelMediaPlaybackResolution(clearResume: true);
@@ -4780,6 +4787,191 @@ public partial class MainWindow : Window
         if (loaded) PlexTokenBox.Clear();
     }
 
+    private async void StartPlexAccountSignIn_Click(object sender, RoutedEventArgs e)
+    {
+        if (!EnsureMediaCenterAccess("Plex")) return;
+        CancelPlexAccountSignInCore(
+            "Preparing a signed Plex approval request. Your account token will remain outside this screen.");
+        var cancellation = new CancellationTokenSource();
+        _plexAccountCancellation = cancellation;
+        PlexAccountSignInButton.IsEnabled = false;
+        PlexAccountProgress.Visibility = Visibility.Visible;
+        PlexAccountCancelButton.Visibility = Visibility.Visible;
+        try
+        {
+            var challenge = await _mediaCenterSource.StartPlexAccountSignInAsync(cancellation.Token);
+            if (!ReferenceEquals(_plexAccountCancellation, cancellation)) return;
+            _plexAccountChallenge = challenge;
+            PlexAccountStatusText.Text =
+                $"Approval code {challenge.Code} is ready. Complete approval in Plex; StreamVue will detect it automatically.";
+            PlexAccountOpenButton.Visibility = Visibility.Visible;
+            OpenPlexAccountApproval(challenge);
+
+            var progress = new Progress<PlaylistProgress>(value =>
+            {
+                PlexAccountStatusText.Text = value.Message;
+                FooterStatusText.Text = value.Message;
+            });
+            var discovery = await _mediaCenterSource.WaitForPlexAccountServersAsync(
+                challenge,
+                progress,
+                cancellation.Token);
+            if (!ReferenceEquals(_plexAccountCancellation, cancellation))
+            {
+                _mediaCenterSource.CancelPlexAccountDiscovery(discovery.SessionId);
+                return;
+            }
+            _plexAccountDiscovery = discovery;
+            PlexAccountServerBox.ItemsSource = discovery.Servers;
+            PlexAccountServerBox.SelectedIndex = 0;
+            PlexAccountPicker.Visibility = Visibility.Visible;
+            PlexAccountStatusText.Text =
+                $"Plex approved StreamVue and returned {discovery.Servers.Count:N0} server(s). Choose the connection to keep on this PC.";
+            PlexAccountSignInButton.Content = "Use another Plex account";
+            PlexAccountSignInButton.IsEnabled = true;
+            PlexAccountOpenButton.Visibility = Visibility.Collapsed;
+            PlexAccountCancelButton.Visibility = Visibility.Collapsed;
+            FooterStatusDot.Fill = LiveBrush;
+            FooterStatusText.Text = "Plex account approved • choose a server";
+        }
+        catch (OperationCanceledException)
+        {
+            if (ReferenceEquals(_plexAccountCancellation, cancellation))
+                CancelPlexAccountSignInCore("Plex account sign-in was canceled.");
+        }
+        catch (Exception exception)
+        {
+            if (ReferenceEquals(_plexAccountCancellation, cancellation))
+            {
+                CancelPlexAccountSignInCore(SafeErrorMessage(exception));
+                FooterStatusDot.Fill = ErrorBrush;
+                FooterStatusText.Text = "Plex account sign-in needs attention";
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_plexAccountCancellation, cancellation))
+            {
+                _plexAccountCancellation = null;
+                PlexAccountProgress.Visibility = Visibility.Collapsed;
+                if (_plexAccountDiscovery is null)
+                {
+                    PlexAccountSignInButton.IsEnabled = _premiumAccess.CanUseMediaCenters;
+                    PlexAccountCancelButton.Visibility = Visibility.Collapsed;
+                }
+            }
+            cancellation.Dispose();
+        }
+    }
+
+    private void OpenPlexAccountApproval_Click(object sender, RoutedEventArgs e)
+    {
+        if (_plexAccountChallenge is { } challenge) OpenPlexAccountApproval(challenge);
+    }
+
+    private void OpenPlexAccountApproval(PlexPinChallenge challenge)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(challenge.AuthorizationUrl) { UseShellExecute = true });
+        }
+        catch (Exception exception)
+        {
+            PlexAccountStatusText.Text =
+                $"Windows could not open the browser. Copy this approval address manually: {challenge.AuthorizationUrl}\n{SafeErrorMessage(exception)}";
+        }
+    }
+
+    private void CancelPlexAccountSignIn_Click(object sender, RoutedEventArgs e) =>
+        CancelPlexAccountSignInCore("Plex account sign-in was canceled.");
+
+    private void PlexAccountServer_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (PlexAccountServerBox.SelectedItem is not PlexDiscoveredServer server)
+        {
+            PlexAccountConnectionBox.ItemsSource = null;
+            PlexAccountLocationText.Text = string.Empty;
+            return;
+        }
+        PlexAccountConnectionBox.ItemsSource = server.Connections;
+        PlexAccountConnectionBox.SelectedIndex = 0;
+    }
+
+    private void PlexAccountConnection_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (PlexAccountConnectionBox.SelectedItem is not PlexServerConnectionChoice connection)
+        {
+            PlexAccountLocationText.Text = string.Empty;
+            PlexAccountAllowHttpBox.Visibility = Visibility.Collapsed;
+            return;
+        }
+        PlexAccountLocationText.Text = connection.DisplayLocation;
+        PlexAccountAllowHttpBox.IsChecked = false;
+        PlexAccountAllowHttpBox.Visibility = connection.IsSecure ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private async void ConnectPlexAccount_Click(object sender, RoutedEventArgs e)
+    {
+        if (!EnsureMediaCenterAccess("Plex")) return;
+        if (_plexAccountDiscovery is not { } discovery ||
+            PlexAccountServerBox.SelectedItem is not PlexDiscoveredServer server ||
+            PlexAccountConnectionBox.SelectedItem is not PlexServerConnectionChoice connection)
+        {
+            PlexAccountStatusText.Text = "Choose a discovered Plex server and connection.";
+            return;
+        }
+        if (!connection.IsSecure && PlexAccountAllowHttpBox.IsChecked != true)
+        {
+            PlexAccountStatusText.Text =
+                "This address uses HTTP. Confirm the trusted local-network warning before StreamVue can send the server token.";
+            return;
+        }
+
+        PlexAccountConnectButton.IsEnabled = false;
+        PlexAccountProgress.Visibility = Visibility.Visible;
+        PlexAccountStatusText.Text = "Verifying the selected server before saving its protected credential…";
+        var loaded = await LoadPlaylistAsync(
+            (progress, token) => _mediaCenterSource.ConnectDiscoveredPlexServerAsync(
+                discovery.SessionId,
+                server.ServerId,
+                connection.Url,
+                PlexAccountAllowHttpBox.IsChecked == true,
+                progress,
+                token),
+            "plex",
+            connection.Url);
+        PlexAccountConnectButton.IsEnabled = true;
+        PlexAccountProgress.Visibility = Visibility.Collapsed;
+        if (loaded)
+        {
+            PlexServerBox.Text = connection.Url;
+            CancelPlexAccountSignInCore(
+                $"{server.Name} is connected. Its server token is protected for this Windows user.");
+            return;
+        }
+        CancelPlexAccountSignInCore("The server selection could not be activated. Sign in with Plex again to retry.");
+    }
+
+    private void CancelPlexAccountSignInCore(string status)
+    {
+        _plexAccountCancellation?.Cancel();
+        _plexAccountCancellation?.Dispose();
+        _plexAccountCancellation = null;
+        if (_plexAccountDiscovery is { } discovery)
+            _mediaCenterSource.CancelPlexAccountDiscovery(discovery.SessionId);
+        _plexAccountChallenge = null;
+        _plexAccountDiscovery = null;
+        PlexAccountServerBox.ItemsSource = null;
+        PlexAccountConnectionBox.ItemsSource = null;
+        PlexAccountPicker.Visibility = Visibility.Collapsed;
+        PlexAccountProgress.Visibility = Visibility.Collapsed;
+        PlexAccountOpenButton.Visibility = Visibility.Collapsed;
+        PlexAccountCancelButton.Visibility = Visibility.Collapsed;
+        PlexAccountSignInButton.Content = "Sign in with Plex";
+        PlexAccountSignInButton.IsEnabled = _premiumAccess.CanUseMediaCenters;
+        PlexAccountStatusText.Text = status;
+    }
+
     private async void LoadEmby_Click(object sender, RoutedEventArgs e)
     {
         if (!EnsureMediaCenterAccess("Emby")) return;
@@ -7731,6 +7923,7 @@ public partial class MainWindow : Window
         _updateCancellation?.Cancel();
         CancelMediaPlaybackResolution(clearResume: true);
         _guideCancellation?.Cancel();
+        CancelPlexAccountSignInCore("Plex account sign-in was canceled because StreamVue is closing.");
         _displayRefreshRate?.Dispose();
         VideoSurface.MediaPlayer = null;
         MultiviewTiles.ItemsSource = null;

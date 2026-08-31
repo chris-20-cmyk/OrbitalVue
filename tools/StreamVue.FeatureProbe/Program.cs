@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
 using LibVLCSharp.Shared;
+using NSec.Cryptography;
 using StreamVue.Player.Models;
 using StreamVue.Player.Playback;
 using StreamVue.Player.Services;
@@ -1657,6 +1658,198 @@ static async Task RunMediaCenterSelfTestAsync(string testRoot)
     var reloadedEmby = await service.LoadSavedAsync("emby", embyBaseUrl);
     if (reloadedPlex.Channels.Count != 1 || reloadedEmby.Channels.Count != 1)
         throw new InvalidOperationException("Saved media-center credentials could not refresh their catalogs.");
+
+    await RunPlexAccountDiscoverySelfTestAsync(testRoot, plexToken, embyPassword, embyToken);
+}
+
+static async Task RunPlexAccountDiscoverySelfTestAsync(
+    string testRoot,
+    string plexToken,
+    string embyPassword,
+    string embyToken)
+{
+    const string accountToken = "plex-probe-account-token";
+    const string secureConnection = "https://plex.local:32400";
+    const string insecureConnection = "http://plex.local:32400";
+
+    var lockedHandler = new MediaCenterProbeHandler(plexToken, embyPassword, embyToken, accountToken);
+    var lockedService = new MediaCenterSourceService(
+        new MediaCenterCredentialStore(Path.Combine(testRoot, "locked-plex-account-credentials.bin")),
+        new HttpClient(lockedHandler),
+        "streamvue-locked-plex-account-probe",
+        PremiumAccessPolicy.Evaluate("store", hasVerifiedStorePurchase: false),
+        plexIdentityStore: new PlexDeviceIdentityStore(Path.Combine(testRoot, "locked-plex-device.bin")));
+    try
+    {
+        await lockedService.StartPlexAccountSignInAsync();
+        throw new InvalidOperationException("A locked Windows Store service started Plex account discovery.");
+    }
+    catch (InvalidOperationException exception) when (
+        exception.Message.Contains("one-time store purchase", StringComparison.OrdinalIgnoreCase))
+    {
+    }
+    if (lockedHandler.Requests.Count != 0)
+        throw new InvalidOperationException("Locked Plex account discovery reached the network.");
+
+    var identityPath = Path.Combine(testRoot, "plex-account-device-identity.bin");
+    var credentialPath = Path.Combine(testRoot, "plex-account-credentials.bin");
+    var handler = new MediaCenterProbeHandler(plexToken, embyPassword, embyToken, accountToken);
+    var service = new MediaCenterSourceService(
+        new MediaCenterCredentialStore(credentialPath),
+        new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) },
+        "streamvue-plex-account-probe",
+        plexIdentityStore: new PlexDeviceIdentityStore(identityPath));
+
+    var challenge = await service.StartPlexAccountSignInAsync();
+    if (!challenge.AuthorizationUrl.StartsWith("https://app.plex.tv/auth#?", StringComparison.Ordinal) ||
+        challenge.Code != "SVUE-700" ||
+        handler.PlexPublicJwk is null ||
+        handler.PlexPublicJwk.ContainsKey("d"))
+        throw new InvalidOperationException("Windows Plex sign-in did not create a strong public-key PIN challenge.");
+    var identityText = Encoding.UTF8.GetString(await File.ReadAllBytesAsync(identityPath));
+    if (identityText.Contains("Ed25519", StringComparison.Ordinal) ||
+        identityText.Contains("streamvue-plex-account-probe", StringComparison.Ordinal) ||
+        handler.PlexPublicJwk.Values.Any(value => identityText.Contains(value, StringComparison.Ordinal)))
+        throw new InvalidOperationException("The DPAPI Plex device identity exposed clear signing material.");
+
+    var discovery = await service.WaitForPlexAccountServersAsync(challenge);
+    if (!handler.PlexDeviceProofVerified ||
+        discovery.Servers is not [var server] ||
+        server.ServerId != "plex-server-1" ||
+        server.Connections.Count != 2 ||
+        server.PreferredConnection?.Url != secureConnection)
+        throw new InvalidOperationException("Signed Plex account discovery did not return the expected token-free server choices.");
+    var serializedDiscovery = JsonSerializer.Serialize(discovery);
+    if (serializedDiscovery.Contains(accountToken, StringComparison.Ordinal) ||
+        serializedDiscovery.Contains(plexToken, StringComparison.Ordinal))
+        throw new InvalidOperationException("Plex account discovery exposed an account or server token.");
+
+    try
+    {
+        await service.ConnectDiscoveredPlexServerAsync(
+            discovery.SessionId,
+            server.ServerId,
+            "https://attacker.invalid:32400",
+            allowInsecureHttp: false);
+        throw new InvalidOperationException("Plex account discovery accepted an unlisted server address.");
+    }
+    catch (InvalidDataException)
+    {
+    }
+    try
+    {
+        await service.ConnectDiscoveredPlexServerAsync(
+            discovery.SessionId,
+            server.ServerId,
+            insecureConnection,
+            allowInsecureHttp: false);
+        throw new InvalidOperationException("Plex account discovery accepted HTTP without explicit consent.");
+    }
+    catch (ArgumentException)
+    {
+    }
+    var playlist = await service.ConnectDiscoveredPlexServerAsync(
+        discovery.SessionId,
+        server.ServerId,
+        secureConnection,
+        allowInsecureHttp: false);
+    if (playlist.Channels.Count != 1)
+        throw new InvalidOperationException("The selected Plex account server did not load its catalog.");
+    var saved = await new MediaCenterCredentialStore(credentialPath)
+        .TryLoadForSourceAsync("plex", secureConnection);
+    if (saved?.AccessToken != plexToken || saved.Binding.ServerId != "plex-server-1")
+        throw new InvalidOperationException("The discovered Plex credential was not bound after public identity verification.");
+
+    var mismatchHandler = new MediaCenterProbeHandler(plexToken, embyPassword, embyToken, accountToken)
+    {
+        PlexIdentityServerId = "changed-plex-server"
+    };
+    var mismatchCredentialPath = Path.Combine(testRoot, "mismatched-plex-account-credentials.bin");
+    var mismatchService = new MediaCenterSourceService(
+        new MediaCenterCredentialStore(mismatchCredentialPath),
+        new HttpClient(mismatchHandler),
+        "streamvue-mismatched-plex-account-probe",
+        plexIdentityStore: new PlexDeviceIdentityStore(Path.Combine(testRoot, "mismatched-plex-device.bin")));
+    var mismatchChallenge = await mismatchService.StartPlexAccountSignInAsync();
+    var mismatchDiscovery = await mismatchService.WaitForPlexAccountServersAsync(mismatchChallenge);
+    try
+    {
+        await mismatchService.ConnectDiscoveredPlexServerAsync(
+            mismatchDiscovery.SessionId,
+            "plex-server-1",
+            secureConnection,
+            allowInsecureHttp: false);
+        throw new InvalidOperationException("A changed Plex server identity was accepted.");
+    }
+    catch (InvalidDataException)
+    {
+    }
+    if (File.Exists(mismatchCredentialPath))
+        throw new InvalidOperationException("A changed Plex server identity wrote a credential.");
+
+    var cancellationChallenge = await mismatchService.StartPlexAccountSignInAsync();
+    var cancellationDiscovery = await mismatchService.WaitForPlexAccountServersAsync(cancellationChallenge);
+    mismatchService.CancelPlexAccountDiscovery(cancellationDiscovery.SessionId);
+    try
+    {
+        await mismatchService.ConnectDiscoveredPlexServerAsync(
+            cancellationDiscovery.SessionId,
+            "plex-server-1",
+            secureConnection,
+            allowInsecureHttp: false);
+        throw new InvalidOperationException("A cancelled Plex discovery lease remained usable.");
+    }
+    catch (InvalidOperationException exception) when (
+        exception.Message.Contains("expired", StringComparison.OrdinalIgnoreCase))
+    {
+    }
+
+    var runtimeAccess = PremiumAccessPolicy.Evaluate(
+        "store",
+        hasVerifiedStorePurchase: true,
+        productId: "com.streamvue.personal-media-centers");
+    var revocationHandler = new MediaCenterProbeHandler(plexToken, embyPassword, embyToken, accountToken);
+    var revocationService = new MediaCenterSourceService(
+        new MediaCenterCredentialStore(Path.Combine(testRoot, "revoked-plex-account-credentials.bin")),
+        new HttpClient(revocationHandler),
+        "streamvue-revoked-plex-account-probe",
+        premiumAccessProvider: () => runtimeAccess,
+        plexIdentityStore: new PlexDeviceIdentityStore(Path.Combine(testRoot, "revoked-plex-device.bin")));
+    var revocationChallenge = await revocationService.StartPlexAccountSignInAsync();
+    var revocationDiscovery = await revocationService.WaitForPlexAccountServersAsync(revocationChallenge);
+    runtimeAccess = PremiumAccessPolicy.Evaluate("store", hasVerifiedStorePurchase: false);
+    try
+    {
+        await revocationService.ConnectDiscoveredPlexServerAsync(
+            revocationDiscovery.SessionId,
+            "plex-server-1",
+            secureConnection,
+            allowInsecureHttp: false);
+        throw new InvalidOperationException("A revoked premium entitlement retained Plex discovery access.");
+    }
+    catch (InvalidOperationException exception) when (
+        exception.Message.Contains("one-time store purchase", StringComparison.OrdinalIgnoreCase))
+    {
+    }
+    runtimeAccess = PremiumAccessPolicy.Evaluate(
+        "store",
+        hasVerifiedStorePurchase: true,
+        productId: "com.streamvue.personal-media-centers");
+    try
+    {
+        await revocationService.ConnectDiscoveredPlexServerAsync(
+            revocationDiscovery.SessionId,
+            "plex-server-1",
+            secureConnection,
+            allowInsecureHttp: false);
+        throw new InvalidOperationException("A Plex discovery lease survived entitlement revocation.");
+    }
+    catch (InvalidOperationException exception) when (
+        exception.Message.Contains("expired", StringComparison.OrdinalIgnoreCase))
+    {
+    }
+
+    Console.WriteLine("Signed Plex account discovery, protected device identity, and revocable server lease: PASS");
 }
 
 static async Task<int> RunDvrSelfTestAsync()
@@ -1817,9 +2010,13 @@ sealed record MediaCenterProbeRequest(
 sealed class MediaCenterProbeHandler(
     string plexToken,
     string embyPassword,
-    string embyToken) : HttpMessageHandler
+    string embyToken,
+    string plexAccountToken = "plex-probe-account-token") : HttpMessageHandler
 {
     public List<MediaCenterProbeRequest> Requests { get; } = [];
+    public IReadOnlyDictionary<string, string>? PlexPublicJwk { get; private set; }
+    public bool PlexDeviceProofVerified { get; private set; }
+    public string PlexIdentityServerId { get; init; } = "plex-server-1";
 
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
@@ -1848,6 +2045,8 @@ sealed class MediaCenterProbeHandler(
         {
             "plex.local" => PlexResponse(request, uri, headers),
             "emby.local" => EmbyResponse(request, uri, headers, body),
+            "clients.plex.tv" => PlexClientsResponse(request, uri, headers, body),
+            "plex.tv" => PlexAccountResponse(request, uri, headers),
             _ => null
         };
         if (json is null)
@@ -1872,9 +2071,15 @@ sealed class MediaCenterProbeHandler(
         {
             if (headers.ContainsKey("X-Plex-Token"))
                 throw new InvalidOperationException("The Plex identity probe received a token.");
-            return """
-                   {"MediaContainer":{"machineIdentifier":"plex-server-1","friendlyName":"Probe Plex Server","version":"1.42.0"}}
-                   """;
+            return JsonSerializer.Serialize(new
+            {
+                MediaContainer = new
+                {
+                    machineIdentifier = PlexIdentityServerId,
+                    friendlyName = "Probe Plex Server",
+                    version = "1.42.0"
+                }
+            });
         }
         RequireHeader(headers, "X-Plex-Token", plexToken);
         return uri.AbsolutePath switch
@@ -1890,6 +2095,124 @@ sealed class MediaCenterProbeHandler(
                                        """,
             _ => null
         };
+    }
+
+    private string? PlexClientsResponse(
+        HttpRequestMessage request,
+        Uri uri,
+        IReadOnlyDictionary<string, string> headers,
+        string? body)
+    {
+        if (request.Method == HttpMethod.Post && uri.AbsolutePath == "/api/v2/pins")
+        {
+            using var document = JsonDocument.Parse(body ?? throw new InvalidOperationException("The Plex PIN request had no body."));
+            var root = document.RootElement;
+            if (!root.TryGetProperty("strong", out var strong) || strong.ValueKind != JsonValueKind.True ||
+                !root.TryGetProperty("jwk", out var jwk) || jwk.ValueKind != JsonValueKind.Object)
+                throw new InvalidOperationException("The Windows Plex PIN request was not strong-signed.");
+            var publicJwk = jwk.EnumerateObject().ToDictionary(
+                property => property.Name,
+                property => property.Value.GetString() ?? string.Empty,
+                StringComparer.Ordinal);
+            if (publicJwk.ContainsKey("d") ||
+                publicJwk.GetValueOrDefault("kty") != "OKP" ||
+                publicJwk.GetValueOrDefault("crv") != "Ed25519" ||
+                publicJwk.GetValueOrDefault("alg") != "EdDSA" ||
+                string.IsNullOrWhiteSpace(publicJwk.GetValueOrDefault("x")) ||
+                string.IsNullOrWhiteSpace(publicJwk.GetValueOrDefault("kid")))
+                throw new InvalidOperationException("The Windows Plex PIN request exposed an invalid public JWK.");
+            PlexPublicJwk = publicJwk;
+            return """
+                   {"id":700,"code":"SVUE-700","expiresIn":300}
+                   """;
+        }
+        if (request.Method == HttpMethod.Get && uri.AbsolutePath == "/api/v2/pins/700")
+        {
+            var proof = ReadQueryValue(uri, "deviceJWT")
+                ?? throw new InvalidOperationException("The Plex PIN poll omitted its device proof.");
+            VerifyPlexDeviceProof(proof, headers);
+            PlexDeviceProofVerified = true;
+            return JsonSerializer.Serialize(new { authToken = plexAccountToken, expiresIn = 300 });
+        }
+        if (request.Method == HttpMethod.Get && uri.AbsolutePath == "/api/v2/resources")
+        {
+            RequireHeader(headers, "X-Plex-Token", plexAccountToken);
+            return JsonSerializer.Serialize(new[]
+            {
+                new
+                {
+                    name = "Probe Plex Server",
+                    clientIdentifier = "plex-server-1",
+                    provides = "server",
+                    owned = true,
+                    accessToken = plexToken,
+                    connections = new object[]
+                    {
+                        new { uri = "http://plex.local:32400", local = true, relay = false, IPv6 = false },
+                        new { uri = "https://plex.local:32400", local = true, relay = false, IPv6 = false }
+                    }
+                }
+            });
+        }
+        return null;
+    }
+
+    private string? PlexAccountResponse(
+        HttpRequestMessage request,
+        Uri uri,
+        IReadOnlyDictionary<string, string> headers)
+    {
+        if (request.Method != HttpMethod.Get || uri.AbsolutePath != "/api/v2/user") return null;
+        RequireHeader(headers, "X-Plex-Token", plexAccountToken);
+        return """{"id":42,"username":"feature-probe"}""";
+    }
+
+    private void VerifyPlexDeviceProof(
+        string compactJwt,
+        IReadOnlyDictionary<string, string> headers)
+    {
+        var jwk = PlexPublicJwk ?? throw new InvalidOperationException("The Plex proof arrived before its public JWK.");
+        var parts = compactJwt.Split('.');
+        if (parts.Length != 3) throw new InvalidOperationException("The Plex device proof was not a compact JWT.");
+        using var header = JsonDocument.Parse(Base64UrlDecode(parts[0]));
+        using var payload = JsonDocument.Parse(Base64UrlDecode(parts[1]));
+        if (header.RootElement.GetProperty("alg").GetString() != "EdDSA" ||
+            header.RootElement.GetProperty("kid").GetString() != jwk["kid"] ||
+            payload.RootElement.GetProperty("aud").GetString() != "plex.tv" ||
+            payload.RootElement.GetProperty("iss").GetString() != headers.GetValueOrDefault("X-Plex-Client-Identifier"))
+            throw new InvalidOperationException("The Plex device proof claims were invalid.");
+        var issuedAt = payload.RootElement.GetProperty("iat").GetInt64();
+        var expiresAt = payload.RootElement.GetProperty("exp").GetInt64();
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        if (issuedAt > now + 60 || expiresAt <= now || expiresAt - issuedAt > 300)
+            throw new InvalidOperationException("The Plex device proof lifetime was invalid.");
+        var publicKey = PublicKey.Import(
+            SignatureAlgorithm.Ed25519,
+            Base64UrlDecode(jwk["x"]),
+            KeyBlobFormat.RawPublicKey);
+        if (!SignatureAlgorithm.Ed25519.Verify(
+                publicKey,
+                Encoding.UTF8.GetBytes($"{parts[0]}.{parts[1]}"),
+                Base64UrlDecode(parts[2])))
+            throw new InvalidOperationException("The Plex device proof signature was invalid.");
+    }
+
+    private static string? ReadQueryValue(Uri uri, string name)
+    {
+        foreach (var part in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var pair = part.Split('=', 2);
+            if (Uri.UnescapeDataString(pair[0]) == name)
+                return pair.Length == 2 ? Uri.UnescapeDataString(pair[1]) : string.Empty;
+        }
+        return null;
+    }
+
+    private static byte[] Base64UrlDecode(string value)
+    {
+        var normalized = value.Replace('-', '+').Replace('_', '/');
+        normalized = normalized.PadRight(normalized.Length + ((4 - normalized.Length % 4) % 4), '=');
+        return Convert.FromBase64String(normalized);
     }
 
     private string? EmbyResponse(

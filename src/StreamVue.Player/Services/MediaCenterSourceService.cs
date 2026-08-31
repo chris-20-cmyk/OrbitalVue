@@ -18,6 +18,7 @@ public sealed partial class MediaCenterSourceService
     private readonly MediaCenterCredentialStore _credentialStore;
     private readonly HttpClient _http;
     private readonly string _deviceId;
+    private readonly PlexDeviceIdentityStore _plexIdentityStore;
     private readonly Func<PremiumAccessSnapshot> _premiumAccessProvider;
 
     public MediaCenterSourceService(
@@ -25,13 +26,15 @@ public sealed partial class MediaCenterSourceService
         HttpClient? httpClient = null,
         string? deviceId = null,
         PremiumAccessSnapshot? premiumAccess = null,
-        Func<PremiumAccessSnapshot>? premiumAccessProvider = null)
+        Func<PremiumAccessSnapshot>? premiumAccessProvider = null,
+        PlexDeviceIdentityStore? plexIdentityStore = null)
     {
         _credentialStore = credentialStore ?? new MediaCenterCredentialStore();
         _http = httpClient ?? CreateHttpClient();
         _deviceId = string.IsNullOrWhiteSpace(deviceId)
             ? ResolveDeviceId()
             : MediaCenterSecurity.RequireIdentifier(deviceId, "media-center device identifier");
+        _plexIdentityStore = plexIdentityStore ?? new PlexDeviceIdentityStore();
         _premiumAccessProvider = premiumAccessProvider ?? (() => premiumAccess ?? PremiumAccessPolicy.Current);
     }
 
@@ -564,7 +567,8 @@ public sealed partial class MediaCenterSourceService
         string url,
         IReadOnlyDictionary<string, string> headers,
         string? body,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int maximumResponseBytes = MaximumResponseBytes)
     {
         using var request = new HttpRequestMessage(method, url);
         foreach (var (name, value) in headers)
@@ -576,7 +580,7 @@ public sealed partial class MediaCenterSourceService
         if (body is not null) request.Content = new StringContent(body, Encoding.UTF8, "application/json");
         using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
-        if (response.Content.Headers.ContentLength > MaximumResponseBytes)
+        if (response.Content.Headers.ContentLength > maximumResponseBytes)
             throw new InvalidDataException("The media server returned an oversized response.");
         await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
         await using var output = new MemoryStream();
@@ -585,7 +589,7 @@ public sealed partial class MediaCenterSourceService
         {
             var read = await input.ReadAsync(buffer, cancellationToken);
             if (read == 0) break;
-            if (output.Length + read > MaximumResponseBytes)
+            if (output.Length + read > maximumResponseBytes)
                 throw new InvalidDataException("The media server returned an oversized response.");
             await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
         }

@@ -52,6 +52,7 @@ jobs:
         shell: pwsh
         run: |
           node tools/verify-premium-store-readiness.mjs
+          node tools/verify-windows-plex-account-foundation.mjs
           dotnet build StreamVue.Native.slnx -c Release --no-restore
           dotnet restore src/StreamVue.Player/StreamVue.Player.csproj -p:StreamVueDistributionMode=Store
           dotnet build src/StreamVue.Player/StreamVue.Player.csproj -c Release --no-restore -p:StreamVueDistributionMode=Store

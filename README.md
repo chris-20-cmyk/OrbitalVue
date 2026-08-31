@@ -42,7 +42,7 @@ The Apple milestone is a source/simulator foundation plus a locked signed-candid
 
 ## 5.1 protected personal libraries
 
-- Plex token and Emby account connections alongside M3U and Xtream sources on Windows, Android/Google TV, Samsung/LG TV, and the Apple foundation; Apple and Android/Google TV also support signed Plex account discovery
+- Plex token and Emby account connections alongside M3U and Xtream sources on Windows, Android/Google TV, Samsung/LG TV, and the Apple foundation; Windows, Apple, and Android/Google TV also support signed Plex account discovery
 - A shared `streamvue-media://` catalog contract that stores provider, verified server identity, and item identity—but never a playable token URL
 - Public server-identity verification before credentials are sent, explicit consent for cleartext local HTTP, same-origin playback-path enforcement, and bounded provider responses
 - Platform-protected credential storage with a separate encrypted last-working catalog; passwords are exchanged for provider tokens and are not retained
@@ -143,6 +143,7 @@ The intended store product is a one-time lifetime unlock, not a subscription. St
 - Large M3U/M3U8 file and URL indexing
 - Xtream-compatible live channel login
 - Protected Plex and Emby personal-library sources with token-free catalogs and just-in-time native playback
+- Signed Plex browser approval with automatic secure/local server discovery, a DPAPI-protected Ed25519 device identity, a revocable token-free selection lease, and an advanced manual-token fallback
 - Automatic startup refresh for every enabled M3U file, M3U URL, Xtream account, Plex server, and Emby server
 - Professional Multiview workspace with 2-up, 4-up, and focused viewing layouts
 - Four persistent channel assignments with keyboard switching and one-click tile controls
@@ -253,7 +254,7 @@ The visual source concepts and the implementation comparison are recorded in [th
 ## Verification tools
 
 - `StreamVue.PlaylistProbe` validates large-list parsing and favorite-key uniqueness.
-- `StreamVue.FeatureProbe` checks update preferences, manual routes, catch-up URL expansion, channel health, interrupted sessions, background wake timers, episode-aware series rules, duplicate prevention, recovery timing, retention, timeshift policy, storage guards, transport-stream capture and playback, protected Plex/Emby contracts, encrypted backup/restore, diagnostics, casting, and Multiview policies.
+- `StreamVue.FeatureProbe` checks update preferences, manual routes, catch-up URL expansion, channel health, interrupted sessions, background wake timers, episode-aware series rules, duplicate prevention, recovery timing, retention, timeshift policy, storage guards, transport-stream capture and playback, protected Plex/Emby contracts, signed Plex account discovery and revocation, encrypted backup/restore, diagnostics, casting, and Multiview policies.
 - `StreamVue.PlaybackProbe` checks native live playback and bounded reconnect behavior.
 
 ## Privacy

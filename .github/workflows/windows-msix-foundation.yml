@@ -11,6 +11,7 @@ on:
       - "tools/StreamVue.FeatureProbe/**"
       - "tools/build-windows-msix.ps1"
       - "tools/verify-windows-msix.ps1"
+      - "tools/verify-windows-plex-account-foundation.mjs"
       - "packaging/windows-msix/**"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
@@ -22,6 +23,7 @@ on:
       - "tools/StreamVue.FeatureProbe/**"
       - "tools/build-windows-msix.ps1"
       - "tools/verify-windows-msix.ps1"
+      - "tools/verify-windows-plex-account-foundation.mjs"
       - "packaging/windows-msix/**"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
@@ -48,6 +50,7 @@ jobs:
       - name: Validate the locked premium and release contracts
         run: |
           node tools/verify-premium-store-readiness.mjs
+          node tools/verify-windows-plex-account-foundation.mjs
           node tools/verify-cross-platform-release-contract.mjs
 
       - name: Restore the isolated Store dependency graph

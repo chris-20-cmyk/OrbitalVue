@@ -45,6 +45,7 @@ jobs:
             throw "Missing required repository variables: $($missing -join ', ')"
           }
           node tools/verify-cross-platform-release-contract.mjs
+          node tools/verify-windows-plex-account-foundation.mjs
           node tools/verify-privacy-readiness.mjs --require-ready windows
           node tools/verify-public-site-readiness.mjs --require-ready
           node tools/verify-store-listing-readiness.mjs --require-ready windows

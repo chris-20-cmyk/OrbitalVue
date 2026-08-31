@@ -37,6 +37,7 @@
   <ItemGroup>
     <PackageReference Include="LibVLCSharp.WPF" Version="3.10.0" />
     <PackageReference Include="LibVLCSharp.WinForms" Version="3.10.0" />
+    <PackageReference Include="NSec.Cryptography" Version="26.4.0" />
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23.1" />
     <PackageReference Include="Velopack" Version="1.2.0" Condition="'$(StreamVueDistributionMode)' != 'Store'" />
   </ItemGroup>

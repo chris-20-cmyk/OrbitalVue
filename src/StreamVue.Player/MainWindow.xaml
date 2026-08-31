@@ -1313,28 +1313,67 @@
                                         <Button x:Name="PlexRestoreButton" Grid.Column="2" Margin="8,0,0,0" Padding="12,7" VerticalAlignment="Center" Style="{StaticResource SecondaryButton}" Click="RestorePremium_Click" Content="Restore" />
                                     </Grid>
                                 </Border>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="2*" />
-                                        <ColumnDefinition Width="12" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
+                                <Border x:Name="PlexAccountPanel" Padding="14" CornerRadius="12" Background="#0D171D" BorderBrush="#244147" BorderThickness="1">
                                     <StackPanel>
-                                        <TextBlock Margin="0,0,0,6" Foreground="#AAB6C8" FontSize="10" Text="SERVER ADDRESS" />
-                                        <TextBox x:Name="PlexServerBox" Height="43" ToolTip="Example: https://192-168-1-20.example.direct:32400" />
+                                        <DockPanel LastChildFill="True">
+                                            <Border DockPanel.Dock="Right" Padding="7,3" CornerRadius="5" Background="#17312F">
+                                                <TextBlock Foreground="{StaticResource AccentBrush}" FontSize="7.5" FontWeight="Bold" Text="RECOMMENDED" />
+                                            </Border>
+                                            <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextBrush}" FontSize="11.5" FontWeight="SemiBold" Text="Sign in with your Plex account" />
+                                        </DockPanel>
+                                        <TextBlock x:Name="PlexAccountStatusText" Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" Text="Approve StreamVue in Plex, then choose an automatically discovered server. Your Plex password never enters StreamVue." TextWrapping="Wrap" />
+                                        <ProgressBar x:Name="PlexAccountProgress" Width="120" Height="3" Margin="0,12,0,0" HorizontalAlignment="Left" Foreground="{StaticResource AccentBrush}" IsIndeterminate="True" Visibility="Collapsed" />
+                                        <WrapPanel Margin="0,13,0,0">
+                                            <Button x:Name="PlexAccountSignInButton" Style="{StaticResource PrimaryButton}" Click="StartPlexAccountSignIn_Click" Content="Sign in with Plex" />
+                                            <Button x:Name="PlexAccountOpenButton" Margin="8,0,0,0" Style="{StaticResource SecondaryButton}" Click="OpenPlexAccountApproval_Click" Content="Open approval" Visibility="Collapsed" />
+                                            <Button x:Name="PlexAccountCancelButton" Margin="8,0,0,0" Style="{StaticResource SecondaryButton}" Click="CancelPlexAccountSignIn_Click" Content="Cancel" Visibility="Collapsed" />
+                                        </WrapPanel>
+                                        <Grid x:Name="PlexAccountPicker" Margin="0,14,0,0" Visibility="Collapsed">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <TextBlock Foreground="#AAB6C8" FontSize="9" Text="PLEX SERVER" />
+                                            <ComboBox x:Name="PlexAccountServerBox" Grid.Row="1" Height="40" Margin="0,5,0,0" DisplayMemberPath="DisplayLabel" SelectionChanged="PlexAccountServer_SelectionChanged" />
+                                            <StackPanel Grid.Row="2" Margin="0,10,0,0">
+                                                <TextBlock Foreground="#AAB6C8" FontSize="9" Text="CONNECTION" />
+                                                <ComboBox x:Name="PlexAccountConnectionBox" Height="40" Margin="0,5,0,0" DisplayMemberPath="DisplayLabel" SelectionChanged="PlexAccountConnection_SelectionChanged" />
+                                                <TextBlock x:Name="PlexAccountLocationText" Margin="1,5,0,0" Foreground="#718198" FontSize="9" />
+                                            </StackPanel>
+                                            <CheckBox x:Name="PlexAccountAllowHttpBox" Grid.Row="3" Margin="0,11,0,0" Foreground="#F4BD6B" FontSize="9.5" Content="Allow this unencrypted HTTP connection on my trusted local network" Visibility="Collapsed" />
+                                            <Button x:Name="PlexAccountConnectButton" Grid.Row="4" Margin="0,13,0,0" HorizontalAlignment="Left" Style="{StaticResource PrimaryButton}" Click="ConnectPlexAccount_Click" Content="Connect selected server" />
+                                        </Grid>
                                     </StackPanel>
-                                    <StackPanel Grid.Column="2">
-                                        <TextBlock Margin="0,0,0,6" Foreground="#AAB6C8" FontSize="10" Text="LIBRARY NAME (OPTIONAL)" />
-                                        <TextBox x:Name="PlexNameBox" Height="43" />
+                                </Border>
+                                <Expander Margin="0,14,0,0" Foreground="#AAB6C8" Header="Advanced: connect with a server token">
+                                    <StackPanel Margin="0,12,0,0">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="2*" />
+                                                <ColumnDefinition Width="12" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Margin="0,0,0,6" Foreground="#AAB6C8" FontSize="10" Text="SERVER ADDRESS" />
+                                                <TextBox x:Name="PlexServerBox" Height="43" ToolTip="Example: https://192-168-1-20.example.direct:32400" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Margin="0,0,0,6" Foreground="#AAB6C8" FontSize="10" Text="LIBRARY NAME (OPTIONAL)" />
+                                                <TextBox x:Name="PlexNameBox" Height="43" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <TextBlock Margin="0,12,0,6" Foreground="#AAB6C8" FontSize="10" Text="PLEX SERVER TOKEN" />
+                                        <PasswordBox x:Name="PlexTokenBox" Height="43" Padding="12,9" Foreground="{StaticResource TextBrush}" Background="#0B1018" BorderBrush="{StaticResource BorderBrush}" />
+                                        <CheckBox x:Name="PlexAllowHttpBox" Margin="0,13,0,0" Foreground="#9EACBF" FontSize="10" Content="Allow unencrypted HTTP on a trusted local network" />
+                                        <Grid Margin="0,16,0,0">
+                                            <TextBlock VerticalAlignment="Center" Foreground="#718198" FontSize="9.5" Text="Identity is checked before StreamVue sends the server token." />
+                                            <Button x:Name="PlexConnectButton" HorizontalAlignment="Right" Style="{StaticResource PrimaryButton}" Click="LoadPlex_Click" Content="Connect Plex" />
+                                        </Grid>
                                     </StackPanel>
-                                </Grid>
-                                <TextBlock Margin="0,12,0,6" Foreground="#AAB6C8" FontSize="10" Text="PLEX ACCESS TOKEN" />
-                                <PasswordBox x:Name="PlexTokenBox" Height="43" Padding="12,9" Foreground="{StaticResource TextBrush}" Background="#0B1018" BorderBrush="{StaticResource BorderBrush}" />
-                                <CheckBox x:Name="PlexAllowHttpBox" Margin="0,13,0,0" Foreground="#9EACBF" FontSize="10" Content="Allow unencrypted HTTP on a trusted local network" />
-                                <Grid Margin="0,16,0,0">
-                                    <TextBlock VerticalAlignment="Center" Foreground="#718198" FontSize="9.5" Text="Identity is checked before StreamVue sends the token." />
-                                    <Button x:Name="PlexConnectButton" HorizontalAlignment="Right" Style="{StaticResource PrimaryButton}" Click="LoadPlex_Click" Content="Connect Plex" />
-                                </Grid>
+                                </Expander>
                             </StackPanel>
                         </TabItem>
 
