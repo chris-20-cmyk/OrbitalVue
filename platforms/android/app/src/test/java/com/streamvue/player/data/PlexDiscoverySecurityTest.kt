@@ -37,8 +37,8 @@ class PlexDiscoverySecurityTest {
         )
 
         assertEquals("server-1", connection.serverId)
-        assertEquals("server-token", vault.read(connection.credentialId))
-        assertFalse(vault.values.containsValue("account-token"))
+        assertTrue(vault.read(connection.credentialId).orEmpty().contains("\"value\":\"server-token\""))
+        assertTrue(vault.values.values.none { it.contains("account-token") })
     }
 
     @Test
@@ -105,7 +105,7 @@ class PlexDiscoverySecurityTest {
             allowInsecureHttp = true
         )
         assertEquals("http://192.168.1.20:32400", connection.baseUrl)
-        assertEquals("server-token", vault.read(connection.credentialId))
+        assertTrue(vault.read(connection.credentialId).orEmpty().contains("\"value\":\"server-token\""))
     }
 
     @Test
