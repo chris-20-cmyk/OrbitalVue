@@ -164,7 +164,7 @@ internal class PlexAccountClient(
             "Accept" to "application/json",
             "X-Plex-Client-Identifier" to clientIdentifier,
             "X-Plex-Product" to safeHeader(device.client, "StreamVue"),
-            "X-Plex-Version" to safeHeader(device.version, "5.1.0")
+            "X-Plex-Version" to safeHeader(device.version, "5.2.0")
         )
 
     private fun authenticatedHeaders(token: String): Map<String, String> =

@@ -1,8 +1,8 @@
 # StreamVue Native
 
-StreamVue is a native IPTV player. The Windows 4.0 preview uses .NET, WPF, LibVLCSharp, the VideoLAN playback engine, and Velopack packaging. The Android 5.0 line uses Kotlin, Compose, and AndroidX Media3 for phones, tablets, Android TV, and Google TV. Samsung Tizen and LG webOS share a lightweight remote-first TypeScript surface while retaining each vendor's native television playback path. Apple 5.1 uses SwiftUI with selectable KSPlayer/Metal and AVFoundation/AVKit engines for iPhone, iPad, and Apple TV.
+StreamVue is a native IPTV player. The Windows 4.0 preview uses .NET, WPF, LibVLCSharp, the VideoLAN playback engine, and Velopack packaging. The Android 5.2 line uses Kotlin, Compose, and AndroidX Media3 for phones, tablets, Android TV, and Google TV. Samsung Tizen and LG webOS share a lightweight remote-first TypeScript surface while retaining each vendor's native television playback path. Apple 5.1 uses SwiftUI with selectable KSPlayer/Metal and AVFoundation/AVKit engines for iPhone, iPad, and Apple TV.
 
-## Android 5.0 foundation
+## Android 5.2 foundation
 
 - M3U/M3U8 file and URL import with a private last-working-copy cache and automatic URL refresh at launch
 - Exact playlist grouping, categorized All Channels browsing, fast search, and remote-friendly 10-foot navigation
@@ -10,6 +10,7 @@ StreamVue is a native IPTV player. The Windows 4.0 preview uses .NET, WPF, LibVL
 - Hardware-backed MediaCodec decoding, decoder fallback, seamless frame-rate hints, six aspect modes, and immersive full screen
 - A versioned portable catalog contract and synthetic conformance fixtures shared with Samsung Tizen, LG webOS, and Apple clients
 - Repeatable cloud builds that produce a personal-test APK, an explicitly locked unsigned foundation AAB, and a readiness-gated upload-key-signed Google Play candidate without requiring a paid certificate
+- Signed Plex PIN login with QR/browser approval, automatic secure/local server discovery, a Keystore-only Ed25519 identity, token-free Compose state, identity-bound credential storage, and cancellation rollback
 
 The Android Studio project lives in `platforms/android`; the shared contract lives in `contracts`. StreamVue does not ship or discover channels. Users connect sources they are authorized to use.
 
@@ -41,7 +42,7 @@ The Apple milestone is a source/simulator foundation plus a locked signed-candid
 
 ## 5.1 protected personal libraries
 
-- Plex token and Emby account connections alongside M3U and Xtream sources on Windows, Android/Google TV, Samsung/LG TV, and the Apple foundation; Apple also supports signed Plex account discovery
+- Plex token and Emby account connections alongside M3U and Xtream sources on Windows, Android/Google TV, Samsung/LG TV, and the Apple foundation; Apple and Android/Google TV also support signed Plex account discovery
 - A shared `streamvue-media://` catalog contract that stores provider, verified server identity, and item identity—but never a playable token URL
 - Public server-identity verification before credentials are sent, explicit consent for cleartext local HTTP, same-origin playback-path enforcement, and bounded provider responses
 - Platform-protected credential storage with a separate encrypted last-working catalog; passwords are exchanged for provider tokens and are not retained

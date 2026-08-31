@@ -769,7 +769,7 @@ internal class MediaCenterService(
         "Accept" to "application/json",
         "X-Plex-Client-Identifier" to safeApplicationValue(device.deviceId, "streamvue-android"),
         "X-Plex-Product" to safeApplicationValue(device.client, "StreamVue"),
-        "X-Plex-Version" to safeApplicationValue(device.version, "5.1.0"),
+        "X-Plex-Version" to safeApplicationValue(device.version, "5.2.0"),
         "X-Plex-Device" to safeApplicationValue(device.device, "Android")
     )
 
@@ -787,7 +787,7 @@ internal class MediaCenterService(
             "Client" to safeApplicationValue(device.client, "StreamVue"),
             "Device" to safeApplicationValue(device.device, "Android"),
             "DeviceId" to safeApplicationValue(device.deviceId, "streamvue-android"),
-            "Version" to safeApplicationValue(device.version, "5.1.0")
+            "Version" to safeApplicationValue(device.version, "5.2.0")
         )
         userId?.let { values["UserId"] = MediaCenterUrlPolicy.requireIdentifier(it, "Emby user") }
         return "MediaBrowser " + values.entries.joinToString(", ") { (name, value) -> "$name=\"$value\"" }

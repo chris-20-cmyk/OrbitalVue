@@ -33,9 +33,9 @@ Apple and Android additionally support Plex's strong signed-PIN account flow. Ea
 
 Windows protects media-center credentials with current-user DPAPI and plays the resolved URL through LibVLC. Android uses its platform-protected credential store and Media3. Apple stores secrets in Keychain and hands the short-lived plan to KSPlayer or AVKit. Samsung and LG use the shared contract and capability-gate playback when the television API cannot safely express a provider requirement. No platform routes personal-library traffic through a StreamVue proxy.
 
-## Android 5.0 foundation
+## Android 5.2 foundation
 
-The first Android milestone is one adaptive application package for touch devices and Android TV. It targets stable API 36, compiles against the Android 37.1 API surface required by its AndroidX dependencies, uses Media3 1.11, and declares both normal launcher and Leanback launcher entry points. TV navigation uses remote-focusable controls and a room-scale layout rather than stretching the phone screen.
+The Android milestone is one adaptive application package for touch devices and Android TV. It targets stable API 36, compiles against the Android 37.1 API surface required by its AndroidX dependencies, uses Media3 1.11, and declares both normal launcher and Leanback launcher entry points. TV navigation uses remote-focusable controls and a room-scale layout rather than stretching the phone screen. Version 5.2 adds strong signed Plex PIN approval, account server discovery, and an opaque token-free selection lease with identity-bound credential activation.
 
 The initial source pipeline supports:
 

@@ -6,11 +6,11 @@ on:
       release_tag:
         description: Prerelease tag to create or update
         required: true
-        default: v5.1.0-alpha.1
+        default: v5.2.0-alpha.1
       release_title:
         description: Public release title
         required: true
-        default: StreamVue 5.1 Apple & Personal Media Foundation
+        default: StreamVue 5.2 Android Plex Account & Resilience
 
 permissions:
   contents: write
@@ -44,12 +44,13 @@ jobs:
         run: sdkmanager "platforms;android-37.1" "build-tools;37.0.0" "platform-tools"
 
       - name: Build and verify Android and Google TV
-        run: >-
-          bash platforms/android/gradlew -p platforms/android
-          testDebugUnitTest
-          lintDebug
-          assembleDebug
-          --stacktrace
+        run: |
+          node tools/verify-android-plex-account-foundation.mjs
+          bash platforms/android/gradlew -p platforms/android \
+            testDebugUnitTest \
+            lintDebug \
+            assembleDebug \
+            --stacktrace
 
       - name: Build the fail-closed Google Play bundle
         run: |
@@ -120,7 +121,7 @@ jobs:
       - name: Upload the reproducible workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: streamvue-5.1-cross-platform-foundation
+          name: streamvue-5.2-cross-platform-foundation
           if-no-files-found: error
           retention-days: 14
           path: artifacts/platform-foundation/

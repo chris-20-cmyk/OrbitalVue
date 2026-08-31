@@ -6,11 +6,11 @@ on:
       version_code:
         description: New positive Play version code (must never have been uploaded before)
         required: true
-        default: "5100001"
+        default: "5200001"
       version_name:
         description: User-visible release version
         required: true
-        default: 5.1.0-alpha.1
+        default: 5.2.0-alpha.1
 
 permissions:
   contents: read
@@ -62,6 +62,7 @@ jobs:
             exit 1
           fi
           node tools/verify-cross-platform-release-contract.mjs
+          node tools/verify-android-plex-account-foundation.mjs
           node tools/verify-privacy-readiness.mjs --require-ready android
           node tools/verify-public-site-readiness.mjs --require-ready
           node tools/verify-store-listing-readiness.mjs --require-ready android

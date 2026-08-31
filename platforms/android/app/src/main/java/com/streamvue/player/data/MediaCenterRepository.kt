@@ -360,7 +360,7 @@ class MediaCenterRepository internal constructor(
                 client = "StreamVue",
                 device = "Android",
                 deviceId = id,
-                version = "5.1.0"
+                version = "5.2.0"
             )
         }
 
