@@ -271,6 +271,9 @@
                                         <Grid Width="39" Height="39" HorizontalAlignment="Left">
                                             <Border CornerRadius="10" Background="#1B2432" BorderBrush="#2A3649" BorderThickness="1" />
                                             <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#B8C5D8" FontSize="11" FontWeight="Bold" Text="{Binding Initials}" />
+                                            <Border CornerRadius="10" ClipToBounds="True">
+                                                <Image Source="{Binding ArtworkSource}" Stretch="UniformToFill" Loaded="ChannelArtwork_Loaded" />
+                                            </Border>
                                         </Grid>
                                         <StackPanel Grid.Column="1" Margin="7,0,8,0" VerticalAlignment="Center">
                                             <TextBlock Foreground="{StaticResource TextBrush}" FontSize="13" FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
@@ -563,6 +566,9 @@
                                 <Grid Width="56" Height="56" HorizontalAlignment="Left">
                                     <Border CornerRadius="14" Background="{StaticResource AccentGradient}" Opacity="0.18" />
                                     <TextBlock x:Name="InspectorInitials" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}" FontSize="15" FontWeight="Bold" Text="KN" />
+                                    <Border CornerRadius="14" ClipToBounds="True">
+                                        <Image x:Name="InspectorArtwork" Source="{Binding ArtworkSource}" Stretch="UniformToFill" />
+                                    </Border>
                                 </Grid>
                                 <TextBlock x:Name="InspectorChannelName" Margin="0,14,0,0" FontFamily="{StaticResource DisplayFont}" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Nothing playing" TextTrimming="CharacterEllipsis" />
                                 <TextBlock x:Name="InspectorGroupName" Margin="0,5,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Select a channel" TextTrimming="CharacterEllipsis" />
@@ -1108,7 +1114,7 @@
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
                     <TextBlock Foreground="#566176" FontSize="9" Text="↑↓ CHANNELS • BACKSPACE LAST" />
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
-                    <TextBlock Foreground="#566176" FontSize="9" Text="5.4 MEDIA SYNC" />
+                    <TextBlock Foreground="#566176" FontSize="9" Text="5.5 LIBRARY ART" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -2354,7 +2360,7 @@
                         <StackPanel>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Smart signal routing" />
-                                <Border Margin="10,3,0,0" Padding="8,4" CornerRadius="6" Background="#17312F" VerticalAlignment="Top"><TextBlock Foreground="{StaticResource AccentBrush}" FontSize="8" FontWeight="Bold" Text="5.4 ROUTE EDITOR" /></Border>
+                                <Border Margin="10,3,0,0" Padding="8,4" CornerRadius="6" Background="#17312F" VerticalAlignment="Top"><TextBlock Foreground="{StaticResource AccentBrush}" FontSize="8" FontWeight="Bold" Text="SIGNAL ROUTES" /></Border>
                             </StackPanel>
                             <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="One channel, every available provider feed, ranked from real playback history." />
                         </StackPanel>

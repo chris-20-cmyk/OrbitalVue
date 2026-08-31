@@ -161,6 +161,41 @@ public static partial class MediaCenterSecurity
     public static bool IsPlaybackLocator(string? value) =>
         value?.StartsWith("streamvue-media://", StringComparison.Ordinal) == true;
 
+    public static string BuildArtworkLocator(string provider, string serverId, string itemId, string? versionTag = null)
+    {
+        var safeProvider = NormalizeProvider(provider);
+        var safeServerId = RequireIdentifier(serverId, "media-center server identifier");
+        var safeItemId = RequireIdentifier(itemId, "media-center item identifier");
+        var safeVersionTag = string.IsNullOrWhiteSpace(versionTag)
+            ? null
+            : RequireIdentifier(versionTag, "media-center artwork version");
+        var suffix = safeVersionTag is null ? string.Empty : $"/{Uri.EscapeDataString(safeVersionTag)}";
+        return $"streamvue-artwork://{safeProvider}/{Uri.EscapeDataString(safeServerId)}/{Uri.EscapeDataString(safeItemId)}{suffix}";
+    }
+
+    public static MediaCenterArtworkLocator ParseArtworkLocator(string value)
+    {
+        if (!string.Equals(value, value.Trim(), StringComparison.Ordinal) ||
+            !Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+            !string.Equals(uri.Scheme, "streamvue-artwork", StringComparison.OrdinalIgnoreCase) ||
+            !string.IsNullOrEmpty(uri.UserInfo) || !uri.IsDefaultPort || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
+            throw new InvalidDataException("This is not a StreamVue media-center artwork address.");
+        var provider = NormalizeProvider(uri.Host);
+        var parts = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.UnescapeDataString).ToArray();
+        if (parts.Length is not (2 or 3)) throw new InvalidDataException("The media-center artwork address is incomplete.");
+        var locator = new MediaCenterArtworkLocator(
+            provider,
+            RequireIdentifier(parts[0], "media-center server identifier"),
+            RequireIdentifier(parts[1], "media-center item identifier"),
+            parts.Length == 3 ? RequireIdentifier(parts[2], "media-center artwork version") : null);
+        if (!string.Equals(value, BuildArtworkLocator(locator.Provider, locator.ServerId, locator.ItemId, locator.VersionTag), StringComparison.Ordinal))
+            throw new InvalidDataException("The media-center artwork address is not canonical.");
+        return locator;
+    }
+
+    public static bool IsArtworkLocator(string? value) =>
+        value?.StartsWith("streamvue-artwork://", StringComparison.Ordinal) == true;
+
     public static string ResolveServerPath(string baseUrl, string path)
     {
         var normalizedBase = NormalizeBaseUrl(baseUrl);

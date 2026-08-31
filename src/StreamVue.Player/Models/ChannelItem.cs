@@ -3,6 +3,8 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Serialization;
+using System.Windows.Media;
 using StreamVue.Player.Services;
 
 namespace StreamVue.Player.Models;
@@ -24,6 +26,7 @@ public sealed class ChannelItem : INotifyPropertyChanged
     private string? _currentProgramTime;
     private string? _signalRouteKey;
     private int _signalFeedCount = 1;
+    private ImageSource? _artworkSource;
 
     public required int Number { get; init; }
     public required string Name { get; init; }
@@ -76,7 +79,25 @@ public sealed class ChannelItem : INotifyPropertyChanged
 
     public bool HasAlternateFeeds => SignalFeedCount > 1;
 
-    public string SignalFeedLabel => HasAlternateFeeds ? $"{SignalFeedCount:N0} FEEDS" : KindLabel;
+    public string SignalFeedLabel => HasAlternateFeeds
+        ? $"{SignalFeedCount:N0} FEEDS"
+        : IsProtectedMedia && IsPlayed
+            ? "WATCHED"
+            : IsProtectedMedia && CanResume
+                ? "RESUME"
+                : KindLabel;
+
+    [JsonIgnore]
+    public ImageSource? ArtworkSource
+    {
+        get => _artworkSource;
+        set
+        {
+            if (ReferenceEquals(_artworkSource, value)) return;
+            _artworkSource = value;
+            OnPropertyChanged();
+        }
+    }
 
     public bool IsFavorite
     {

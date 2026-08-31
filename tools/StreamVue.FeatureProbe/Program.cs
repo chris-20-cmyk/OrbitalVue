@@ -1341,7 +1341,7 @@ try
     Console.WriteLine("Single-audio multiview policy: PASS");
     Console.WriteLine("Independent encrypted multi-source playlist caches: PASS");
     Console.WriteLine("Protected multi-account Xtream vault and legacy migration: PASS");
-    Console.WriteLine("Protected Plex and Emby catalog, credentials, just-in-time playback, and watch-progress synchronization: PASS");
+    Console.WriteLine("Protected Plex and Emby catalog, artwork, credentials, just-in-time playback, and watch-progress synchronization: PASS");
     Console.WriteLine("Personal/store premium entitlement policy: PASS");
     Console.WriteLine("Microsoft Store durable add-on verification and revocation: PASS");
     Console.WriteLine("XMLTV Now/Next, episode metadata, and call-sign matching: PASS");
@@ -1580,6 +1580,26 @@ static async Task RunMediaCenterSelfTestAsync(string testRoot)
     var handler = new MediaCenterProbeHandler(plexToken, embyPassword, embyToken);
     using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
     var service = new MediaCenterSourceService(credentialStore, http, "streamvue-win-feature-probe");
+    var lockedArtworkService = new MediaCenterSourceService(
+        credentialStore,
+        http,
+        "streamvue-win-locked-artwork-probe",
+        PremiumAccessPolicy.Evaluate("store", hasVerifiedStorePurchase: false));
+    var requestsBeforeLockedArtwork = handler.Requests.Count;
+    try
+    {
+        await lockedArtworkService.LoadArtworkAsync(
+            MediaCenterSecurity.BuildArtworkLocator("plex", "plex-server-1", "100"),
+            320);
+        throw new InvalidOperationException("An unverified Store entitlement loaded premium artwork.");
+    }
+    catch (InvalidOperationException exception) when (
+        exception.Message.Contains("purchase", StringComparison.OrdinalIgnoreCase) ||
+        exception.Message.Contains("verification", StringComparison.OrdinalIgnoreCase))
+    {
+    }
+    if (handler.Requests.Count != requestsBeforeLockedArtwork)
+        throw new InvalidOperationException("A locked premium artwork request reached the network.");
 
     var plex = await service.ConnectPlexAsync(
         plexBaseUrl,
@@ -1590,11 +1610,27 @@ static async Task RunMediaCenterSelfTestAsync(string testRoot)
         !plexItem.IsProtectedMedia ||
         plexItem.Kind != ChannelKind.Movie ||
         plexItem.ResumePositionMilliseconds != 60_000 ||
-        plexItem.Url.Contains(plexToken, StringComparison.Ordinal))
+        plexItem.Url.Contains(plexToken, StringComparison.Ordinal) ||
+        !MediaCenterSecurity.IsArtworkLocator(plexItem.LogoUrl) ||
+        plexItem.LogoUrl?.Contains(plexToken, StringComparison.Ordinal) == true)
         throw new InvalidOperationException("The Plex catalog did not produce one token-free resumable movie.");
     var plexLocator = MediaCenterSecurity.ParsePlaybackLocator(plexItem.Url);
     if (plexLocator.Provider != "plex" || plexLocator.ServerId != "plex-server-1" || plexLocator.ItemId != "100")
         throw new InvalidOperationException("The Plex catalog locator was not canonical.");
+    var plexArtworkLocator = MediaCenterSecurity.ParseArtworkLocator(plexItem.LogoUrl!);
+    if (plexArtworkLocator.Provider != "plex" || plexArtworkLocator.ServerId != "plex-server-1" ||
+        plexArtworkLocator.ItemId != "100" || plexArtworkLocator.VersionTag != "1700000000")
+        throw new InvalidOperationException("The Plex artwork locator was not canonical.");
+    var plexArtwork = await service.LoadArtworkAsync(plexItem.LogoUrl!, 320);
+    if (!plexArtwork.SequenceEqual(handler.ArtworkBytes))
+        throw new InvalidOperationException("Plex protected artwork bytes did not round-trip.");
+    var plexArtworkRequest = handler.Requests.Last(request =>
+        request.Host == "plex.local" && request.Path == "/photo/:/transcode");
+    if (plexArtworkRequest.Headers.GetValueOrDefault("X-Plex-Token") != plexToken ||
+        ReadProbeQueryValue(plexArtworkRequest.Uri, "width") != "320" ||
+        ReadProbeQueryValue(plexArtworkRequest.Uri, "url") != "/library/metadata/100/thumb/1700000000" ||
+        plexArtworkRequest.Uri.Contains(plexToken, StringComparison.Ordinal))
+        throw new InvalidOperationException("Plex artwork was not fetched with bounded, header-only authentication.");
 
     var savedPlex = await credentialStore.TryLoadForSourceAsync("plex", plexBaseUrl);
     if (savedPlex is null || savedPlex.AccessToken != plexToken)
@@ -1698,11 +1734,77 @@ static async Task RunMediaCenterSelfTestAsync(string testRoot)
         embyItem.Kind != ChannelKind.Series ||
         embyItem.ResumePositionMilliseconds != 90_000 ||
         embyItem.Url.Contains(embyToken, StringComparison.Ordinal) ||
-        embyItem.Url.Contains(embyPassword, StringComparison.Ordinal))
+        embyItem.Url.Contains(embyPassword, StringComparison.Ordinal) ||
+        !MediaCenterSecurity.IsArtworkLocator(embyItem.LogoUrl) ||
+        embyItem.LogoUrl?.Contains(embyToken, StringComparison.Ordinal) == true ||
+        embyItem.LogoUrl?.Contains(embyPassword, StringComparison.Ordinal) == true)
         throw new InvalidOperationException("The Emby catalog did not produce one token-free resumable episode.");
     var embyLocator = MediaCenterSecurity.ParsePlaybackLocator(embyItem.Url);
     if (embyLocator.Provider != "emby" || embyLocator.ServerId != "emby-server-1" || embyLocator.ItemId != "200")
         throw new InvalidOperationException("The Emby catalog locator was not canonical.");
+    var embyArtworkLocator = MediaCenterSecurity.ParseArtworkLocator(embyItem.LogoUrl!);
+    if (embyArtworkLocator.Provider != "emby" || embyArtworkLocator.ServerId != "emby-server-1" || embyArtworkLocator.ItemId != "200")
+        throw new InvalidOperationException("The Emby artwork locator was not canonical.");
+    var embyArtwork = await service.LoadArtworkAsync(embyItem.LogoUrl!, 320);
+    if (!embyArtwork.SequenceEqual(handler.ArtworkBytes))
+        throw new InvalidOperationException("Emby protected artwork bytes did not round-trip.");
+    var embyArtworkRequest = handler.Requests.Last(request =>
+        request.Host == "emby.local" && request.Path == "/emby/Items/200/Images/Primary");
+    if (embyArtworkRequest.Headers.GetValueOrDefault("X-Emby-Token") != embyToken ||
+        ReadProbeQueryValue(embyArtworkRequest.Uri, "maxWidth") != "320" ||
+        ReadProbeQueryValue(embyArtworkRequest.Uri, "quality") != "90" ||
+        embyArtworkRequest.Uri.Contains(embyToken, StringComparison.Ordinal))
+        throw new InvalidOperationException("Emby artwork was not fetched with bounded, header-only authentication.");
+
+    handler.ArtworkContentType = "text/plain";
+    try
+    {
+        await service.LoadArtworkAsync(embyItem.LogoUrl!, 320);
+        throw new InvalidOperationException("A non-image media-center artwork response was accepted.");
+    }
+    catch (InvalidDataException exception) when (
+        exception.Message.Contains("non-image", StringComparison.OrdinalIgnoreCase))
+    {
+    }
+    finally
+    {
+        handler.ArtworkContentType = "image/png";
+    }
+    handler.AdvertiseOversizedArtwork = true;
+    try
+    {
+        await service.LoadArtworkAsync(plexItem.LogoUrl!, 320);
+        throw new InvalidOperationException("An oversized media-center artwork response was accepted.");
+    }
+    catch (InvalidDataException exception) when (
+        exception.Message.Contains("oversized", StringComparison.OrdinalIgnoreCase))
+    {
+    }
+    finally
+    {
+        handler.AdvertiseOversizedArtwork = false;
+    }
+
+    var requestsBeforeForgedArtwork = handler.Requests.Count;
+    try
+    {
+        await service.LoadArtworkAsync("streamvue-artwork://plex/emby-server-1/200", 320);
+        throw new InvalidOperationException("A cross-provider artwork locator was accepted.");
+    }
+    catch (InvalidOperationException exception) when (
+        exception.Message.Contains("Reconnect", StringComparison.OrdinalIgnoreCase))
+    {
+    }
+    try
+    {
+        await service.LoadArtworkAsync($"{plexItem.LogoUrl}?X-Plex-Token=forged", 320);
+        throw new InvalidOperationException("A credential-bearing artwork locator was accepted.");
+    }
+    catch (InvalidDataException)
+    {
+    }
+    if (handler.Requests.Count != requestsBeforeForgedArtwork)
+        throw new InvalidOperationException("A forged media-center artwork locator reached the network.");
     var resolvedEmby = await service.ResolvePlaybackAsync(embyItem);
     var resolvedEmbyUri = new Uri(resolvedEmby.Url);
     if (!resolvedEmbyUri.Query.Contains($"api_key={Uri.EscapeDataString(embyToken)}", StringComparison.Ordinal) ||
@@ -1818,7 +1920,9 @@ static async Task RunMediaCenterSelfTestAsync(string testRoot)
     var cachedEmby = await cache.TryLoadAsync("emby", embyBaseUrl);
     if (cachedPlex?.Playlist.Channels is not [var cachedPlexItem] || !cachedPlexItem.IsProtectedMedia ||
         cachedEmby?.Playlist.Channels is not [var cachedEmbyItem] || !cachedEmbyItem.IsProtectedMedia ||
-        cachedPlexItem.ResumePositionMilliseconds != 60_000 || cachedEmbyItem.ResumePositionMilliseconds != 90_000)
+        cachedPlexItem.ResumePositionMilliseconds != 60_000 || cachedEmbyItem.ResumePositionMilliseconds != 90_000 ||
+        !MediaCenterSecurity.IsArtworkLocator(cachedPlexItem.LogoUrl) ||
+        !MediaCenterSecurity.IsArtworkLocator(cachedEmbyItem.LogoUrl))
         throw new InvalidOperationException("Protected media-center cache metadata did not round-trip.");
 
     var protectedFiles = Directory.EnumerateFiles(cacheDirectory, "*", SearchOption.AllDirectories)
@@ -1839,8 +1943,32 @@ static async Task RunMediaCenterSelfTestAsync(string testRoot)
         throw new InvalidOperationException("Saved media-center credentials could not refresh their catalogs.");
 
     var deletedSourcePlayback = await service.ResolvePlaybackAsync(plexItem);
+    handler.ArtworkDelayMilliseconds = 5_000;
+    var artworkRequestsBeforeCancel = handler.Requests.Count(request =>
+        request.Host == "plex.local" && request.Path == "/photo/:/transcode");
+    var cancelledArtwork = service.LoadArtworkAsync(plexItem.LogoUrl!, 320);
+    var artworkRequestDeadline = DateTimeOffset.UtcNow.AddSeconds(2);
+    while (handler.Requests.Count(request => request.Host == "plex.local" &&
+               request.Path == "/photo/:/transcode") == artworkRequestsBeforeCancel &&
+           DateTimeOffset.UtcNow < artworkRequestDeadline)
+        await Task.Delay(10);
+    if (handler.Requests.Count(request => request.Host == "plex.local" &&
+            request.Path == "/photo/:/transcode") == artworkRequestsBeforeCancel)
+        throw new InvalidOperationException("The delayed artwork cancellation probe did not reach its protected request.");
     var requestsBeforeSourceDelete = handler.Requests.Count;
     await service.DeleteCredentialAsync("plex", plexBaseUrl);
+    try
+    {
+        await cancelledArtwork;
+        throw new InvalidOperationException("Deleting a media-center credential left its artwork request active.");
+    }
+    catch (OperationCanceledException)
+    {
+    }
+    finally
+    {
+        handler.ArtworkDelayMilliseconds = 0;
+    }
     try
     {
         await service.ReportPlaybackAsync(
@@ -1858,6 +1986,18 @@ static async Task RunMediaCenterSelfTestAsync(string testRoot)
         throw new InvalidOperationException("A deleted media-center source emitted a playback report.");
 
     await RunPlexAccountDiscoverySelfTestAsync(testRoot, plexToken, embyPassword, embyToken);
+}
+
+static string? ReadProbeQueryValue(string uriValue, string name)
+{
+    var uri = new Uri(uriValue);
+    foreach (var part in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+    {
+        var pair = part.Split('=', 2);
+        if (Uri.UnescapeDataString(pair[0]) == name)
+            return pair.Length == 2 ? Uri.UnescapeDataString(pair[1]) : string.Empty;
+    }
+    return null;
 }
 
 static async Task RunPlexAccountDiscoverySelfTestAsync(
@@ -2211,10 +2351,17 @@ sealed class MediaCenterProbeHandler(
     string embyToken,
     string plexAccountToken = "plex-probe-account-token") : HttpMessageHandler
 {
+    private static readonly byte[] ProbeArtworkPng = Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+
     public List<MediaCenterProbeRequest> Requests { get; } = [];
+    public byte[] ArtworkBytes => ProbeArtworkPng;
     public IReadOnlyDictionary<string, string>? PlexPublicJwk { get; private set; }
     public bool PlexDeviceProofVerified { get; private set; }
     public string PlexIdentityServerId { get; init; } = "plex-server-1";
+    public string ArtworkContentType { get; set; } = "image/png";
+    public bool AdvertiseOversizedArtwork { get; set; }
+    public int ArtworkDelayMilliseconds { get; set; }
 
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
@@ -2239,6 +2386,13 @@ sealed class MediaCenterProbeHandler(
             headers,
             body));
 
+        if (ArtworkDelayMilliseconds > 0 &&
+            (uri.AbsolutePath == "/photo/:/transcode" || uri.AbsolutePath == "/emby/Items/200/Images/Primary"))
+            await Task.Delay(ArtworkDelayMilliseconds, cancellationToken);
+
+        var artworkResponse = CreateArtworkResponse(request, uri, headers);
+        if (artworkResponse is not null) return artworkResponse;
+
         string? json = uri.Host switch
         {
             "plex.local" => PlexResponse(request, uri, headers),
@@ -2258,6 +2412,25 @@ sealed class MediaCenterProbeHandler(
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
+    }
+
+    private HttpResponseMessage? CreateArtworkResponse(
+        HttpRequestMessage request,
+        Uri uri,
+        IReadOnlyDictionary<string, string> headers)
+    {
+        if (request.Method != HttpMethod.Get) return null;
+        if (uri.Host == "plex.local" && uri.AbsolutePath == "/photo/:/transcode")
+            RequireHeader(headers, "X-Plex-Token", plexToken);
+        else if (uri.Host == "emby.local" && uri.AbsolutePath == "/emby/Items/200/Images/Primary")
+            RequireHeader(headers, "X-Emby-Token", embyToken);
+        else
+            return null;
+
+        var content = new ByteArrayContent(ProbeArtworkPng);
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(ArtworkContentType);
+        if (AdvertiseOversizedArtwork) content.Headers.ContentLength = 8 * 1024 * 1024 + 1;
+        return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = content };
     }
 
     private string? PlexResponse(
@@ -2286,7 +2459,7 @@ sealed class MediaCenterProbeHandler(
                                    {"MediaContainer":{"Directory":[{"key":"1","title":"Movies","type":"movie"}]}}
                                    """,
             "/library/sections/1/all" => """
-                                         {"MediaContainer":{"totalSize":1,"Metadata":[{"ratingKey":"100","title":"Probe Movie","type":"movie","duration":7200000,"viewOffset":60000,"viewCount":0}]}}
+                                         {"MediaContainer":{"totalSize":1,"Metadata":[{"ratingKey":"100","title":"Probe Movie","type":"movie","thumb":"/library/metadata/100/thumb/1700000000","duration":7200000,"viewOffset":60000,"viewCount":0}]}}
                                          """,
             "/library/metadata/100" => """
                                        {"MediaContainer":{"Metadata":[{"Media":[{"Part":[{"key":"/library/parts/part-1/file.mkv?X-Plex-Token=upstream-plex-token"}]}]}]}}
@@ -2447,7 +2620,7 @@ sealed class MediaCenterProbeHandler(
                                            {"Items":[{"Id":"library-1","Name":"Shows","CollectionType":"tvshows"}]}
                                            """,
             "/emby/Users/user-1/Items" => """
-                                           {"TotalRecordCount":1,"Items":[{"Id":"200","Name":"Probe Episode","Type":"Episode","SeriesName":"Probe Series","ParentIndexNumber":1,"IndexNumber":2,"RunTimeTicks":27000000000,"UserData":{"PlaybackPositionTicks":900000000,"Played":false}}]}
+                                           {"TotalRecordCount":1,"Items":[{"Id":"200","Name":"Probe Episode","Type":"Episode","SeriesName":"Probe Series","ParentIndexNumber":1,"IndexNumber":2,"ImageTags":{"Primary":"primary-tag-200"},"RunTimeTicks":27000000000,"UserData":{"PlaybackPositionTicks":900000000,"Played":false}}]}
                                            """,
             "/emby/Items/200/PlaybackInfo" => """
                                                 {"PlaySessionId":"play-session-1","MediaSources":[{"Id":"source-200","Container":"mkv","SupportsDirectPlay":true,"SupportsDirectStream":true,"SupportsTranscoding":true,"DirectStreamUrl":"/Videos/200/stream.mkv?api_key=upstream-emby-token","RequiredHttpHeaders":{"Referer":"https://emby.local/player"}}]}

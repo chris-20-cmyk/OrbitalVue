@@ -13,7 +13,7 @@ public sealed partial class MediaCenterSourceService
     private const int PageSize = 200;
     private const int MaximumItems = 20_000;
     private const int MaximumResponseBytes = 32 * 1024 * 1024;
-    private const string ClientVersion = "5.4.0";
+    private const string ClientVersion = "5.5.0";
 
     private readonly MediaCenterCredentialStore _credentialStore;
     private readonly HttpClient _http;
@@ -139,7 +139,9 @@ public sealed partial class MediaCenterSourceService
     {
         var normalizedProvider = MediaCenterSecurity.NormalizeProvider(provider);
         var baseUrl = MediaCenterSecurity.NormalizeBaseUrl(serverAddress);
+        var credential = await _credentialStore.TryLoadForSourceAsync(normalizedProvider, baseUrl, cancellationToken);
         CancelPlaybackReportingSessionsForSource(normalizedProvider, baseUrl);
+        CancelArtworkRequestsForSource(normalizedProvider, baseUrl, credential?.Binding.ServerId);
         await _credentialStore.DeleteForSourceAsync(normalizedProvider, baseUrl, cancellationToken);
     }
 
@@ -403,10 +405,12 @@ public sealed partial class MediaCenterSourceService
         var serverId = MediaCenterSecurity.RequireIdentifier(
             ReadString(container, "machineIdentifier") ?? string.Empty,
             "Plex server identifier");
-        return new MediaCenterServerIdentity(
+        var identity = new MediaCenterServerIdentity(
             serverId,
             ReadString(container, "friendlyName") ?? "Plex",
             ReadString(container, "version"));
+        RememberArtworkIdentity("plex", baseUrl, identity.ServerId);
+        return identity;
     }
 
     private async Task<MediaCenterServerIdentity> ProbeEmbyIdentityAsync(string baseUrl, CancellationToken cancellationToken)
@@ -420,10 +424,12 @@ public sealed partial class MediaCenterSourceService
         var serverId = MediaCenterSecurity.RequireIdentifier(
             ReadString(document.RootElement, "Id") ?? ReadString(document.RootElement, "ServerId") ?? string.Empty,
             "Emby server identifier");
-        return new MediaCenterServerIdentity(
+        var identity = new MediaCenterServerIdentity(
             serverId,
             ReadString(document.RootElement, "ServerName") ?? "Emby",
             ReadString(document.RootElement, "Version"));
+        RememberArtworkIdentity("emby", baseUrl, identity.ServerId);
+        return identity;
     }
 
     private PlaylistResult CreatePlaylist(
@@ -450,6 +456,13 @@ public sealed partial class MediaCenterSourceService
                     item.Id),
                 Group = string.IsNullOrWhiteSpace(group) ? ProviderLabel(credential.Binding.Provider) : group,
                 Kind = kind.Value,
+                LogoUrl = item.HasArtwork
+                    ? MediaCenterSecurity.BuildArtworkLocator(
+                        credential.Binding.Provider,
+                        credential.Binding.ServerId,
+                        item.Id,
+                        item.ArtworkVersionTag)
+                    : null,
                 DurationMilliseconds = Math.Max(0, item.DurationMilliseconds),
                 ResumePositionMilliseconds = Math.Max(0, item.ResumePositionMilliseconds),
                 IsPlayed = item.Played
@@ -481,7 +494,9 @@ public sealed partial class MediaCenterSourceService
             ReadInt(element, "index"),
             ReadLong(element, "duration") ?? 0,
             ReadLong(element, "viewOffset") ?? 0,
-            (ReadInt(element, "viewCount") ?? 0) > 0);
+            (ReadInt(element, "viewCount") ?? 0) > 0,
+            TryReadPlexArtworkVersion(ReadString(element, "thumb"), id, out var artworkVersion),
+            artworkVersion);
     }
 
     private static CatalogMediaItem? ParseEmbyItem(JsonElement element, MediaLibrary library, string serverId)
@@ -492,6 +507,7 @@ public sealed partial class MediaCenterSourceService
         if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(title) || kind is not ("movie" or "episode" or "video" or "musicvideo" or "recording" or "livetvchannel" or "audio")) return null;
         id = MediaCenterSecurity.RequireIdentifier(id, "Emby item identifier");
         var userData = ReadObject(element, "UserData");
+        var imageTags = ReadObject(element, "ImageTags");
         var durationTicks = ReadLong(element, "RunTimeTicks") ?? 0;
         var resumeTicks = userData is null ? 0 : ReadLong(userData.Value, "PlaybackPositionTicks") ?? 0;
         return new CatalogMediaItem(
@@ -506,7 +522,31 @@ public sealed partial class MediaCenterSourceService
             ReadInt(element, "IndexNumber"),
             Math.Max(0, durationTicks / 10_000),
             Math.Max(0, resumeTicks / 10_000),
-            userData is not null && ReadBool(userData.Value, "Played"));
+            userData is not null && ReadBool(userData.Value, "Played"),
+            !string.IsNullOrWhiteSpace(ReadString(element, "PrimaryImageTag")) ||
+            imageTags is not null && !string.IsNullOrWhiteSpace(ReadString(imageTags.Value, "Primary")),
+            null);
+    }
+
+    private static bool TryReadPlexArtworkVersion(string? thumbPath, string itemId, out string? versionTag)
+    {
+        versionTag = null;
+        if (string.IsNullOrWhiteSpace(thumbPath) || thumbPath.ContainsAny('\\', '?', '#')) return false;
+        var expectedPrefix = $"/library/metadata/{Uri.EscapeDataString(itemId)}/thumb";
+        if (string.Equals(thumbPath, expectedPrefix, StringComparison.Ordinal)) return true;
+        if (!thumbPath.StartsWith($"{expectedPrefix}/", StringComparison.Ordinal)) return false;
+        var candidate = thumbPath[(expectedPrefix.Length + 1)..];
+        if (candidate.Contains('/')) return false;
+        try
+        {
+            versionTag = MediaCenterSecurity.RequireIdentifier(Uri.UnescapeDataString(candidate), "Plex artwork version");
+            return true;
+        }
+        catch (Exception exception) when (exception is InvalidDataException or UriFormatException)
+        {
+            versionTag = null;
+            return false;
+        }
     }
 
     private static ChannelKind? ToChannelKind(string kind) => kind switch
@@ -796,5 +836,7 @@ public sealed partial class MediaCenterSourceService
         int? EpisodeNumber,
         long DurationMilliseconds,
         long ResumePositionMilliseconds,
-        bool Played);
+        bool Played,
+        bool HasArtwork,
+        string? ArtworkVersionTag);
 }

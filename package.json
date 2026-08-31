@@ -1,7 +1,7 @@
 {
   "name": "streamvue",
   "private": true,
-  "version": "5.4.0-alpha.1",
+  "version": "5.5.0-alpha.1",
   "packageManager": "pnpm@11.19.0",
   "scripts": {
     "catalog:build": "pnpm --filter @streamvue/catalog build",
@@ -22,7 +22,7 @@
     "site:build": "vite build --config site/vite.config.mjs",
     "release:report": "node tools/generate-release-readiness-report.mjs",
     "release:check": "pnpm entitlements:build && pnpm entitlements:test && pnpm verifier-worker:check && pnpm premium:check && pnpm verifier:check && pnpm privacy:check && pnpm listing:check && pnpm accessibility:check && pnpm site:check && pnpm windows:check && pnpm apple:check && pnpm android:check && pnpm samsung:check && pnpm lg:check && node tools/verify-cross-platform-release-contract.mjs",
-    "windows:check": "node tools/verify-windows-plex-account-foundation.mjs && node tools/verify-windows-media-center-progress.mjs",
+    "windows:check": "node tools/verify-windows-plex-account-foundation.mjs && node tools/verify-windows-media-center-progress.mjs && node tools/verify-windows-media-center-artwork.mjs",
     "apple:check": "node tools/verify-apple-brand-assets.mjs && node tools/verify-apple-distribution-readiness.mjs && node tools/verify-apple-plex-account-foundation.mjs",
     "android:check": "node tools/verify-android-plex-account-foundation.mjs",
     "samsung:check": "node tools/verify-samsung-distribution-readiness.mjs",

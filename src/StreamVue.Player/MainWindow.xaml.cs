@@ -314,6 +314,7 @@ public partial class MainWindow : Window
         }
         if (!previous.CanUseMediaCenters || state.Access.CanUseMediaCenters) return;
         CancelPlexAccountSignInCore("Premium access is no longer verified. Plex account sign-in was canceled.");
+        ResetArtworkLoading();
         if (_currentChannel?.IsProtectedMedia == true)
         {
             ObserveMediaPlaybackReport(EndCurrentMediaPlaybackReporting(_playback?.GetSnapshot()));
@@ -1526,6 +1527,7 @@ public partial class MainWindow : Window
 
     private void ApplyPlaylist(PlaylistResult result)
     {
+        ResetArtworkLoading();
         var rebuildMultiview = _multiviewSession is not null;
         _multiviewSession?.Dispose();
         _multiviewSession = null;
@@ -2207,6 +2209,7 @@ public partial class MainWindow : Window
         InspectorChannelName.Text = route.Representative.Name;
         InspectorGroupName.Text = route.Representative.Group;
         InspectorInitials.Text = route.Representative.Initials;
+        ShowChannelArtwork(route.Representative);
         ActiveFeedValue.Text = SmartSignalRoutingPolicy.SourceLabel(_activeSignalFeed);
         UpdateSignalRouteAvailability();
         FooterStatusDot.Fill = LiveBrush;
@@ -2758,6 +2761,7 @@ public partial class MainWindow : Window
         InspectorChannelName.Text = logicalChannel.Name;
         InspectorGroupName.Text = logicalChannel.Group;
         InspectorInitials.Text = logicalChannel.Initials;
+        ShowChannelArtwork(logicalChannel);
         UpdateCurrentFavoriteButton(logicalChannel);
         UpdateCurrentGuide(logicalChannel);
         _showPlayerTopStatus = logicalChannel.Kind == ChannelKind.Live;
@@ -8038,6 +8042,7 @@ public partial class MainWindow : Window
             // App shutdown must not be held open by an unavailable media server.
         }
         _mediaCenterSource.CancelAllPlaybackReportingSessions();
+        ResetArtworkLoading();
         if (!_automationRun)
             _sessionRecoveryService.CompleteAsync(CreateSessionSnapshot()).GetAwaiter().GetResult();
         _telemetryTimer.Stop();

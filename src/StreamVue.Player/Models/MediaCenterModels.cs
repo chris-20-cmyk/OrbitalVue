@@ -23,6 +23,8 @@ public sealed record MediaCenterCredential
 
 public sealed record MediaCenterLocator(string Provider, string ServerId, string ItemId);
 
+public sealed record MediaCenterArtworkLocator(string Provider, string ServerId, string ItemId, string? VersionTag);
+
 public sealed record ResolvedMediaPlayback(
     string Url,
     string Method,
