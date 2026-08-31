@@ -15,8 +15,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Launch
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.Launch
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material3.Button
@@ -142,7 +142,7 @@ private fun PlexSignInChallenge(
             onClick = { runCatching { uriHandler.openUri(authorizationUrl) } },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Icon(Icons.Rounded.Launch, contentDescription = null)
+            Icon(Icons.AutoMirrored.Rounded.Launch, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
             Text("Open Plex sign-in")
         }

@@ -70,7 +70,8 @@ requireFragments(signer, [
   "verifyMasterKey(masterAead)",
   "TinkProtoKeysetFormat.serializeEncryptedKeyset",
   "TinkProtoKeysetFormat.parseEncryptedKeyset",
-  "SignatureKeyTemplates.ED25519WithRawOutput",
+  "PredefinedSignatureParameters.ED25519WithRawOutput",
+  "RegistryConfiguration.get()",
   "MessageDigest.isEqual",
   "putString(KEYSET_NAME, Hex.encode(encrypted)).commit()"
 ], "Keystore-only device signer");

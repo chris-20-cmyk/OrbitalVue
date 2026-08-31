@@ -8,9 +8,9 @@ import com.google.crypto.tink.PublicKeySign
 import com.google.crypto.tink.RegistryConfiguration
 import com.google.crypto.tink.TinkProtoKeysetFormat
 import com.google.crypto.tink.integration.android.AndroidKeystore
+import com.google.crypto.tink.signature.PredefinedSignatureParameters
 import com.google.crypto.tink.signature.SignatureConfig
 import com.google.crypto.tink.signature.SignatureJwkSetConverter
-import com.google.crypto.tink.signature.SignatureKeyTemplates
 import com.google.crypto.tink.subtle.Hex
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -100,15 +100,17 @@ internal class AndroidPlexDeviceSigner(
             return TinkProtoKeysetFormat.parseEncryptedKeyset(
                 Hex.decode(storedKeyset),
                 masterAead,
-                KEYSET_ASSOCIATED_DATA
+                KEYSET_ASSOCIATED_DATA,
+                RegistryConfiguration.get()
             )
         }
 
-        val generated = KeysetHandle.generateNew(SignatureKeyTemplates.ED25519WithRawOutput)
+        val generated = KeysetHandle.generateNew(PredefinedSignatureParameters.ED25519WithRawOutput)
         val encrypted = TinkProtoKeysetFormat.serializeEncryptedKeyset(
             generated,
             masterAead,
-            KEYSET_ASSOCIATED_DATA
+            KEYSET_ASSOCIATED_DATA,
+            RegistryConfiguration.get()
         )
         check(preferences.edit().putString(KEYSET_NAME, Hex.encode(encrypted)).commit()) {
             "Android could not persist the encrypted Plex sign-in key."
