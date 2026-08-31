@@ -22,6 +22,7 @@ const [
   panel,
   app,
   tests,
+  discoveryTests,
   manifest,
   privacyText
 ] = await Promise.all([
@@ -33,6 +34,7 @@ const [
   read("platforms/android/app/src/main/java/com/streamvue/player/ui/PlexAccountConnectPanel.kt"),
   read("platforms/android/app/src/main/java/com/streamvue/player/ui/StreamVueApp.kt"),
   read("platforms/android/app/src/test/java/com/streamvue/player/data/PlexAccountClientTest.kt"),
+  read("platforms/android/app/src/test/java/com/streamvue/player/data/PlexDiscoverySecurityTest.kt"),
   read("platforms/android/app/src/main/AndroidManifest.xml"),
   read("store/privacy-data-inventory.json")
 ]);
@@ -127,6 +129,16 @@ requireFragments(tests, [
   "discovers servers and prefers secure local connections",
   "rejects private key material before contacting Plex"
 ], "protocol unit tests");
+requireFragments(discoveryTests, [
+  "signed discovery exposes no token and persists only the selected server token",
+  "unlisted connection is rejected before a server request or credential write",
+  "changed server identity is rejected before its token is stored",
+  "http requires consent and the same discovery can recover after denial",
+  "cancelling an in-flight selection removes its newly stored credential",
+  "assertFalse(encodedDiscovery.contains(\"account-token\"))",
+  "assertFalse(encodedDiscovery.contains(\"server-token\"))",
+  "assertTrue(vault.values.isEmpty())"
+], "discovery security tests");
 requireFragments(manifest, [
   'android:allowBackup="false"',
   'android:dataExtractionRules="@xml/data_extraction_rules"',
