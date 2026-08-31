@@ -152,6 +152,10 @@ public partial class MainWindow : Window
     private bool _recordingResumeApplied = true;
     private long _pendingMediaResumeMilliseconds;
     private bool _mediaResumeApplied = true;
+    private string? _mediaPlaybackReportingSessionId;
+    private PlaybackState _mediaPlaybackState = PlaybackState.Idle;
+    private MediaCenterPlaybackState? _lastReportedMediaPlaybackState;
+    private DateTimeOffset _lastMediaPlaybackReportUtc = DateTimeOffset.MinValue;
     private bool _seekingRecording;
     private bool _allowFinalClose;
     private bool _hiddenToTray;
@@ -312,6 +316,8 @@ public partial class MainWindow : Window
         CancelPlexAccountSignInCore("Premium access is no longer verified. Plex account sign-in was canceled.");
         if (_currentChannel?.IsProtectedMedia == true)
         {
+            ObserveMediaPlaybackReport(EndCurrentMediaPlaybackReporting(_playback?.GetSnapshot()));
+            _mediaCenterSource.CancelAllPlaybackReportingSessions();
             CancelMediaPlaybackResolution(clearResume: true);
             _playback?.Stop();
             _displayRefreshRate?.Restore();
@@ -2723,6 +2729,7 @@ public partial class MainWindow : Window
         bool rememberChannel = true,
         ChannelItem? playbackOverride = null,
         ChannelPlaybackProfile? playbackProfile = null,
+        string? mediaPlaybackReportingSessionId = null,
         bool force = false)
     {
         var route = string.IsNullOrWhiteSpace(recordingPath) && playbackOverride is null ? GetSignalRoute(channel) : null;
@@ -2730,14 +2737,20 @@ public partial class MainWindow : Window
         if (!force && ReferenceEquals(logicalChannel, _currentChannel) &&
             string.Equals(recordingPath, _currentRecordingPath, StringComparison.OrdinalIgnoreCase) &&
             (requestedSignalFeed is null || string.Equals(requestedSignalFeed.StableKey, _activeSignalFeed?.StableKey, StringComparison.OrdinalIgnoreCase))) return;
-        CaptureSignalTelemetry(_playback?.GetSnapshot(), persist: false);
+        var previousSnapshot = _playback?.GetSnapshot();
+        CaptureSignalTelemetry(previousSnapshot, persist: false);
         SaveCurrentRecordingProgress(force: true);
+        ObserveMediaPlaybackReport(EndCurrentMediaPlaybackReporting(previousSnapshot));
         _displayRefreshRate?.Restore();
         if (_currentChannel is not null && string.IsNullOrWhiteSpace(_currentRecordingPath) && !ReferenceEquals(_currentChannel, logicalChannel))
             _previousChannel = _currentChannel;
         _currentRecordingPath = string.IsNullOrWhiteSpace(recordingPath) ? null : Path.GetFullPath(recordingPath);
         _recordingResumeApplied = _currentRecordingPath is null;
         _currentChannel = logicalChannel;
+        _mediaPlaybackReportingSessionId = mediaPlaybackReportingSessionId;
+        _mediaPlaybackState = PlaybackState.Idle;
+        _lastReportedMediaPlaybackState = null;
+        _lastMediaPlaybackReportUtc = DateTimeOffset.MinValue;
         if (_currentRecordingPath is null && rememberChannel) _settings.LastChannelKey = logicalChannel.StableKey;
         _learnedProfileSignature = string.Empty;
         NowPlayingHeading.Text = logicalChannel.Name;
@@ -2787,10 +2800,13 @@ public partial class MainWindow : Window
         FooterStatusText.Text = $"Preparing protected {logicalChannel.SourceName ?? "media-center"} playback…";
         PlaybackDetailText.Text = "Resolving a short-lived playback address";
 
+        string? pendingReportingSessionId = null;
+        var reportingSessionAdopted = false;
         try
         {
             var resolved = await _mediaCenterSource.ResolvePlaybackAsync(logicalChannel, cancellation.Token);
             cancellation.Token.ThrowIfCancellationRequested();
+            pendingReportingSessionId = resolved.ReportingSessionId;
             var playbackChannel = CreateResolvedMediaChannel(logicalChannel, resolved);
             _pendingMediaResumeMilliseconds = Math.Max(0, resolved.ResumePositionMilliseconds);
             _mediaResumeApplied = _pendingMediaResumeMilliseconds < 30_000 || logicalChannel.Kind == ChannelKind.Live;
@@ -2799,7 +2815,12 @@ public partial class MainWindow : Window
                 rememberChannel: rememberChannel,
                 playbackOverride: playbackChannel,
                 playbackProfile: profile,
+                mediaPlaybackReportingSessionId: pendingReportingSessionId,
                 force: true);
+            reportingSessionAdopted = string.Equals(
+                _mediaPlaybackReportingSessionId,
+                pendingReportingSessionId,
+                StringComparison.Ordinal);
             PlaybackDetailText.Text = $"{logicalChannel.Group} • {resolved.Method.Replace('-', ' ')}";
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -2814,6 +2835,8 @@ public partial class MainWindow : Window
         }
         finally
         {
+            if (!reportingSessionAdopted)
+                _mediaCenterSource.CancelPlaybackReportingSession(pendingReportingSessionId);
             if (ReferenceEquals(_mediaPlaybackCancellation, cancellation))
                 _mediaPlaybackCancellation = null;
             cancellation.Dispose();
@@ -3024,6 +3047,8 @@ public partial class MainWindow : Window
     {
         Dispatcher.BeginInvoke(() =>
         {
+            var previousMediaPlaybackState = _mediaPlaybackState;
+            _mediaPlaybackState = status.State;
             if (status.IsTerminalFailure && TryAutomaticSignalFailover(status)) return;
             if (status.IsTerminalFailure) RecordSignalFailure(status.TechnicalDetail ?? status.Message);
             StreamStateValue.Text = status.State.ToString();
@@ -3075,11 +3100,15 @@ public partial class MainWindow : Window
                         : $"DVR playback • {_currentChannel?.Name}";
                     LiveDot.Fill = LiveBrush;
                     PlayPauseGlyph.Text = "Ⅱ";
+                    QueueMediaPlaybackReport(
+                        MediaCenterPlaybackState.Playing,
+                        force: previousMediaPlaybackState != PlaybackState.Playing);
                     break;
                 case PlaybackState.Paused:
                     FooterStatusDot.Fill = WarningBrush;
                     LiveDot.Fill = WarningBrush;
                     PlayPauseGlyph.Text = "▶";
+                    QueueMediaPlaybackReport(MediaCenterPlaybackState.Paused, force: true);
                     break;
                 case PlaybackState.Stopped when _currentRecordingPath is not null && status.Message == "Recording finished":
                     _settings.RecordingPlaybackProgress.Remove(DvrRecordingService.CreateLibraryKey(_currentRecordingPath));
@@ -3090,6 +3119,7 @@ public partial class MainWindow : Window
                     PlayPauseGlyph.Text = "▶";
                     break;
                 case PlaybackState.Error:
+                    ObserveMediaPlaybackReport(EndCurrentMediaPlaybackReporting(_playback?.GetSnapshot()));
                     FooterStatusDot.Fill = ErrorBrush;
                     FooterStatusText.Text = _currentRecordingPath is null
                         ? "Playback error — try Stable buffer or another channel"
@@ -3263,6 +3293,7 @@ public partial class MainWindow : Window
                 position = resumePosition;
                 FooterStatusDot.Fill = LiveBrush;
                 FooterStatusText.Text = $"Resumed at {FormatPlaybackTime(position)} • {_currentChannel?.Name}";
+                QueueMediaPlaybackReport(MediaCenterPlaybackState.Playing, snapshot with { Time = position }, force: true);
             }
         }
 
@@ -3273,6 +3304,79 @@ public partial class MainWindow : Window
         }
         RecordingPositionText.Text = FormatPlaybackTime(position);
         RecordingDurationText.Text = FormatPlaybackTime(length);
+        if (_mediaPlaybackState == PlaybackState.Playing)
+            QueueMediaPlaybackReport(MediaCenterPlaybackState.Playing, snapshot);
+    }
+
+    private void QueueMediaPlaybackReport(
+        MediaCenterPlaybackState state,
+        PlaybackSnapshot? snapshot = null,
+        bool force = false)
+    {
+        if (string.IsNullOrWhiteSpace(_mediaPlaybackReportingSessionId) ||
+            _currentChannel?.IsProtectedMedia != true ||
+            _currentChannel.Kind == ChannelKind.Live) return;
+        var now = DateTimeOffset.UtcNow;
+        if (!force &&
+            _lastReportedMediaPlaybackState == state &&
+            now - _lastMediaPlaybackReportUtc < TimeSpan.FromSeconds(10)) return;
+        snapshot ??= _playback?.GetSnapshot();
+        if (snapshot is null) return;
+        _lastReportedMediaPlaybackState = state;
+        _lastMediaPlaybackReportUtc = now;
+        try
+        {
+            ObserveMediaPlaybackReport(_mediaCenterSource.ReportPlaybackAsync(
+                _mediaPlaybackReportingSessionId,
+                state,
+                snapshot.Time,
+                snapshot.Length,
+                snapshot.IsMuted,
+                snapshot.Volume));
+        }
+        catch
+        {
+            // Reporting is best-effort and must never interrupt local playback.
+        }
+    }
+
+    private Task EndCurrentMediaPlaybackReporting(
+        PlaybackSnapshot? snapshot = null,
+        CancellationToken cancellationToken = default)
+    {
+        var reportingSessionId = _mediaPlaybackReportingSessionId;
+        _mediaPlaybackReportingSessionId = null;
+        _lastReportedMediaPlaybackState = null;
+        _lastMediaPlaybackReportUtc = DateTimeOffset.MinValue;
+        if (string.IsNullOrWhiteSpace(reportingSessionId)) return Task.CompletedTask;
+        snapshot ??= _playback?.GetSnapshot();
+        try
+        {
+            return _mediaCenterSource.StopPlaybackReportingAsync(
+                reportingSessionId,
+                snapshot?.Time ?? 0,
+                snapshot?.Length ?? 0,
+                snapshot?.IsMuted ?? false,
+                snapshot?.Volume ?? 100,
+                cancellationToken);
+        }
+        catch
+        {
+            _mediaCenterSource.CancelPlaybackReportingSession(reportingSessionId);
+            return Task.CompletedTask;
+        }
+    }
+
+    private static async void ObserveMediaPlaybackReport(Task report)
+    {
+        try
+        {
+            await report.ConfigureAwait(false);
+        }
+        catch
+        {
+            // Plex/Emby progress synchronization fails open so video keeps playing.
+        }
     }
 
     private void SaveCurrentRecordingProgress(bool force, PlaybackSnapshot? snapshot = null)
@@ -3318,6 +3422,7 @@ public partial class MainWindow : Window
         _playback?.SeekTo((long)PlaybackSeekSlider.Value);
         RecordingPositionText.Text = FormatPlaybackTime((long)PlaybackSeekSlider.Value);
         if (_currentRecordingPath is not null) _lastRecordingProgressSaveUtc = DateTimeOffset.MinValue;
+        else QueueMediaPlaybackReport(CurrentMediaCenterPlaybackState(), _playback?.GetSnapshot(), force: true);
     }
 
     private void PlaybackSeekSlider_KeyUp(object sender, KeyEventArgs e)
@@ -3325,7 +3430,13 @@ public partial class MainWindow : Window
         if (!HasSeekableLibraryPlayback || e.Key is not (Key.Left or Key.Right or Key.Home or Key.End or Key.PageUp or Key.PageDown)) return;
         _playback?.SeekTo((long)PlaybackSeekSlider.Value);
         if (_currentRecordingPath is not null) _lastRecordingProgressSaveUtc = DateTimeOffset.MinValue;
+        else QueueMediaPlaybackReport(CurrentMediaCenterPlaybackState(), _playback?.GetSnapshot(), force: true);
     }
+
+    private MediaCenterPlaybackState CurrentMediaCenterPlaybackState() =>
+        _mediaPlaybackState == PlaybackState.Paused
+            ? MediaCenterPlaybackState.Paused
+            : MediaCenterPlaybackState.Playing;
 
     private bool HasSeekableLibraryPlayback =>
         _currentRecordingPath is not null ||
@@ -5067,6 +5178,7 @@ public partial class MainWindow : Window
     {
         CaptureSignalTelemetry(_playback?.GetSnapshot(), persist: true);
         SaveCurrentRecordingProgress(force: true);
+        ObserveMediaPlaybackReport(EndCurrentMediaPlaybackReporting(_playback?.GetSnapshot()));
         CancelMediaPlaybackResolution(clearResume: true);
         _playback?.Stop();
         if (_currentRecordingPath is not null) _recordingResumeApplied = false;
@@ -7913,6 +8025,19 @@ public partial class MainWindow : Window
         }
 
         if (_isFullscreen) ExitFullscreen();
+        using var mediaStopCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var mediaStop = EndCurrentMediaPlaybackReporting(
+            _playback?.GetSnapshot(),
+            mediaStopCancellation.Token);
+        try
+        {
+            mediaStop.GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // App shutdown must not be held open by an unavailable media server.
+        }
+        _mediaCenterSource.CancelAllPlaybackReportingSessions();
         if (!_automationRun)
             _sessionRecoveryService.CompleteAsync(CreateSessionSnapshot()).GetAwaiter().GetResult();
         _telemetryTimer.Stop();

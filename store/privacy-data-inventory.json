@@ -22,6 +22,7 @@
         "provider-password-during-authentication",
         "provider-account-token-during-authentication",
         "provider-server-access-token",
+        "media-item-identifier-and-playback-progress",
         "user-supplied-request-headers"
       ],
       "purpose": "app-functionality",

@@ -27,6 +27,14 @@ public sealed record ResolvedMediaPlayback(
     string Url,
     string Method,
     long ResumePositionMilliseconds,
-    string? Referrer = null);
+    string? Referrer = null,
+    string? ReportingSessionId = null);
+
+public enum MediaCenterPlaybackState
+{
+    Playing,
+    Paused,
+    Stopped
+}
 
 public sealed record MediaCenterServerIdentity(string ServerId, string DisplayName, string? Version = null);

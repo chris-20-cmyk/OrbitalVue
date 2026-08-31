@@ -5,7 +5,7 @@ StreamVue has a technical privacy inventory, but it does not yet have a publishe
 ## What the current app does
 
 - StreamVue has no advertising, cross-app tracking, automatic analytics, or developer-hosted user account system.
-- Playlist files, channel and guide metadata, favorites, recents, resume state, and playback preferences stay on the device.
+- Playlist files, channel and guide metadata, favorites, recents, and playback preferences stay on the device. When a user plays their own Plex or Emby library, StreamVue sends the media item identifier, position, and play/pause/stop state directly to that selected server so its account resume and watched state can stay current.
 - A playlist URL, Xtream request, or Plex/Emby request goes only to the server selected by the user. StreamVue does not proxy those requests through a StreamVue service.
 - Plex/Emby tokens and Windows Xtream credentials are protected locally when the platform offers an appropriate secure store. Windows uses current-user data protection, Android uses an Android Keystore AES-GCM key, Apple uses Keychain, Samsung uses Tizen KeyManager, and LG uses its trusted-execution key manager with a session-only fallback when secure persistence is unavailable. Playlist locations and catalogs stay in app-private device storage; the added encryption/protection level varies by platform, so a signed playlist URL must be treated as sensitive data.
 - A random app-installation identifier is sent to a connected Plex or Emby server as a player/client identifier. It is not a hardware identifier and StreamVue does not receive it.

@@ -1,36 +1,34 @@
-# StreamVue 5.3.0 Windows Plex Account Discovery
+# StreamVue 5.4.0 Windows Media-Center Progress Sync
 
-StreamVue 5.3 brings secure Plex account sign-in and automatic personal-server discovery to the native Windows app. Existing M3U, Xtream, manual Plex/Emby, DVR, casting, playback-resilience, and in-place update features remain available.
+StreamVue 5.4 keeps Plex and Emby resume position and watched state synchronized from the native Windows player. Existing M3U, Xtream, Plex account discovery, DVR, casting, playback-resilience, and in-place update features remain available.
 
-## Recommended Plex sign-in
+## Plex and Emby playback lifecycle
 
-- New **Sign in with Plex** path opens the official browser approval page and polls automatically after approval
-- Automatically discovers every Plex Media Server authorized for the account
-- Prefers secure local connections, then secure remote/relay choices
-- Lets the user choose the exact server and connection before anything is saved
-- Keeps manual Plex server-token entry under an advanced option
-- Requires explicit trusted-network consent before sending a server token over HTTP
+- Sends Plex timeline updates when playback starts, pauses, resumes, seeks, stops, changes source, fails terminally, or closes
+- Sends Emby `Playing`, `Progress`, and `Stopped` session check-ins with the server-issued play-session and media-source identifiers
+- Refreshes active progress every ten seconds without blocking the player UI
+- Reports the native player position, duration, mute state, volume, direct-play/direct-stream/transcode method, and seek capability where the provider accepts them
+- Lets each selected media center update its own resume and watched state for the signed-in account
 
-## Credential and device protection
+## Credential and session protection
 
-- Uses Plex's strong PIN flow with a stable Ed25519 device identity
-- Sends only the public JWK to Plex; the private 32-byte signing seed is protected by Windows current-user DPAPI
-- Imports the private seed into a non-exportable runtime key and zeroes temporary clear buffers
-- Keeps the Plex account token in service memory only while verifying the account and fetching server-scoped resources
-- Exposes only sanitized server choices and an opaque ten-minute discovery lease to WPF
-- Probes the selected server without a token and requires its identity to match the selected Plex resource before storing the server token
-- Invalidates discovery on cancellation, failed activation, or premium-entitlement loss
+- Exposes only a random 32-character reporting handle to WPF; tokens remain inside the DPAPI-backed media-center service
+- Binds every report to the verified provider, server identity, normalized origin, credential, item, and playback session
+- Serializes concurrent events and rejects stale event ordering
+- Limits in-memory reporting sessions to eight and expires abandoned sessions after eighteen hours
+- Cancels pending network work when a resolution is abandoned, premium access is revoked, or StreamVue closes
+- Fails open: an unavailable Plex or Emby server never interrupts local playback
 
 ## Verification and release controls
 
-- Protocol tests cryptographically verify the Ed25519 device JWT, claims, and five-minute lifetime
-- Security tests reject unlisted addresses, cleartext connections without consent, changed server identities, cancelled leases, and leases observed after entitlement revocation
-- Serialized discovery and UI models are checked for account/server-token leakage
-- Both Personal and Microsoft Store build modes compile with zero warnings
-- A dedicated Windows structural gate runs in foundation, Store-candidate, and preview-packaging workflows
+- Protocol tests verify Plex playing/paused/stopped ordering and authenticated session headers
+- Protocol tests verify Emby start/progress/pause/unpause/stopped endpoints, event reasons, and tick conversion
+- Security tests prove forged handles never reach the network, duplicate stops are suppressed, and report bodies contain no password or provider token
+- A dedicated structural gate covers play, pause, seek, periodic progress, stop, shutdown, cancellation, entitlement revocation, and fail-open behavior
+- Personal and Microsoft Store build modes remain independently compiled and checked
 
-## Updating from Windows 4.0
+## Updating from Windows 4.0 or 5.3
 
-The personal Windows build remains on the existing Velopack update lane. StreamVue 4.0 can download and install the 5.3 preview in place; uninstalling first is not required. Microsoft Store builds remain Store-managed and do not contact the GitHub updater.
+The personal Windows build remains on the existing Velopack update lane. StreamVue 4.0 and 5.3 can install the 5.4 preview in place; uninstalling first is not required. Microsoft Store builds remain Store-managed and do not contact the GitHub updater.
 
 This is a prerelease intended for personal testing. Store submission remains locked until the real product, privacy, listing, accessibility, public-site, and Partner Center owner-review gates are complete.

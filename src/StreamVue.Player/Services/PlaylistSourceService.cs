@@ -44,7 +44,7 @@ public sealed class PlaylistSourceService
         {
             Timeout = TimeSpan.FromMinutes(3)
         };
-        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("StreamVue", "5.3.0"));
+        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("StreamVue", "5.4.0"));
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("audio/x-mpegurl"));
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.apple.mpegurl"));
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/plain"));

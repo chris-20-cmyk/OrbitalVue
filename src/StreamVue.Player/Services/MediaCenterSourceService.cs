@@ -13,7 +13,7 @@ public sealed partial class MediaCenterSourceService
     private const int PageSize = 200;
     private const int MaximumItems = 20_000;
     private const int MaximumResponseBytes = 32 * 1024 * 1024;
-    private const string ClientVersion = "5.3.0";
+    private const string ClientVersion = "5.4.0";
 
     private readonly MediaCenterCredentialStore _credentialStore;
     private readonly HttpClient _http;
@@ -132,11 +132,16 @@ public sealed partial class MediaCenterSourceService
         return await _credentialStore.TryLoadForSourceAsync(provider, serverAddress, cancellationToken) is not null;
     }
 
-    public Task DeleteCredentialAsync(
+    public async Task DeleteCredentialAsync(
         string provider,
         string serverAddress,
-        CancellationToken cancellationToken = default) =>
-        _credentialStore.DeleteForSourceAsync(provider, serverAddress, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedProvider = MediaCenterSecurity.NormalizeProvider(provider);
+        var baseUrl = MediaCenterSecurity.NormalizeBaseUrl(serverAddress);
+        CancelPlaybackReportingSessionsForSource(normalizedProvider, baseUrl);
+        await _credentialStore.DeleteForSourceAsync(normalizedProvider, baseUrl, cancellationToken);
+    }
 
     public async Task<ResolvedMediaPlayback> ResolvePlaybackAsync(
         ChannelItem channel,
@@ -297,7 +302,12 @@ public sealed partial class MediaCenterSourceService
             throw new InvalidDataException("Plex returned no direct-play media part for this item.");
         var playbackUrl = MediaCenterSecurity.ResolveServerPath(credential.Binding.BaseUrl, partPath);
         playbackUrl = MediaCenterSecurity.AddCredentialQuery(playbackUrl, "X-Plex-Token", credential.AccessToken);
-        return new ResolvedMediaPlayback(playbackUrl, "direct-play", Math.Max(0, resumePositionMilliseconds));
+        var reportingSessionId = RegisterPlaybackReportingSession(locator, credential, "direct-play");
+        return new ResolvedMediaPlayback(
+            playbackUrl,
+            "direct-play",
+            Math.Max(0, resumePositionMilliseconds),
+            ReportingSessionId: reportingSessionId);
     }
 
     private async Task<ResolvedMediaPlayback> ResolveEmbyPlaybackAsync(
@@ -322,6 +332,10 @@ public sealed partial class MediaCenterSourceService
             EmbyHeaders(credential.AccessToken, userId),
             null,
             cancellationToken);
+        var rawPlaySessionId = ReadString(document.RootElement, "PlaySessionId");
+        var playSessionId = string.IsNullOrWhiteSpace(rawPlaySessionId)
+            ? Guid.NewGuid().ToString("N")
+            : MediaCenterSecurity.RequireIdentifier(rawPlaySessionId, "Emby play session identifier");
         var source = ReadArray(document.RootElement, "MediaSources").FirstOrDefault();
         if (source.ValueKind == JsonValueKind.Undefined)
             throw new InvalidDataException("Emby returned no playable media source.");
@@ -346,7 +360,7 @@ public sealed partial class MediaCenterSourceService
                 playbackUrl = MediaCenterSecurity.ResolveServerPath(apiBase, $"/Videos/{Uri.EscapeDataString(locator.ItemId)}/stream.{container}");
                 playbackUrl = AddQuery(playbackUrl,
                     ("MediaSourceId", sourceId),
-                    ("PlaySessionId", ReadString(document.RootElement, "PlaySessionId") ?? Guid.NewGuid().ToString("N")),
+                    ("PlaySessionId", playSessionId),
                     ("Static", "true"));
             }
         }
@@ -363,7 +377,18 @@ public sealed partial class MediaCenterSourceService
             ? SanitizeHeaderValue(ReadString(requiredHeaders, "Referer") ?? ReadString(requiredHeaders, "Referrer"))
             : null;
         playbackUrl = MediaCenterSecurity.AddCredentialQuery(playbackUrl, "api_key", credential.AccessToken);
-        return new ResolvedMediaPlayback(playbackUrl, method, Math.Max(0, resumePositionMilliseconds), referrer);
+        var reportingSessionId = RegisterPlaybackReportingSession(
+            locator,
+            credential,
+            method,
+            playSessionId,
+            sourceId);
+        return new ResolvedMediaPlayback(
+            playbackUrl,
+            method,
+            Math.Max(0, resumePositionMilliseconds),
+            referrer,
+            reportingSessionId);
     }
 
     private async Task<MediaCenterServerIdentity> ProbePlexIdentityAsync(string baseUrl, CancellationToken cancellationToken)

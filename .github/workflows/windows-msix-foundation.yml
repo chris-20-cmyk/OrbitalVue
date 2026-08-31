@@ -12,6 +12,7 @@ on:
       - "tools/build-windows-msix.ps1"
       - "tools/verify-windows-msix.ps1"
       - "tools/verify-windows-plex-account-foundation.mjs"
+      - "tools/verify-windows-media-center-progress.mjs"
       - "packaging/windows-msix/**"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
@@ -24,6 +25,7 @@ on:
       - "tools/build-windows-msix.ps1"
       - "tools/verify-windows-msix.ps1"
       - "tools/verify-windows-plex-account-foundation.mjs"
+      - "tools/verify-windows-media-center-progress.mjs"
       - "packaging/windows-msix/**"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
@@ -51,6 +53,7 @@ jobs:
         run: |
           node tools/verify-premium-store-readiness.mjs
           node tools/verify-windows-plex-account-foundation.mjs
+          node tools/verify-windows-media-center-progress.mjs
           node tools/verify-cross-platform-release-contract.mjs
 
       - name: Restore the isolated Store dependency graph
@@ -67,7 +70,7 @@ jobs:
           -IdentityName StreamVue.Test.Package
           -Publisher 'CN=00000000-0000-0000-0000-000000000000'
           -PublisherDisplayName 'StreamVue Test'
-          -Version 5.3.0.0
+          -Version 5.4.0.0
           -PremiumProductId streamvue-test-premium
           -SkipRestore
 
@@ -85,4 +88,4 @@ jobs:
           name: streamvue-windows-msix-layout-test-not-for-installation
           if-no-files-found: error
           retention-days: 14
-          path: artifacts/windows-msix/StreamVue-5.3.0.0-win-x64-microsoft-store-unsigned.msix
+          path: artifacts/windows-msix/StreamVue-5.4.0.0-win-x64-microsoft-store-unsigned.msix

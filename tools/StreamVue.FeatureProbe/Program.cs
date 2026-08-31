@@ -1341,7 +1341,7 @@ try
     Console.WriteLine("Single-audio multiview policy: PASS");
     Console.WriteLine("Independent encrypted multi-source playlist caches: PASS");
     Console.WriteLine("Protected multi-account Xtream vault and legacy migration: PASS");
-    Console.WriteLine("Protected Plex and Emby catalog, credential, cache, and just-in-time playback contract: PASS");
+    Console.WriteLine("Protected Plex and Emby catalog, credentials, just-in-time playback, and watch-progress synchronization: PASS");
     Console.WriteLine("Personal/store premium entitlement policy: PASS");
     Console.WriteLine("Microsoft Store durable add-on verification and revocation: PASS");
     Console.WriteLine("XMLTV Now/Next, episode metadata, and call-sign matching: PASS");
@@ -1521,6 +1521,32 @@ static async Task RunMediaCenterSelfTestAsync(string testRoot)
         allowInsecureHttp: false);
     if (runtimePlaylist.Channels.Count != 1 || runtimeHandler.Requests.Count == 0)
         throw new InvalidOperationException("An existing Windows media-center service did not observe verified runtime access.");
+    var runtimePlayback = await runtimeService.ResolvePlaybackAsync(runtimePlaylist.Channels[0]);
+    runtimeAccess = PremiumAccessPolicy.Evaluate("store", hasVerifiedStorePurchase: false);
+    var requestsBeforeRuntimeRevocation = runtimeHandler.Requests.Count;
+    await runtimeService.StopPlaybackReportingAsync(
+        runtimePlayback.ReportingSessionId!,
+        60_000,
+        7_200_000);
+    runtimeAccess = PremiumAccessPolicy.Evaluate(
+        "store",
+        hasVerifiedStorePurchase: true,
+        productId: "com.streamvue.personal-media-centers");
+    try
+    {
+        await runtimeService.ReportPlaybackAsync(
+            runtimePlayback.ReportingSessionId!,
+            MediaCenterPlaybackState.Playing,
+            60_000,
+            7_200_000);
+        throw new InvalidOperationException("A playback reporting session survived premium entitlement revocation.");
+    }
+    catch (InvalidOperationException exception) when (
+        exception.Message.Contains("no longer active", StringComparison.OrdinalIgnoreCase))
+    {
+    }
+    if (runtimeHandler.Requests.Count != requestsBeforeRuntimeRevocation)
+        throw new InvalidOperationException("Premium revocation emitted a protected playback report.");
 
     if (MediaCenterSecurity.NormalizeBaseUrl($"{plexBaseUrl}/") != plexBaseUrl)
         throw new InvalidOperationException("Media-center server normalization was not canonical.");
@@ -1590,6 +1616,76 @@ static async Task RunMediaCenterSelfTestAsync(string testRoot)
         resolvedPlexUri.Query.Contains("upstream-plex-token", StringComparison.Ordinal) ||
         resolvedPlexUri.Host != "plex.local")
         throw new InvalidOperationException("Plex playback did not materialize only the bound credential on the original server.");
+    if (string.IsNullOrWhiteSpace(resolvedPlex.ReportingSessionId) ||
+        resolvedPlex.ReportingSessionId.Contains(plexToken, StringComparison.Ordinal) ||
+        resolvedPlex.ReportingSessionId.Length != 32)
+        throw new InvalidOperationException("Plex playback did not return an opaque reporting-session handle.");
+    var requestCountBeforeInvalidReport = handler.Requests.Count;
+    try
+    {
+        await service.ReportPlaybackAsync(
+            "00000000000000000000000000000000",
+            MediaCenterPlaybackState.Playing,
+            60_000,
+            7_200_000);
+        throw new InvalidOperationException("An unknown media-center reporting session was accepted.");
+    }
+    catch (InvalidOperationException exception) when (
+        exception.Message.Contains("no longer active", StringComparison.OrdinalIgnoreCase))
+    {
+    }
+    if (handler.Requests.Count != requestCountBeforeInvalidReport)
+        throw new InvalidOperationException("An unknown reporting session reached the media-server network.");
+    try
+    {
+        await service.ReportPlaybackAsync(
+            resolvedPlex.ReportingSessionId,
+            (MediaCenterPlaybackState)99,
+            60_000,
+            7_200_000);
+        throw new InvalidOperationException("An invalid media-center playback state was accepted.");
+    }
+    catch (ArgumentOutOfRangeException)
+    {
+    }
+    if (handler.Requests.Count != requestCountBeforeInvalidReport)
+        throw new InvalidOperationException("An invalid playback state reached the media-server network.");
+    await service.ReportPlaybackAsync(
+        resolvedPlex.ReportingSessionId,
+        MediaCenterPlaybackState.Playing,
+        60_000,
+        7_200_000,
+        volume: 82);
+    await service.ReportPlaybackAsync(
+        resolvedPlex.ReportingSessionId,
+        MediaCenterPlaybackState.Paused,
+        75_000,
+        7_200_000,
+        volume: 82);
+    await service.StopPlaybackReportingAsync(
+        resolvedPlex.ReportingSessionId,
+        90_000,
+        7_200_000,
+        volume: 82);
+    var plexTimelines = handler.Requests
+        .Where(request => request.Host == "plex.local" && request.Path == "/:/timeline")
+        .ToList();
+    if (plexTimelines.Count != 3 ||
+        plexTimelines.Any(request => request.Method != "POST" ||
+            request.Headers.GetValueOrDefault("X-Plex-Token") != plexToken ||
+            request.Headers.GetValueOrDefault("X-Plex-Session-Identifier") != resolvedPlex.ReportingSessionId))
+        throw new InvalidOperationException("Plex timeline reporting was not bound to the protected playback session.");
+    var plexTimelineQueries = plexTimelines
+        .Select(request => Uri.UnescapeDataString(new Uri(request.Uri).Query))
+        .ToList();
+    if (!plexTimelineQueries[0].Contains("state=playing", StringComparison.Ordinal) ||
+        !plexTimelineQueries[1].Contains("state=paused", StringComparison.Ordinal) ||
+        !plexTimelineQueries[2].Contains("state=stopped", StringComparison.Ordinal) ||
+        plexTimelineQueries.Any(query =>
+            !query.Contains("ratingKey=100", StringComparison.Ordinal) ||
+            !query.Contains("key=/library/metadata/100", StringComparison.Ordinal) ||
+            query.Contains(plexToken, StringComparison.Ordinal)))
+        throw new InvalidOperationException("Plex timeline reporting did not preserve state, item, and secret-isolation semantics.");
 
     var emby = await service.ConnectEmbyAsync(
         embyBaseUrl,
@@ -1613,6 +1709,89 @@ static async Task RunMediaCenterSelfTestAsync(string testRoot)
         resolvedEmbyUri.Query.Contains("upstream-emby-token", StringComparison.Ordinal) ||
         resolvedEmbyUri.Host != "emby.local")
         throw new InvalidOperationException("Emby playback did not materialize only the bound credential on the original server.");
+    if (string.IsNullOrWhiteSpace(resolvedEmby.ReportingSessionId) ||
+        resolvedEmby.ReportingSessionId.Contains(embyToken, StringComparison.Ordinal) ||
+        resolvedEmby.ReportingSessionId.Length != 32)
+        throw new InvalidOperationException("Emby playback did not return an opaque reporting-session handle.");
+    await service.ReportPlaybackAsync(
+        resolvedEmby.ReportingSessionId,
+        MediaCenterPlaybackState.Playing,
+        90_000,
+        2_700_000,
+        volume: 70);
+    await service.ReportPlaybackAsync(
+        resolvedEmby.ReportingSessionId,
+        MediaCenterPlaybackState.Playing,
+        100_000,
+        2_700_000,
+        volume: 70);
+    await service.ReportPlaybackAsync(
+        resolvedEmby.ReportingSessionId,
+        MediaCenterPlaybackState.Paused,
+        105_000,
+        2_700_000,
+        isMuted: true,
+        volume: 70);
+    await service.ReportPlaybackAsync(
+        resolvedEmby.ReportingSessionId,
+        MediaCenterPlaybackState.Playing,
+        110_000,
+        2_700_000,
+        volume: 70);
+    await service.StopPlaybackReportingAsync(
+        resolvedEmby.ReportingSessionId,
+        120_000,
+        2_700_000,
+        volume: 70);
+    var embyReports = handler.Requests
+        .Where(request => request.Host == "emby.local" && request.Path.StartsWith("/emby/Sessions/Playing", StringComparison.Ordinal))
+        .ToList();
+    var expectedEmbyPaths = new[]
+    {
+        "/emby/Sessions/Playing",
+        "/emby/Sessions/Playing/Progress",
+        "/emby/Sessions/Playing/Progress",
+        "/emby/Sessions/Playing/Progress",
+        "/emby/Sessions/Playing/Stopped"
+    };
+    if (embyReports.Count != expectedEmbyPaths.Length ||
+        embyReports.Where((request, index) =>
+            request.Method != "POST" ||
+            request.Path != expectedEmbyPaths[index] ||
+            request.Headers.GetValueOrDefault("X-Emby-Token") != embyToken).Any())
+        throw new InvalidOperationException("Emby playback check-ins did not follow the start/progress/stop lifecycle.");
+    for (var index = 0; index < embyReports.Count; index++)
+    {
+        var body = embyReports[index].Body ?? throw new InvalidOperationException("An Emby playback check-in had no body.");
+        if (body.Contains(embyToken, StringComparison.Ordinal) || body.Contains(embyPassword, StringComparison.Ordinal))
+            throw new InvalidOperationException("An Emby secret leaked into playback progress metadata.");
+        using var reportDocument = JsonDocument.Parse(body);
+        var report = reportDocument.RootElement;
+        if (report.GetProperty("ItemId").GetString() != "200" ||
+            report.GetProperty("MediaSourceId").GetString() != "source-200" ||
+            report.GetProperty("PlaySessionId").GetString() != "play-session-1" ||
+            report.GetProperty("PlayMethod").GetString() != "DirectPlay")
+            throw new InvalidOperationException("An Emby playback check-in lost its bound playback context.");
+    }
+    using (var pausedReport = JsonDocument.Parse(embyReports[2].Body!))
+    {
+        if (!pausedReport.RootElement.GetProperty("IsPaused").GetBoolean() ||
+            !pausedReport.RootElement.GetProperty("IsMuted").GetBoolean() ||
+            pausedReport.RootElement.GetProperty("PositionTicks").GetInt64() != 1_050_000_000 ||
+            pausedReport.RootElement.GetProperty("EventName").GetString() != "Pause")
+            throw new InvalidOperationException("Emby pause progress did not preserve state and position.");
+    }
+    using (var timeReport = JsonDocument.Parse(embyReports[1].Body!))
+    using (var resumedReport = JsonDocument.Parse(embyReports[3].Body!))
+    {
+        if (timeReport.RootElement.GetProperty("EventName").GetString() != "TimeUpdate" ||
+            resumedReport.RootElement.GetProperty("EventName").GetString() != "Unpause")
+            throw new InvalidOperationException("Emby progress check-ins did not identify time, pause, and unpause events.");
+    }
+    var requestCountAfterStops = handler.Requests.Count;
+    await service.StopPlaybackReportingAsync(resolvedEmby.ReportingSessionId, 120_000, 2_700_000);
+    if (handler.Requests.Count != requestCountAfterStops)
+        throw new InvalidOperationException("A completed playback session emitted duplicate stop check-ins.");
 
     var plexIdentity = handler.Requests.First(request => request.Host == "plex.local" && request.Path == "/identity");
     if (plexIdentity.Headers.ContainsKey("X-Plex-Token") || plexIdentity.Uri.Contains(plexToken, StringComparison.Ordinal))
@@ -1658,6 +1837,25 @@ static async Task RunMediaCenterSelfTestAsync(string testRoot)
     var reloadedEmby = await service.LoadSavedAsync("emby", embyBaseUrl);
     if (reloadedPlex.Channels.Count != 1 || reloadedEmby.Channels.Count != 1)
         throw new InvalidOperationException("Saved media-center credentials could not refresh their catalogs.");
+
+    var deletedSourcePlayback = await service.ResolvePlaybackAsync(plexItem);
+    var requestsBeforeSourceDelete = handler.Requests.Count;
+    await service.DeleteCredentialAsync("plex", plexBaseUrl);
+    try
+    {
+        await service.ReportPlaybackAsync(
+            deletedSourcePlayback.ReportingSessionId!,
+            MediaCenterPlaybackState.Playing,
+            120_000,
+            7_200_000);
+        throw new InvalidOperationException("Deleting a media-center credential left its playback reporter active.");
+    }
+    catch (InvalidOperationException exception) when (
+        exception.Message.Contains("no longer active", StringComparison.OrdinalIgnoreCase))
+    {
+    }
+    if (handler.Requests.Count != requestsBeforeSourceDelete)
+        throw new InvalidOperationException("A deleted media-center source emitted a playback report.");
 
     await RunPlexAccountDiscoverySelfTestAsync(testRoot, plexToken, embyPassword, embyToken);
 }
@@ -2093,6 +2291,7 @@ sealed class MediaCenterProbeHandler(
             "/library/metadata/100" => """
                                        {"MediaContainer":{"Metadata":[{"Media":[{"Part":[{"key":"/library/parts/part-1/file.mkv?X-Plex-Token=upstream-plex-token"}]}]}]}}
                                        """,
+            "/:/timeline" when request.Method == HttpMethod.Post => """{"MediaContainer":{"size":0}}""",
             _ => null
         };
     }
@@ -2253,6 +2452,9 @@ sealed class MediaCenterProbeHandler(
             "/emby/Items/200/PlaybackInfo" => """
                                                 {"PlaySessionId":"play-session-1","MediaSources":[{"Id":"source-200","Container":"mkv","SupportsDirectPlay":true,"SupportsDirectStream":true,"SupportsTranscoding":true,"DirectStreamUrl":"/Videos/200/stream.mkv?api_key=upstream-emby-token","RequiredHttpHeaders":{"Referer":"https://emby.local/player"}}]}
                                                 """,
+            "/emby/Sessions/Playing" when request.Method == HttpMethod.Post => "{}",
+            "/emby/Sessions/Playing/Progress" when request.Method == HttpMethod.Post => "{}",
+            "/emby/Sessions/Playing/Stopped" when request.Method == HttpMethod.Post => "{}",
             _ => null
         };
     }
