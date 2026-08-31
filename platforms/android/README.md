@@ -29,6 +29,12 @@ The Android/Google TV client includes Google Play Billing Library 9.1.0 for a on
 
 The verifier must validate the purchase token with the Google Play Developer API. With either value missing, purchase and restore controls remain unavailable and Plex/Emby stay locked.
 
+## Plex account connection
+
+Personal builds offer **Sign in with Plex** as the recommended connection path. StreamVue creates a strong signed PIN, shows a QR code and browser action, discovers the Plex Media Servers authorized for that account, and lets the user choose a verified secure/local endpoint. Manual server-token entry remains available under the advanced option.
+
+The account token exists only during the short discovery operation and never enters Compose UI state or the saved catalog. A selected server token is saved only after StreamVue rechecks the server identity and selected origin. The stable Ed25519 device identity is stored only as a Tink encrypted keyset whose wrapping key is created and tested in Android Keystore; the feature fails closed instead of falling back to a cleartext keyset. Android backup and device-to-device transfer remain disabled for this state.
+
 ## Google Play upload signing
 
 Google Play App Signing uses two keys: Google protects the app-signing key used on delivered APKs, while StreamVue signs each uploaded AAB with a separate upload key. The upload key is self-generated and free; it is not a purchased public certificate. Keep its keystore and passwords outside the repository and back them up securely.
@@ -105,4 +111,4 @@ RTMP entries remain in the portable catalog for compatibility but are not claime
 
 ## Source privacy
 
-Raw URL sources and cached playlists stay in app-private storage. Android cloud backup and device-to-device transfer are disabled for all StreamVue state because IPTV URLs can contain private account tokens. Displayed source locations show only the provider host and optional port.
+Raw URL sources and cached playlists stay in app-private storage. Android cloud backup and device-to-device transfer are disabled for all StreamVue state because IPTV URLs can contain private account tokens. Displayed source locations show only the provider host and optional port. Plex account discovery retains no account token; the chosen server token uses the existing Android Keystore-backed credential vault.

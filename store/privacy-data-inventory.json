@@ -53,7 +53,7 @@
         "plex-device-public-signing-key"
       ],
       "purpose": "identify-the-player-to-the-user-selected-media-server",
-      "storage": "on-device; Apple keeps the Plex client identifier and matching private signing key in Keychain, and the private key is never transmitted",
+      "storage": "on-device; Apple keeps the Plex client identifier and matching private signing key in Keychain; Android keeps the matching private signing key in an encrypted Tink keyset wrapped exclusively by Android Keystore; private signing keys are never transmitted",
       "transmittedTo": [
         "user-selected-plex-or-emby-provider"
       ],
