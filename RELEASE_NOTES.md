@@ -1,40 +1,36 @@
-# StreamVue 5.2.0 Android Plex Account & Resilience
+# StreamVue 5.3.0 Windows Plex Account Discovery
 
-StreamVue 5.2 adds secure Plex account sign-in and automatic personal-server discovery to the native Android and Google TV app. It retains the Apple 5.1 foundation, Samsung/LG television clients, and the proven Windows 4.0 application and updater.
+StreamVue 5.3 brings secure Plex account sign-in and automatic personal-server discovery to the native Windows app. Existing M3U, Xtream, manual Plex/Emby, DVR, casting, playback-resilience, and in-place update features remain available.
 
-## Android and Google TV Plex sign-in
+## Recommended Plex sign-in
 
-- Recommended **Sign in with Plex** flow with QR approval and an external-browser action
-- Strong signed PIN requests using a stable Ed25519 device identity
-- Automatic discovery of every authorized Plex Media Server with secure/local connection preference
-- Server and connection pickers designed for touch, D-pad, and ten-foot television use
-- Manual server-token entry retained under an advanced option
-- Explicit consent before any unencrypted local HTTP connection
+- New **Sign in with Plex** path opens the official browser approval page and polls automatically after approval
+- Automatically discovers every Plex Media Server authorized for the account
+- Prefers secure local connections, then secure remote/relay choices
+- Lets the user choose the exact server and connection before anything is saved
+- Keeps manual Plex server-token entry under an advanced option
+- Requires explicit trusted-network consent before sending a server token over HTTP
 
-## Credential and identity protection
+## Credential and device protection
 
-- Plex account tokens remain session-only and never enter Compose state, the portable catalog, or saved preferences
-- Compose receives sanitized server choices plus an opaque discovery lease that expires in no more than ten minutes
-- The chosen server token is stored only after the responding server identity matches the selected Plex resource
-- In-flight cancellation and premium-entitlement loss invalidate discovery and remove any newly created credential
-- The device private key is held only in a Tink encrypted keyset wrapped by a verified Android Keystore AES-GCM key
-- Tink's opportunistic cleartext keyset fallback is not used; unsupported or failing Keystore devices fail closed
-- Android cloud backup and device-to-device transfer remain disabled for credentials and private source state
+- Uses Plex's strong PIN flow with a stable Ed25519 device identity
+- Sends only the public JWK to Plex; the private 32-byte signing seed is protected by Windows current-user DPAPI
+- Imports the private seed into a non-exportable runtime key and zeroes temporary clear buffers
+- Keeps the Plex account token in service memory only while verifying the account and fetching server-scoped resources
+- Exposes only sanitized server choices and an opaque ten-minute discovery lease to WPF
+- Probes the selected server without a token and requires its identity to match the selected Plex resource before storing the server token
+- Invalidates discovery on cancellation, failed activation, or premium-entitlement loss
 
 ## Verification and release controls
 
-- Protocol tests cover public-key-only strong PIN creation, signed proof claims, provider allowlists, response limits, and secure/local sorting
-- Lifecycle tests cover token-free discovery state, unlisted URL rejection, substituted server identity, HTTP denial/retry, and cancellation rollback
-- A dedicated structural gate rejects token-bearing UI models and any cleartext/opportunistic signing-key storage path
-- Android CI validates unit tests, lint, debug APK, minified Store AAB, Leanback metadata, and 16 KB package alignment
-- The personal APK remains available for testing without a paid certificate
-- The Google Play AAB remains premium-locked and unsigned until the real Play product, verifier, upload key, privacy, listing, and accessibility gates are complete
+- Protocol tests cryptographically verify the Ed25519 device JWT, claims, and five-minute lifetime
+- Security tests reject unlisted addresses, cleartext connections without consent, changed server identities, cancelled leases, and leases observed after entitlement revocation
+- Serialized discovery and UI models are checked for account/server-token leakage
+- Both Personal and Microsoft Store build modes compile with zero warnings
+- A dedicated Windows structural gate runs in foundation, Store-candidate, and preview-packaging workflows
 
-## Existing platform foundation retained
+## Updating from Windows 4.0
 
-- Native Apple SwiftUI clients with KSPlayer/Metal personal builds and AVKit-only Store candidates
-- Plex and Emby token/account connections across the platform family using token-free `streamvue-media://` catalogs
-- Samsung AVPlay and LG/webOS television clients with remote-first browsing and native playback paths
-- One cross-platform premium contract based on a one-time lifetime unlock rather than a subscription
+The personal Windows build remains on the existing Velopack update lane. StreamVue 4.0 can download and install the 5.3 preview in place; uninstalling first is not required. Microsoft Store builds remain Store-managed and do not contact the GitHub updater.
 
-This is a prerelease foundation. The Android APK can be installed for personal testing. The release does not contain a new Windows installer; Windows 4.0 remains the current Windows build and continues updating in place.
+This is a prerelease intended for personal testing. Store submission remains locked until the real product, privacy, listing, accessibility, public-site, and Partner Center owner-review gates are complete.

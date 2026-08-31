@@ -1,7 +1,7 @@
 {
   "name": "streamvue",
   "private": true,
-  "version": "5.2.0-alpha.1",
+  "version": "5.3.0-alpha.1",
   "packageManager": "pnpm@11.19.0",
   "scripts": {
     "catalog:build": "pnpm --filter @streamvue/catalog build",

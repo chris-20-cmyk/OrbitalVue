@@ -1,6 +1,6 @@
 # StreamVue Native
 
-StreamVue is a native IPTV player. The Windows 4.0 preview uses .NET, WPF, LibVLCSharp, the VideoLAN playback engine, and Velopack packaging. The Android 5.2 line uses Kotlin, Compose, and AndroidX Media3 for phones, tablets, Android TV, and Google TV. Samsung Tizen and LG webOS share a lightweight remote-first TypeScript surface while retaining each vendor's native television playback path. Apple 5.1 uses SwiftUI with selectable KSPlayer/Metal and AVFoundation/AVKit engines for iPhone, iPad, and Apple TV.
+StreamVue is a native IPTV player. The Windows 5.3 preview uses .NET, WPF, LibVLCSharp, the VideoLAN playback engine, and Velopack packaging. The Android 5.2 line uses Kotlin, Compose, and AndroidX Media3 for phones, tablets, Android TV, and Google TV. Samsung Tizen and LG webOS share a lightweight remote-first TypeScript surface while retaining each vendor's native television playback path. Apple 5.1 uses SwiftUI with selectable KSPlayer/Metal and AVFoundation/AVKit engines for iPhone, iPad, and Apple TV.
 
 ## Android 5.2 foundation
 

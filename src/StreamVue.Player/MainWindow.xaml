@@ -1108,7 +1108,7 @@
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
                     <TextBlock Foreground="#566176" FontSize="9" Text="↑↓ CHANNELS • BACKSPACE LAST" />
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
-                    <TextBlock Foreground="#566176" FontSize="9" Text="4.0 RESILIENCE" />
+                    <TextBlock Foreground="#566176" FontSize="9" Text="5.3 RESILIENCE" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -2354,7 +2354,7 @@
                         <StackPanel>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Smart signal routing" />
-                                <Border Margin="10,3,0,0" Padding="8,4" CornerRadius="6" Background="#17312F" VerticalAlignment="Top"><TextBlock Foreground="{StaticResource AccentBrush}" FontSize="8" FontWeight="Bold" Text="4.0 ROUTE EDITOR" /></Border>
+                                <Border Margin="10,3,0,0" Padding="8,4" CornerRadius="6" Background="#17312F" VerticalAlignment="Top"><TextBlock Foreground="{StaticResource AccentBrush}" FontSize="8" FontWeight="Bold" Text="5.3 ROUTE EDITOR" /></Border>
                             </StackPanel>
                             <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="One channel, every available provider feed, ranked from real playback history." />
                         </StackPanel>

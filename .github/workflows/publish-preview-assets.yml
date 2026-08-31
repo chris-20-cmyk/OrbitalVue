@@ -6,19 +6,19 @@ on:
       release_tag:
         description: Existing draft release tag
         required: true
-        default: v4.0.0-alpha.1
+        default: v5.3.0-alpha.1
       package_version:
         description: Velopack package version
         required: true
-        default: 4.0.0-alpha.1
+        default: 5.3.0-alpha.1
       base_release_tag:
         description: Previous release containing the base full package
         required: true
-        default: v3.9.0-alpha.1
+        default: v4.0.0-alpha.1
       base_package_name:
         description: Previous full package filename
         required: true
-        default: Chris.StreamVue-3.9.0-alpha.1-full.nupkg
+        default: Chris.StreamVue-4.0.0-alpha.1-full.nupkg
 
 permissions:
   contents: write
