@@ -325,6 +325,11 @@ struct EmbyMediaCenterClient: Sendable {
         case .progress: "/Sessions/Playing/Progress"
         case .stopped: "/Sessions/Playing/Stopped"
         }
+        let playMethod = switch plan.method {
+        case .directPlay: "DirectPlay"
+        case .directStream: "DirectStream"
+        case .transcode: "Transcode"
+        }
         var body: [String: Any] = [
             "QueueableMediaTypes": ["Video"],
             "CanSeek": normalized.canSeek,
@@ -333,11 +338,7 @@ struct EmbyMediaCenterClient: Sendable {
             "IsPaused": normalized.state == .paused,
             "IsMuted": normalized.isMuted,
             "PositionTicks": normalized.positionMS * 10_000,
-            "PlayMethod": switch plan.method {
-            case .directPlay: "DirectPlay"
-            case .directStream: "DirectStream"
-            case .transcode: "Transcode"
-            },
+            "PlayMethod": playMethod,
             "PlaySessionId": playSessionID
         ]
         if let durationMS = normalized.durationMS {
