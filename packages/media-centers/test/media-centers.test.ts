@@ -403,6 +403,14 @@ describe("Plex integration", () => {
           }
         };
       }
+      if (url.pathname === "/:/timeline") {
+        expect(request.method).toBe("POST");
+        expect(request.headers["X-Plex-Token"]).toBe(plexToken);
+        expect(request.headers["X-Plex-Session-Identifier"]).toBeTruthy();
+        expect(url.searchParams.get("key")).toBe("/library/metadata/100");
+        expect(url.searchParams.get("ratingKey")).toBe("100");
+        return { MediaContainer: { size: 0 } };
+      }
       throw new Error(`Unexpected Plex request: ${request.url}`);
     });
     const client = new PlexClient(mock.transport, {
@@ -420,11 +428,46 @@ describe("Plex integration", () => {
     const item = page.items[0]!;
     const playback = client.getPlaybackPlan(item);
     const artwork = client.artworkRequest(item)!;
+    await client.reportPlayback(playback, {
+      kind: "started",
+      state: "playing",
+      positionMs: 600_000,
+      durationMs: 7_200_000
+    });
+    await client.reportPlayback(playback, {
+      kind: "progress",
+      state: "paused",
+      positionMs: Number.POSITIVE_INFINITY,
+      durationMs: 7_200_000,
+      event: "pause"
+    });
+    await client.reportPlayback(playback, {
+      kind: "stopped",
+      state: "playing",
+      positionMs: 7_500_000,
+      durationMs: 7_200_000
+    });
+    const requestCountBeforeArtworkReport = mock.requests.length;
+    await client.reportPlayback(artwork, {
+      kind: "progress",
+      state: "playing",
+      positionMs: 1_000
+    });
     const catalog = createMediaCenterCatalog(connection, libraries, page.items, "2026-08-26T12:00:00Z");
     const serializedCatalog = JSON.stringify(catalog);
 
     expect(playback.requestHeaders["X-Plex-Token"]).toBe(plexToken);
     expect(playback.sensitiveHeaderNames).toEqual(["X-Plex-Token"]);
+    const timelineRequests = mock.requests.filter((request) =>
+      new URL(request.url).pathname === "/:/timeline"
+    );
+    expect(timelineRequests).toHaveLength(3);
+    expect(new URL(timelineRequests[0]!.url).searchParams.get("state")).toBe("playing");
+    expect(new URL(timelineRequests[1]!.url).searchParams.get("state")).toBe("paused");
+    expect(new URL(timelineRequests[1]!.url).searchParams.get("time")).toBe("0");
+    expect(new URL(timelineRequests[2]!.url).searchParams.get("state")).toBe("stopped");
+    expect(new URL(timelineRequests[2]!.url).searchParams.get("time")).toBe("7200000");
+    expect(mock.requests).toHaveLength(requestCountBeforeArtworkReport);
     expect(playback.url).not.toContain(plexToken);
     expect(playback.url).not.toContain(upstreamToken);
     expect(artwork.url).not.toContain(upstreamToken);
@@ -573,6 +616,12 @@ describe("Emby integration", () => {
           }]
         };
       }
+      if (url.pathname.startsWith("/emby/Sessions/Playing")) {
+        expect(request.method).toBe("POST");
+        expect(request.headers["X-Emby-Token"]).toBe(embyToken);
+        expect(request.headers["Content-Type"]).toBe("application/json");
+        return {};
+      }
       throw new Error(`Unexpected Emby request: ${request.url}`);
     });
     const device = {
@@ -607,6 +656,33 @@ describe("Emby integration", () => {
     const page = await client.getItems(libraries[0]!, Number.NaN, Number.POSITIVE_INFINITY);
     const item = page.items[0]!;
     const playback = await client.getPlaybackPlan(item);
+    await client.reportPlayback(playback, {
+      kind: "started",
+      state: "playing",
+      positionMs: 1_200,
+      durationMs: 3_600_000,
+      volumePercent: 45
+    });
+    await client.reportPlayback(playback, {
+      kind: "progress",
+      state: "paused",
+      positionMs: 3_700_000,
+      durationMs: 3_600_000,
+      event: "pause"
+    });
+    await client.reportPlayback(playback, {
+      kind: "stopped",
+      state: "playing",
+      positionMs: Number.NaN,
+      durationMs: 3_600_000
+    });
+    const artwork = client.artworkRequest(item)!;
+    const requestCountBeforeArtworkReport = mock.requests.length;
+    await client.reportPlayback(artwork, {
+      kind: "progress",
+      state: "playing",
+      positionMs: 1_000
+    });
     const catalog = createMediaCenterCatalog(connection, libraries, page.items, "2026-08-26T12:00:00Z");
     const serializedCatalog = JSON.stringify(catalog);
 
@@ -624,6 +700,34 @@ describe("Emby integration", () => {
     expect(playback.requestHeaders.Authorization).toBeUndefined();
     expect(playback.requestHeaders.Cookie).toBeUndefined();
     expect(playback.sensitiveHeaderNames).toEqual(["X-Emby-Token", "X-Emby-Authorization"]);
+    const playbackReports = mock.requests.filter((request) =>
+      new URL(request.url).pathname.startsWith("/emby/Sessions/Playing")
+    );
+    expect(playbackReports.map((request) => new URL(request.url).pathname)).toEqual([
+      "/emby/Sessions/Playing",
+      "/emby/Sessions/Playing/Progress",
+      "/emby/Sessions/Playing/Stopped"
+    ]);
+    expect(JSON.parse(playbackReports[0]!.body ?? "{}")).toMatchObject({
+      ItemId: "item-1",
+      MediaSourceId: "source-1",
+      PositionTicks: 12_000_000,
+      RunTimeTicks: 36_000_000_000,
+      PlayMethod: "DirectPlay",
+      PlaySessionId: "play-session-1",
+      IsPaused: false,
+      VolumeLevel: 45
+    });
+    expect(JSON.parse(playbackReports[1]!.body ?? "{}")).toMatchObject({
+      PositionTicks: 36_000_000_000,
+      EventName: "Pause",
+      IsPaused: true
+    });
+    expect(JSON.parse(playbackReports[2]!.body ?? "{}")).toMatchObject({
+      PositionTicks: 0,
+      IsPaused: false
+    });
+    expect(mock.requests).toHaveLength(requestCountBeforeArtworkReport);
     expect(catalog.sources[0]?.displayLocation).toBe("emby.home");
     expect(catalog.channels[0]?.stream.requestHeaders).toEqual({});
     expect(catalog.channels[0]?.stream.uri).toBe("streamvue-media://emby/emby-server-1/item-1");

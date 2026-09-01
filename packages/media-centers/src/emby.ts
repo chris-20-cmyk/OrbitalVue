@@ -15,6 +15,7 @@ import type {
   MediaCenterMediaSource,
   MediaCenterPage,
   MediaCenterPlaybackPlan,
+  MediaCenterPlaybackReport,
   MediaCenterTrack,
   PlaybackMethod
 } from "./types.js";
@@ -278,6 +279,50 @@ export class EmbyClient {
     };
   }
 
+  async reportPlayback(
+    plan: MediaCenterPlaybackPlan,
+    report: MediaCenterPlaybackReport
+  ): Promise<void> {
+    if (!plan.requiresPlaybackReporting) return;
+    this.requireVerifiedIdentity();
+    const itemId = requireIdentifier(plan.itemId, "Emby item identifier");
+    const sourceId = requireIdentifier(plan.mediaSourceId, "Emby media source identifier");
+    const normalized = normalizePlaybackReport(report);
+    const endpoint = report.kind === "started"
+      ? "/Sessions/Playing"
+      : report.kind === "stopped"
+        ? "/Sessions/Playing/Stopped"
+        : "/Sessions/Playing/Progress";
+    const body = {
+      QueueableMediaTypes: ["Video"],
+      CanSeek: report.canSeek ?? true,
+      ItemId: itemId,
+      MediaSourceId: sourceId,
+      IsPaused: normalized.state === "paused",
+      IsMuted: report.isMuted ?? false,
+      PositionTicks: normalized.positionMs * 10_000,
+      ...(normalized.durationMs === undefined
+        ? {}
+        : { RunTimeTicks: normalized.durationMs * 10_000 }),
+      ...(report.volumePercent === undefined
+        ? {}
+        : { VolumeLevel: clampPercent(report.volumePercent) }),
+      PlayMethod: embyPlayMethod(plan.method),
+      ...(plan.playSessionId === undefined ? {} : { PlaySessionId: plan.playSessionId }),
+      ...(plan.liveStreamId === undefined ? {} : { LiveStreamId: plan.liveStreamId }),
+      ...(report.kind !== "progress"
+        ? {}
+        : { EventName: embyEventName(report.event, normalized.state) })
+    };
+    const response = await this.transport({
+      method: "POST",
+      url: resolveServerPath(this.apiBaseUrl, endpoint),
+      headers: { ...this.headers, "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    requireSuccessfulReport(response.status, "Emby");
+  }
+
   private async get(path: string): Promise<unknown> {
     return this.getAbsolute(resolveServerPath(this.apiBaseUrl, path));
   }
@@ -522,4 +567,49 @@ function safeContainer(value: string | undefined): string {
 function createSessionId(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
   return `streamvue-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function normalizePlaybackReport(report: MediaCenterPlaybackReport): {
+  state: MediaCenterPlaybackReport["state"];
+  positionMs: number;
+  durationMs?: number;
+} {
+  const durationMs = Number.isFinite(report.durationMs) && (report.durationMs ?? 0) > 0
+    ? Math.floor(report.durationMs!)
+    : undefined;
+  const rawPosition = Number.isFinite(report.positionMs) ? Math.floor(report.positionMs) : 0;
+  const positionMs = Math.min(durationMs ?? Number.MAX_SAFE_INTEGER, Math.max(0, rawPosition));
+  return {
+    state: report.state,
+    positionMs,
+    ...(durationMs === undefined ? {} : { durationMs })
+  };
+}
+
+function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+function embyPlayMethod(method: PlaybackMethod): "DirectPlay" | "DirectStream" | "Transcode" {
+  switch (method) {
+  case "direct-play": return "DirectPlay";
+  case "direct-stream": return "DirectStream";
+  case "transcode": return "Transcode";
+  }
+}
+
+function embyEventName(
+  event: MediaCenterPlaybackReport["event"],
+  state: MediaCenterPlaybackReport["state"]
+): "TimeUpdate" | "Pause" | "Unpause" {
+  if (event === "pause" || state === "paused") return "Pause";
+  if (event === "unpause") return "Unpause";
+  return "TimeUpdate";
+}
+
+function requireSuccessfulReport(status: number, provider: string): void {
+  if (status < 200 || status >= 300) {
+    throw new TypeError(`${provider} rejected the playback report with HTTP ${status}.`);
+  }
 }

@@ -18,6 +18,7 @@ interface SamsungAvPlay {
   pause(): void;
   stop(): void;
   seekTo(milliseconds: number): void;
+  getDuration(): number;
   getState(): "NONE" | "IDLE" | "READY" | "PLAYING" | "PAUSED";
   setListener(listener: SamsungAvPlayListener): void;
   setDisplayRect(x: number, y: number, width: number, height: number): void;

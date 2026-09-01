@@ -4,6 +4,9 @@ export type MediaCenterProvider = "plex" | "emby";
 export type MediaCenterLibraryKind = "movies" | "shows" | "recordings" | "live-tv" | "music" | "other";
 export type MediaCenterItemKind = "movie" | "episode" | "video" | "recording" | "live-tv" | "audio";
 export type PlaybackMethod = "direct-play" | "direct-stream" | "transcode";
+export type MediaCenterPlaybackReportKind = "started" | "progress" | "stopped";
+export type MediaCenterPlaybackState = "playing" | "paused" | "buffering";
+export type MediaCenterPlaybackEvent = "time-update" | "pause" | "unpause" | "seek";
 
 export interface MediaCenterConnection {
   contractVersion: typeof MEDIA_CENTER_CONTRACT_VERSION;
@@ -100,6 +103,21 @@ export interface MediaCenterPlaybackPlan {
   playSessionId?: string;
   liveStreamId?: string;
   requiresPlaybackReporting: boolean;
+}
+
+/**
+ * Ephemeral playback state sent directly to the connected media server. This
+ * contract must not be stored in catalogs, logs, or release artifacts.
+ */
+export interface MediaCenterPlaybackReport {
+  kind: MediaCenterPlaybackReportKind;
+  state: MediaCenterPlaybackState;
+  positionMs: number;
+  durationMs?: number;
+  event?: MediaCenterPlaybackEvent;
+  canSeek?: boolean;
+  isMuted?: boolean;
+  volumePercent?: number;
 }
 
 export interface MediaCenterDeviceIdentity {

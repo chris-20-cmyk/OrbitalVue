@@ -14,6 +14,7 @@ import type {
   MediaCenterMediaSource,
   MediaCenterPage,
   MediaCenterPlaybackPlan,
+  MediaCenterPlaybackReport,
   MediaCenterTrack
 } from "./types.js";
 import {
@@ -184,8 +185,37 @@ export class PlexClient {
       url: resolveServerPath(this.baseUrl, source.playbackPath),
       requestHeaders: { ...this.headers },
       sensitiveHeaderNames: ["X-Plex-Token"],
+      playSessionId: createSessionId(),
       requiresPlaybackReporting: true
     };
+  }
+
+  async reportPlayback(
+    plan: MediaCenterPlaybackPlan,
+    report: MediaCenterPlaybackReport
+  ): Promise<void> {
+    if (!plan.requiresPlaybackReporting) return;
+    this.requireVerifiedIdentity();
+    const itemId = requireIdentifier(plan.itemId, "Plex item identifier");
+    const normalized = normalizePlaybackReport(report);
+    const url = withQuery(resolveServerPath(this.baseUrl, "/:/timeline"), {
+      key: `/library/metadata/${itemId}`,
+      ratingKey: itemId,
+      state: report.kind === "stopped" ? "stopped" : normalized.state,
+      time: normalized.positionMs,
+      ...(normalized.durationMs === undefined ? {} : { duration: normalized.durationMs })
+    });
+    const response = await this.transport({
+      method: "POST",
+      url,
+      headers: {
+        ...this.headers,
+        ...(plan.playSessionId === undefined
+          ? {}
+          : { "X-Plex-Session-Identifier": safeHeaderValue(plan.playSessionId, "") })
+      }
+    });
+    requireSuccessfulReport(response.status, "Plex");
   }
 
   artworkRequest(item: MediaCenterItem, maxWidth = 640): MediaCenterPlaybackPlan | undefined {
@@ -373,4 +403,32 @@ function parsePlexTrack(value: unknown): MediaCenterTrack[] {
     isForced: asBoolean(stream.forced),
     ...(channels === undefined ? {} : { channels })
   }];
+}
+
+function normalizePlaybackReport(report: MediaCenterPlaybackReport): {
+  state: MediaCenterPlaybackReport["state"];
+  positionMs: number;
+  durationMs?: number;
+} {
+  const durationMs = Number.isFinite(report.durationMs) && (report.durationMs ?? 0) > 0
+    ? Math.floor(report.durationMs!)
+    : undefined;
+  const rawPosition = Number.isFinite(report.positionMs) ? Math.floor(report.positionMs) : 0;
+  const positionMs = Math.min(durationMs ?? Number.MAX_SAFE_INTEGER, Math.max(0, rawPosition));
+  return {
+    state: report.state,
+    positionMs,
+    ...(durationMs === undefined ? {} : { durationMs })
+  };
+}
+
+function requireSuccessfulReport(status: number, provider: string): void {
+  if (status < 200 || status >= 300) {
+    throw new TypeError(`${provider} rejected the playback report with HTTP ${status}.`);
+  }
+}
+
+function createSessionId(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  return `streamvue-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }

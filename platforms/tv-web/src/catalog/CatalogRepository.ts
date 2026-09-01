@@ -21,6 +21,7 @@ import {
   type MediaCenterHttpTransport,
   type MediaCenterItem,
   type MediaCenterPlaybackPlan,
+  type MediaCenterPlaybackReport,
   type MediaCenterSnapshot,
   type MediaCenterProvider
 } from "@streamvue/media-centers";
@@ -76,9 +77,15 @@ export interface ResolvedTelevisionPlayback {
 
 type MediaCenterClient = Pick<PlexClient, "getLibraries" | "getItems">
   | Pick<EmbyClient, "getLibraries" | "getItems">;
+type MediaCenterReportingClient = Pick<PlexClient, "reportPlayback">
+  | Pick<EmbyClient, "reportPlayback">;
 
 export class CatalogRepository {
   private readonly premiumAccessProvider: () => PremiumAccessSnapshot;
+  private activeMediaPlayback: {
+    client: MediaCenterReportingClient;
+    plan: MediaCenterPlaybackPlan;
+  } | null = null;
 
   constructor(
     private readonly cache: CatalogStore = new CatalogCache(),
@@ -282,18 +289,35 @@ export class CatalogRepository {
     if (!item) throw new Error("This media item is no longer available in the saved library.");
     const credential = await this.requireCredential(snapshot.connection);
     let plan: MediaCenterPlaybackPlan;
+    let client: MediaCenterReportingClient;
     if (snapshot.connection.provider === "plex") {
-      const client = this.plexClient(snapshot.connection, credential);
-      await client.getIdentity();
-      plan = client.getPlaybackPlan(item);
+      const plex = this.plexClient(snapshot.connection, credential);
+      await plex.getIdentity();
+      plan = plex.getPlaybackPlan(item);
+      client = plex;
     } else {
-      plan = await this.embyClient(snapshot.connection, credential).getPlaybackPlan(item);
+      const emby = this.embyClient(snapshot.connection, credential);
+      plan = await emby.getPlaybackPlan(item);
+      client = emby;
     }
+    this.activeMediaPlayback = { client, plan };
     return {
       channel: materializeTelevisionPlayback(channel, snapshot.connection, credential, plan),
       startPositionMs: Math.max(0, item.resumePositionMs ?? 0),
       method: plan.method
     };
+  }
+
+  async reportPlayback(report: MediaCenterPlaybackReport): Promise<void> {
+    const active = this.activeMediaPlayback;
+    if (!active) return;
+    try {
+      await active.client.reportPlayback(active.plan, report);
+    } finally {
+      if (report.kind === "stopped" && this.activeMediaPlayback === active) {
+        this.activeMediaPlayback = null;
+      }
+    }
   }
 
   async useDemo(): Promise<CatalogLoadResult> {
@@ -302,6 +326,7 @@ export class CatalogRepository {
   }
 
   async clear(): Promise<void> {
+    this.activeMediaPlayback = null;
     const saved = await this.cache.read();
     await this.cache.clear();
     const credentialId = saved?.mediaCenterSnapshot?.connection.credentialId;

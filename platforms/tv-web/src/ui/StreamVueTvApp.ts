@@ -11,12 +11,17 @@ import {
   isMediaCenterCatalog,
   type CatalogLoadResult
 } from "../catalog/CatalogRepository.js";
+import type {
+  MediaCenterPlaybackReport,
+  MediaCenterPlaybackState
+} from "@streamvue/media-centers";
 import { SpatialNavigator } from "../navigation/SpatialNavigator.js";
 import { exitTelevisionApp, registerPlatformRemoteKeys } from "../platform/platform.js";
 import { createPlayerAdapter } from "../playback/createPlayer.js";
 import {
   ASPECT_MODES,
   type PlaybackSignal,
+  type PlaybackTimeline,
   type PlayerAdapter
 } from "../playback/PlayerAdapter.js";
 import { icon, type IconName } from "./icons.js";
@@ -46,6 +51,7 @@ const MEDIA_BROWSE_GROUPS = [
   SERIES_GROUP
 ] as const;
 const GROUP_WINDOW_SIZE = 8;
+const PLAYBACK_REPORT_INTERVAL_MS = 10_000;
 
 export class StreamVueTvApp {
   private readonly repository: CatalogRepository;
@@ -65,6 +71,10 @@ export class StreamVueTvApp {
   private searchQuery = "";
   private player: PlayerAdapter | null = null;
   private playbackSignal: PlaybackSignal = { state: "idle", message: null, warning: null };
+  private playbackTimeline: PlaybackTimeline = { positionMs: 0 };
+  private playbackReportingStarted = false;
+  private playbackReportTimer: number | null = null;
+  private playbackReportQueue: Promise<void> = Promise.resolve();
   private aspectIndex = 0;
   private hideChromeTimer: number | null = null;
   private noticeTimer: number | null = null;
@@ -114,6 +124,7 @@ export class StreamVueTvApp {
   }
 
   destroy(): void {
+    void this.finishPlaybackReporting();
     this.player?.destroy();
     this.clearNoticeTimer();
     this.unsubscribePremium();
@@ -403,7 +414,13 @@ export class StreamVueTvApp {
     const objectElement = this.root.querySelector<HTMLObjectElement>("#samsung-player");
     const surface = this.root.querySelector<HTMLElement>("#player-surface");
     if (!video || !objectElement || !surface) throw new Error("The native player surface could not be created.");
-    this.player = createPlayerAdapter(video, objectElement, surface, this.updatePlaybackSignal);
+    this.player = createPlayerAdapter(
+      video,
+      objectElement,
+      surface,
+      this.updatePlaybackSignal,
+      this.updatePlaybackTimeline
+    );
     this.player.setAspect(ASPECT_MODES[this.aspectIndex] ?? "Auto");
     this.updateEngineLabel();
     this.navigator.setScope(this.root);
@@ -414,6 +431,7 @@ export class StreamVueTvApp {
   private closePlayer(): void {
     this.playbackRequestSerial += 1;
     this.clearChromeTimer();
+    void this.finishPlaybackReporting();
     this.player?.destroy();
     this.player = null;
     this.screen = "browse";
@@ -423,7 +441,19 @@ export class StreamVueTvApp {
   }
 
   private readonly updatePlaybackSignal = (signal: PlaybackSignal): void => {
+    const previousState = this.playbackSignal.state;
     this.playbackSignal = signal;
+    if (this.playbackReportingStarted) {
+      if (signal.state === "paused" && previousState !== "paused") {
+        void this.queuePlaybackReport(this.playbackReport("progress", "paused", "pause"));
+      } else if (signal.state === "playing" && previousState === "paused") {
+        void this.queuePlaybackReport(this.playbackReport("progress", "playing", "unpause"));
+      } else if (signal.state === "buffering" && previousState !== "buffering") {
+        void this.queuePlaybackReport(this.playbackReport("progress", "buffering", "time-update"));
+      } else if (signal.state === "ended" || signal.state === "error") {
+        void this.finishPlaybackReporting();
+      }
+    }
     const screen = this.root.querySelector<HTMLElement>(".player-screen");
     const buffering = this.root.querySelector<HTMLElement>("[data-role='buffering']");
     const message = this.root.querySelector<HTMLElement>("[data-role='player-message']");
@@ -436,6 +466,10 @@ export class StreamVueTvApp {
     message.classList.toggle("is-error", Boolean(signal.message));
     if (signal.state === "playing") this.scheduleChromeHide();
     else this.showPlayerChrome();
+  };
+
+  private readonly updatePlaybackTimeline = (timeline: PlaybackTimeline): void => {
+    this.playbackTimeline = timeline;
   };
 
   private applyCatalog(loaded: CatalogLoadResult): void {
@@ -677,11 +711,21 @@ export class StreamVueTvApp {
 
   private async playResolvedChannel(channel: CatalogChannel): Promise<void> {
     const serial = ++this.playbackRequestSerial;
+    await this.finishPlaybackReporting();
+    if (serial !== this.playbackRequestSerial) return;
     this.updatePlaybackSignal({ state: "opening", message: null, warning: null });
     try {
       const resolved = await this.repository.resolvePlayback(channel);
       if (serial !== this.playbackRequestSerial || !this.player || this.screen !== "player") return;
+      this.playbackTimeline = {
+        positionMs: resolved.startPositionMs,
+        ...(channel.media?.durationMs === undefined
+          ? {}
+          : { durationMs: channel.media.durationMs })
+      };
       await this.player.play(resolved.channel, resolved.startPositionMs);
+      if (serial !== this.playbackRequestSerial || this.playbackSignal.state === "error") return;
+      this.startPlaybackReporting();
     } catch (error) {
       if (serial !== this.playbackRequestSerial) return;
       this.updatePlaybackSignal({
@@ -690,6 +734,57 @@ export class StreamVueTvApp {
         warning: null
       });
     }
+  }
+
+  private startPlaybackReporting(): void {
+    this.playbackReportingStarted = true;
+    void this.queuePlaybackReport(this.playbackReport("started", "playing"));
+    this.clearPlaybackReportTimer();
+    this.playbackReportTimer = window.setInterval(() => {
+      if (!this.playbackReportingStarted || this.playbackSignal.state === "paused") return;
+      void this.queuePlaybackReport(this.playbackReport(
+        "progress",
+        playbackReportState(this.playbackSignal.state),
+        "time-update"
+      ));
+    }, PLAYBACK_REPORT_INTERVAL_MS);
+  }
+
+  private async finishPlaybackReporting(): Promise<void> {
+    this.clearPlaybackReportTimer();
+    if (!this.playbackReportingStarted) return;
+    this.playbackReportingStarted = false;
+    await this.queuePlaybackReport(this.playbackReport("stopped", "playing"));
+  }
+
+  private playbackReport(
+    kind: MediaCenterPlaybackReport["kind"],
+    state: MediaCenterPlaybackState,
+    event?: MediaCenterPlaybackReport["event"]
+  ): MediaCenterPlaybackReport {
+    return {
+      kind,
+      state,
+      positionMs: this.playbackTimeline.positionMs,
+      ...(this.playbackTimeline.durationMs === undefined
+        ? {}
+        : { durationMs: this.playbackTimeline.durationMs }),
+      ...(event === undefined ? {} : { event })
+    };
+  }
+
+  private queuePlaybackReport(report: MediaCenterPlaybackReport): Promise<void> {
+    const task = this.playbackReportQueue
+      .catch(() => undefined)
+      .then(() => this.repository.reportPlayback(report));
+    this.playbackReportQueue = task.catch(() => undefined);
+    return task;
+  }
+
+  private clearPlaybackReportTimer(): void {
+    if (this.playbackReportTimer === null) return;
+    window.clearInterval(this.playbackReportTimer);
+    this.playbackReportTimer = null;
   }
 
   private closeModal(): void {
@@ -765,6 +860,7 @@ export class StreamVueTvApp {
   private async reconcilePremiumAccess(hadAccess: boolean, hasAccess: boolean): Promise<void> {
     if (hadAccess && !hasAccess && this.catalog && isMediaCenterCatalog(this.catalog)) {
       this.playbackRequestSerial += 1;
+      void this.finishPlaybackReporting();
       this.player?.destroy();
       this.player = null;
       this.catalog = null;
@@ -1149,6 +1245,12 @@ function escapeHtml(value: string): string {
 
 function escapeAttribute(value: string): string {
   return escapeHtml(value).replace(/`/g, "&#96;");
+}
+
+function playbackReportState(state: PlaybackSignal["state"]): MediaCenterPlaybackState {
+  if (state === "paused") return "paused";
+  if (state === "buffering" || state === "opening") return "buffering";
+  return "playing";
 }
 
 function cssEscape(value: string): string {

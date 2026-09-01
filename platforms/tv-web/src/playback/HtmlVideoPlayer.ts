@@ -1,5 +1,5 @@
 import type { CatalogChannel } from "@streamvue/catalog";
-import type { AspectMode, PlaybackSignal, PlayerAdapter } from "./PlayerAdapter.js";
+import type { AspectMode, PlaybackSignal, PlaybackTimeline, PlayerAdapter } from "./PlayerAdapter.js";
 
 export class HtmlVideoPlayer implements PlayerAdapter {
   readonly kind = "html-video" as const;
@@ -8,7 +8,8 @@ export class HtmlVideoPlayer implements PlayerAdapter {
   constructor(
     private readonly video: HTMLVideoElement,
     private readonly surface: HTMLElement,
-    private readonly onSignal: (signal: PlaybackSignal) => void
+    private readonly onSignal: (signal: PlaybackSignal) => void,
+    private readonly onTimeline: (timeline: PlaybackTimeline) => void
   ) {
     this.video.addEventListener("loadstart", this.onLoadStart);
     this.video.addEventListener("waiting", this.onWaiting);
@@ -17,6 +18,8 @@ export class HtmlVideoPlayer implements PlayerAdapter {
     this.video.addEventListener("pause", this.onPause);
     this.video.addEventListener("ended", this.onEnded);
     this.video.addEventListener("error", this.onError);
+    this.video.addEventListener("timeupdate", this.onTimeUpdate);
+    this.video.addEventListener("durationchange", this.onTimeUpdate);
     window.addEventListener("resize", this.resize);
   }
 
@@ -89,6 +92,8 @@ export class HtmlVideoPlayer implements PlayerAdapter {
     this.video.removeEventListener("pause", this.onPause);
     this.video.removeEventListener("ended", this.onEnded);
     this.video.removeEventListener("error", this.onError);
+    this.video.removeEventListener("timeupdate", this.onTimeUpdate);
+    this.video.removeEventListener("durationchange", this.onTimeUpdate);
   }
 
   private readonly onLoadStart = (): void => this.onSignal({ state: "opening", message: null, warning: null });
@@ -107,6 +112,16 @@ export class HtmlVideoPlayer implements PlayerAdapter {
       : "The television could not play this channel.";
     this.onSignal({ state: "error", message, warning: null });
   };
+  private readonly onTimeUpdate = (): void => this.onTimeline({
+    positionMs: finiteMilliseconds(this.video.currentTime),
+    ...(Number.isFinite(this.video.duration) && this.video.duration > 0
+      ? { durationMs: finiteMilliseconds(this.video.duration) }
+      : {})
+  });
+}
+
+function finiteMilliseconds(seconds: number): number {
+  return Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds * 1_000)) : 0;
 }
 
 async function waitForMetadata(video: HTMLVideoElement): Promise<void> {

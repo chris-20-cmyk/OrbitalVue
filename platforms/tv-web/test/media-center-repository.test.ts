@@ -114,6 +114,11 @@ describe("television media-center repository", () => {
           })
         };
       }
+      if (path === "/:/timeline") {
+        expect(request.method).toBe("POST");
+        expect(request.headers["X-Plex-Session-Identifier"]).toBeTruthy();
+        return { status: 200, body: "" };
+      }
       throw new Error(`Unexpected Plex request: ${request.url}`);
     };
     const cache = new MemoryCatalogStore();
@@ -133,6 +138,31 @@ describe("television media-center repository", () => {
     expect(savedBeforePlayback).not.toContain("X-Plex-Token");
 
     const resolved = await repository.resolvePlayback(loaded.catalog.channels[0]!);
+    await repository.reportPlayback({
+      kind: "started",
+      state: "playing",
+      positionMs: resolved.startPositionMs,
+      durationMs: 120_000
+    });
+    await repository.reportPlayback({
+      kind: "progress",
+      state: "paused",
+      positionMs: 61_000,
+      durationMs: 120_000,
+      event: "pause"
+    });
+    await repository.reportPlayback({
+      kind: "stopped",
+      state: "playing",
+      positionMs: 62_000,
+      durationMs: 120_000
+    });
+    const requestCountAfterStop = requests.length;
+    await repository.reportPlayback({
+      kind: "progress",
+      state: "playing",
+      positionMs: 63_000
+    });
     const resolvedUrl = new URL(resolved.channel.stream.uri);
 
     expect(resolvedUrl.searchParams.get("X-Plex-Token")).toBe(accessToken);
@@ -140,6 +170,11 @@ describe("television media-center repository", () => {
     expect(resolved.channel.stream.requestHeaders["X-Plex-Token"]).toBeUndefined();
     expect(resolved.startPositionMs).toBe(41_000);
     expect(JSON.stringify(cache.record)).toBe(savedBeforePlayback);
+    const reports = requests.filter((request) => new URL(request.url).pathname === "/:/timeline");
+    expect(reports).toHaveLength(3);
+    expect(reports.map((request) => new URL(request.url).searchParams.get("state")))
+      .toEqual(["playing", "paused", "stopped"]);
+    expect(requests).toHaveLength(requestCountAfterStop);
     expect(requests.filter((request) => new URL(request.url).pathname === "/identity"))
       .toHaveLength(3);
   });
