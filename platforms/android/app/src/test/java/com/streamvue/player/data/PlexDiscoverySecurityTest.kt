@@ -231,7 +231,7 @@ class PlexDiscoverySecurityTest {
             client = "OrbitalVue",
             device = "Android Test",
             deviceId = "android-plex-discovery-test",
-            version = "5.6.0"
+            version = "5.7.0"
         )
     }
 }

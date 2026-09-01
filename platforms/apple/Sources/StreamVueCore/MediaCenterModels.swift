@@ -479,7 +479,7 @@ public struct MediaCenterDeviceIdentity: Equatable, Sendable {
         client: "OrbitalVue",
         device: "Apple",
         deviceID: "streamvue-apple",
-        version: "5.6.0"
+        version: "5.7.0"
     )
 }
 

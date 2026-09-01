@@ -6,11 +6,11 @@ on:
       release_tag:
         description: Existing draft release tag
         required: true
-        default: v5.6.0-alpha.1
+        default: v5.7.0-alpha.1
       package_version:
         description: Velopack package version
         required: true
-        default: 5.6.0-alpha.1
+        default: 5.7.0-alpha.1
       base_release_tag:
         description: Previous release containing the base full package
         required: true

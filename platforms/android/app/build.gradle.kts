@@ -34,7 +34,7 @@ if (streamVuePremiumVerificationUrl.isNotEmpty()) {
 }
 
 val streamVueVersionCodeText = providers.gradleProperty("streamVueVersionCode")
-    .orElse("5600001")
+    .orElse("5700001")
     .get()
     .trim()
 val streamVueVersionCode = streamVueVersionCodeText.toIntOrNull()
@@ -42,7 +42,7 @@ require(streamVueVersionCode != null && streamVueVersionCode in 1..2_100_000_000
     "streamVueVersionCode must be a positive integer no greater than Google Play's 2100000000 limit."
 }
 val streamVueVersionName = providers.gradleProperty("streamVueVersionName")
-    .orElse("5.6.0-alpha.1")
+    .orElse("5.7.0-alpha.1")
     .get()
     .trim()
 require(Regex("^[0-9A-Za-z][0-9A-Za-z._+-]{0,99}$").matches(streamVueVersionName)) {

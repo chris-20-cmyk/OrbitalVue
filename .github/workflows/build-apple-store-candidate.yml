@@ -6,11 +6,11 @@ on:
       marketing_version:
         description: App Store version (three numeric components)
         required: true
-        default: 5.6.0
+        default: 5.7.0
       build_number:
         description: New App Store build string (one to three numeric components)
         required: true
-        default: "5060001"
+        default: "5070001"
 
 permissions:
   contents: read

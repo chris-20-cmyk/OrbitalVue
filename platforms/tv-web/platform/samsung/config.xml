@@ -2,7 +2,7 @@
 <widget xmlns="http://www.w3.org/ns/widgets"
         xmlns:tizen="http://tizen.org/ns/widgets"
         id="https://orbitalvue.app/tv"
-        version="5.6.0"
+        version="5.7.0"
         viewmodes="maximized">
   <tizen:application id="OvTvPlayer.OrbitalVue" package="OvTvPlayer" required_version="5.0" />
   <content src="index.html" />

@@ -407,7 +407,7 @@ class MediaCenterRepository internal constructor(
                 client = "OrbitalVue",
                 device = "Android",
                 deviceId = id,
-                version = "5.6.0"
+                version = "5.7.0"
             )
         }
 

@@ -71,7 +71,7 @@ LG uses the free Developer Mode app and the current webOS CLI. Register the TV, 
 ```text
 node node_modules/@webos-tools/cli/bin/ares-setup-device.js
 node node_modules/@webos-tools/cli/bin/ares-package.js platforms/tv-web/dist/webos
-node node_modules/@webos-tools/cli/bin/ares-install.js --device YOUR_TV com.orbitalvue.player.tv_5.6.0_all.ipk
+node node_modules/@webos-tools/cli/bin/ares-install.js --device YOUR_TV com.orbitalvue.player.tv_5.7.0_all.ipk
 ```
 
 The repository pins `@webos-tools/cli` 3.2.5 in `pnpm-lock.yaml`. These direct Node entry points also avoid a Windows command-shim issue observed with `pnpm exec`. LG Developer Mode is time limited, so extend the session before it expires or the TV will remove developer-installed apps.
