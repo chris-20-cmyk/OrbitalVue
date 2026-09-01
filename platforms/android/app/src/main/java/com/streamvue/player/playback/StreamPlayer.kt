@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
@@ -35,6 +36,12 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.streamvue.player.BuildConfig
 import com.streamvue.player.data.Channel
+import com.streamvue.player.data.MediaCenterPlaybackEvent
+import com.streamvue.player.data.MediaCenterPlaybackReport
+import com.streamvue.player.data.MediaCenterPlaybackReportKind
+import com.streamvue.player.data.MediaCenterPlaybackState
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 enum class VideoScaleMode(
     val label: String,
@@ -58,10 +65,12 @@ data class PlaybackSignal(
 @Composable
 fun rememberStreamPlayer(
     channel: Channel?,
-    onSignal: (PlaybackSignal) -> Unit
+    onSignal: (PlaybackSignal) -> Unit,
+    onPlaybackReport: (String, MediaCenterPlaybackReport) -> Unit
 ): ExoPlayer? {
     val context = LocalContext.current
     val signalCallback = rememberUpdatedState(onSignal)
+    val reportCallback = rememberUpdatedState(onPlaybackReport)
     if (channel == null) return null
 
     val player = remember(channel.id, channel.streamUri, channel.requestHeaders, channel.startPositionMs) {
@@ -118,6 +127,18 @@ fun rememberStreamPlayer(
                 prepare()
             }
     }
+    val reportSession = remember(player, channel.playbackReportSessionId) {
+        AndroidPlaybackReportSession(channel.playbackReportSessionId) { sessionId, report ->
+            reportCallback.value(sessionId, report)
+        }
+    }
+
+    LaunchedEffect(player, reportSession) {
+        while (isActive) {
+            delay(PLAYBACK_REPORT_INTERVAL_MS)
+            reportSession.progress(player)
+        }
+    }
 
     DisposableEffect(player) {
         val listener = object : Player.Listener {
@@ -129,6 +150,7 @@ fun rememberStreamPlayer(
                         error = null
                     )
                 )
+                reportSession.stateChanged(player, playbackState)
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -139,6 +161,7 @@ fun rememberStreamPlayer(
                         error = null
                     )
                 )
+                reportSession.playingChanged(player, isPlaying)
             }
 
             override fun onPlayerError(error: PlaybackException) {
@@ -149,10 +172,12 @@ fun rememberStreamPlayer(
                         error = error.errorCodeName.replace('_', ' ')
                     )
                 )
+                reportSession.stop(player)
             }
         }
         player.addListener(listener)
         onDispose {
+            reportSession.stop(player)
             player.removeListener(listener)
             player.release()
         }
@@ -160,6 +185,100 @@ fun rememberStreamPlayer(
 
     return player
 }
+
+private class AndroidPlaybackReportSession(
+    private val sessionId: String?,
+    private val callback: (String, MediaCenterPlaybackReport) -> Unit
+) {
+    private var started = false
+    private var paused = false
+    private var stopped = false
+
+    fun playingChanged(player: Player, isPlaying: Boolean) {
+        if (sessionId == null || stopped) return
+        if (isPlaying) {
+            if (!started) {
+                started = true
+                paused = false
+                send(player, MediaCenterPlaybackReportKind.Started, MediaCenterPlaybackState.Playing)
+            } else if (paused) {
+                paused = false
+                send(
+                    player,
+                    MediaCenterPlaybackReportKind.Progress,
+                    MediaCenterPlaybackState.Playing,
+                    MediaCenterPlaybackEvent.Unpause
+                )
+            }
+        } else if (started && player.playbackState == Player.STATE_READY && !player.playWhenReady && !paused) {
+            paused = true
+            send(
+                player,
+                MediaCenterPlaybackReportKind.Progress,
+                MediaCenterPlaybackState.Paused,
+                MediaCenterPlaybackEvent.Pause
+            )
+        }
+    }
+
+    fun stateChanged(player: Player, playbackState: Int) {
+        if (sessionId == null || stopped) return
+        when {
+            playbackState == Player.STATE_ENDED -> stop(player)
+            started && playbackState == Player.STATE_BUFFERING -> send(
+                player,
+                MediaCenterPlaybackReportKind.Progress,
+                MediaCenterPlaybackState.Buffering,
+                MediaCenterPlaybackEvent.TimeUpdate
+            )
+        }
+    }
+
+    fun progress(player: Player) {
+        if (!started || stopped || paused) return
+        send(
+            player,
+            MediaCenterPlaybackReportKind.Progress,
+            if (player.playbackState == Player.STATE_BUFFERING) {
+                MediaCenterPlaybackState.Buffering
+            } else {
+                MediaCenterPlaybackState.Playing
+            },
+            MediaCenterPlaybackEvent.TimeUpdate
+        )
+    }
+
+    fun stop(player: Player) {
+        if (!started || stopped) return
+        stopped = true
+        send(player, MediaCenterPlaybackReportKind.Stopped, MediaCenterPlaybackState.Playing)
+    }
+
+    private fun send(
+        player: Player,
+        kind: MediaCenterPlaybackReportKind,
+        state: MediaCenterPlaybackState,
+        event: MediaCenterPlaybackEvent? = null
+    ) {
+        val safeSessionId = sessionId ?: return
+        val durationMs = player.duration.takeIf { it != C.TIME_UNSET && it > 0 }
+        callback(
+            safeSessionId,
+            MediaCenterPlaybackReport(
+                kind = kind,
+                state = state,
+                positionMs = player.currentPosition.coerceAtLeast(0),
+                durationMs = durationMs,
+                event = event,
+                canSeek = player.isCurrentMediaItemSeekable,
+                isMuted = player.volume <= 0f,
+                volumePercent = (player.volume * 100f).toInt().coerceIn(0, 100)
+            )
+        )
+    }
+}
+
+private const val PLAYBACK_REPORT_INTERVAL_MS = 10_000L
 
 @Composable
 fun StreamPlayerSurface(

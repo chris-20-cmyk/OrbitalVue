@@ -96,6 +96,7 @@ import com.streamvue.player.playback.PlaybackSignal
 import com.streamvue.player.playback.StreamPlayerSurface
 import com.streamvue.player.playback.VideoScaleMode
 import com.streamvue.player.playback.rememberStreamPlayer
+import com.streamvue.player.data.MediaCenterPlaybackReport
 import com.streamvue.player.premium.PremiumBillingState
 import com.streamvue.player.ui.theme.StreamVueBackground
 import com.streamvue.player.ui.theme.StreamVueBorder
@@ -126,6 +127,7 @@ fun StreamVueApp(
     onSelectBrowseMode: (MediaLibraryBrowseMode) -> Unit,
     onQueryChanged: (String) -> Unit,
     onSelectChannel: (Channel) -> Unit,
+    onPlaybackReport: (String, MediaCenterPlaybackReport) -> Unit,
     onDismissNotice: () -> Unit,
     onDismissError: () -> Unit,
     onFullscreenChanged: (Boolean) -> Unit
@@ -134,7 +136,11 @@ fun StreamVueApp(
     var isFullscreen by remember { mutableStateOf(false) }
     var scaleMode by remember { mutableStateOf(VideoScaleMode.Auto) }
     var playbackSignal by remember(state.selectedChannel?.id) { mutableStateOf(PlaybackSignal()) }
-    val player = rememberStreamPlayer(state.playbackChannel) { playbackSignal = it }
+    val player = rememberStreamPlayer(
+        state.playbackChannel,
+        onSignal = { playbackSignal = it },
+        onPlaybackReport = onPlaybackReport
+    )
 
     LaunchedEffect(isFullscreen) { onFullscreenChanged(isFullscreen) }
     DisposableEffect(Unit) {

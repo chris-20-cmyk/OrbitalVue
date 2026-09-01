@@ -103,10 +103,29 @@ data class MediaCenterPage(
 data class MediaCenterPlaybackPlan(
     val itemId: String,
     val mediaSourceId: String,
+    val method: MediaCenterPlaybackMethod,
     val url: String,
     val requestHeaders: Map<String, String>,
     val resumePositionMs: Long = 0,
+    val playSessionId: String,
+    val liveStreamId: String? = null,
     val requiresPlaybackReporting: Boolean = true
+)
+
+enum class MediaCenterPlaybackMethod { DirectPlay, DirectStream, Transcode }
+enum class MediaCenterPlaybackReportKind { Started, Progress, Stopped }
+enum class MediaCenterPlaybackState { Playing, Paused, Buffering }
+enum class MediaCenterPlaybackEvent { TimeUpdate, Pause, Unpause, Seek }
+
+data class MediaCenterPlaybackReport(
+    val kind: MediaCenterPlaybackReportKind,
+    val state: MediaCenterPlaybackState,
+    val positionMs: Long,
+    val durationMs: Long? = null,
+    val event: MediaCenterPlaybackEvent? = null,
+    val canSeek: Boolean = true,
+    val isMuted: Boolean = false,
+    val volumePercent: Int? = null
 )
 
 data class MediaCenterDeviceIdentity(

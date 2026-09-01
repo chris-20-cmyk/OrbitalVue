@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity() {
                     onSelectBrowseMode = viewModel::selectBrowseMode,
                     onQueryChanged = viewModel::updateQuery,
                     onSelectChannel = viewModel::selectChannel,
+                    onPlaybackReport = viewModel::reportPlayback,
                     onDismissNotice = viewModel::dismissNotice,
                     onDismissError = viewModel::dismissError,
                     onFullscreenChanged = ::setFullscreen

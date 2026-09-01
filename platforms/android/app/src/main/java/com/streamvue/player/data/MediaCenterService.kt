@@ -273,6 +273,110 @@ internal class MediaCenterService(
         }
     }
 
+    fun reportPlayback(
+        connection: MediaCenterConnection,
+        plan: MediaCenterPlaybackPlan,
+        report: MediaCenterPlaybackReport
+    ) {
+        if (!plan.requiresPlaybackReporting) return
+        validateConnection(connection)
+        val token = credential(connection)
+        val normalized = normalizePlaybackReport(report)
+        when (connection.provider) {
+            MediaCenterProvider.Plex -> reportPlexPlayback(connection, token, plan, normalized)
+            MediaCenterProvider.Emby -> reportEmbyPlayback(connection, token, plan, normalized)
+        }
+    }
+
+    private fun reportPlexPlayback(
+        connection: MediaCenterConnection,
+        token: String,
+        plan: MediaCenterPlaybackPlan,
+        report: NormalizedPlaybackReport
+    ) {
+        val itemId = MediaCenterUrlPolicy.requireIdentifier(plan.itemId, "Plex item")
+        val state = if (report.kind == MediaCenterPlaybackReportKind.Stopped) {
+            "stopped"
+        } else {
+            when (report.state) {
+                MediaCenterPlaybackState.Playing -> "playing"
+                MediaCenterPlaybackState.Paused -> "paused"
+                MediaCenterPlaybackState.Buffering -> "buffering"
+            }
+        }
+        val values = linkedMapOf(
+            "key" to "/library/metadata/$itemId",
+            "ratingKey" to itemId,
+            "state" to state,
+            "time" to report.positionMs.toString()
+        )
+        report.durationMs?.let { values["duration"] = it.toString() }
+        val response = transport.execute(
+            MediaHttpRequest(
+                method = MediaHttpMethod.POST,
+                url = MediaCenterUrlPolicy.appendQuery(
+                    MediaCenterUrlPolicy.resolveServerPath(URI(connection.baseUrl), "/:/timeline"),
+                    values
+                ),
+                headers = plexHeaders(token) + (
+                    "X-Plex-Session-Identifier" to
+                        MediaCenterUrlPolicy.requireIdentifier(plan.playSessionId, "Plex play session")
+                    )
+            )
+        )
+        requireSuccessfulReport(response, "Plex")
+    }
+
+    private fun reportEmbyPlayback(
+        connection: MediaCenterConnection,
+        token: String,
+        plan: MediaCenterPlaybackPlan,
+        report: NormalizedPlaybackReport
+    ) {
+        val itemId = MediaCenterUrlPolicy.requireIdentifier(plan.itemId, "Emby item")
+        val sourceId = MediaCenterUrlPolicy.requireIdentifier(plan.mediaSourceId, "Emby media source")
+        val sessionId = MediaCenterUrlPolicy.requireIdentifier(plan.playSessionId, "Emby play session")
+        val userId = MediaCenterUrlPolicy.requireIdentifier(connection.userId.orEmpty(), "Emby user")
+        val endpoint = when (report.kind) {
+            MediaCenterPlaybackReportKind.Started -> "/Sessions/Playing"
+            MediaCenterPlaybackReportKind.Progress -> "/Sessions/Playing/Progress"
+            MediaCenterPlaybackReportKind.Stopped -> "/Sessions/Playing/Stopped"
+        }
+        val body = linkedMapOf<String, Any>(
+            "QueueableMediaTypes" to listOf("Video"),
+            "CanSeek" to report.canSeek,
+            "ItemId" to itemId,
+            "MediaSourceId" to sourceId,
+            "IsPaused" to (report.state == MediaCenterPlaybackState.Paused),
+            "IsMuted" to report.isMuted,
+            "PositionTicks" to report.positionMs * TICKS_PER_MILLISECOND,
+            "PlayMethod" to plan.method.name,
+            "PlaySessionId" to sessionId
+        )
+        report.durationMs?.let { body["RunTimeTicks"] = it * TICKS_PER_MILLISECOND }
+        report.volumePercent?.let { body["VolumeLevel"] = it }
+        plan.liveStreamId?.let {
+            body["LiveStreamId"] = MediaCenterUrlPolicy.requireIdentifier(it, "Emby live stream")
+        }
+        if (report.kind == MediaCenterPlaybackReportKind.Progress) {
+            body["EventName"] = when {
+                report.event == MediaCenterPlaybackEvent.Pause ||
+                    report.state == MediaCenterPlaybackState.Paused -> "Pause"
+                report.event == MediaCenterPlaybackEvent.Unpause -> "Unpause"
+                else -> "TimeUpdate"
+            }
+        }
+        val response = transport.execute(
+            MediaHttpRequest(
+                method = MediaHttpMethod.POST,
+                url = MediaCenterUrlPolicy.resolveServerPath(embyApiBase(URI(connection.baseUrl)), endpoint),
+                headers = embyHeaders(token, userId) + ("Content-Type" to "application/json"),
+                body = gson.toJson(body).toByteArray(Charsets.UTF_8)
+            )
+        )
+        requireSuccessfulReport(response, "Emby")
+    }
+
     fun disconnect(connection: MediaCenterConnection) {
         credentialVault.remove(connection.credentialId)
     }
@@ -435,9 +539,11 @@ internal class MediaCenterService(
         return MediaCenterPlaybackPlan(
             itemId = item.id,
             mediaSourceId = source.id,
+            method = MediaCenterPlaybackMethod.DirectPlay,
             url = MediaCenterUrlPolicy.resolveServerPath(baseUrl, path).toASCIIString(),
             requestHeaders = plexHeaders(token),
-            resumePositionMs = item.resumePositionMs ?: 0
+            resumePositionMs = item.resumePositionMs ?: 0,
+            playSessionId = "orbitalvue-${UUID.randomUUID().toString().lowercase(Locale.ROOT)}"
         )
     }
 
@@ -623,7 +729,14 @@ internal class MediaCenterService(
             payload.text("PlaySessionId") ?: MediaCenterUrlPolicy.hash("${item.id}|${Instant.now()}").take(48),
             "Emby play session"
         )
-        val direct = source.boolean("SupportsDirectPlay") || source.boolean("SupportsDirectStream")
+        val supportsDirectPlay = source.boolean("SupportsDirectPlay")
+        val supportsDirectStream = source.boolean("SupportsDirectStream")
+        val direct = supportsDirectPlay || supportsDirectStream
+        val method = when {
+            supportsDirectPlay -> MediaCenterPlaybackMethod.DirectPlay
+            supportsDirectStream -> MediaCenterPlaybackMethod.DirectStream
+            else -> MediaCenterPlaybackMethod.Transcode
+        }
         val targetUrl = when {
             direct && source.text("DirectStreamUrl") != null ->
                 MediaCenterUrlPolicy.resolveServerPath(apiBase, source.text("DirectStreamUrl")!!)
@@ -648,9 +761,12 @@ internal class MediaCenterService(
         return MediaCenterPlaybackPlan(
             itemId = item.id,
             mediaSourceId = sourceId,
+            method = method,
             url = targetUrl.toASCIIString(),
             requestHeaders = MediaCenterHeaderPolicy.providerHeaders(requiredHeaders) + embyHeaders(token, userId),
-            resumePositionMs = item.resumePositionMs ?: 0
+            resumePositionMs = item.resumePositionMs ?: 0,
+            playSessionId = playSessionId,
+            liveStreamId = source.text("LiveStreamId")
         )
     }
 
@@ -856,9 +972,45 @@ internal class MediaCenterService(
     )
 
     private companion object {
+        const val TICKS_PER_MILLISECOND = 10_000L
         val MAX_MEDIA_DATE: Instant = Instant.parse("3001-01-01T00:00:00Z")
         const val PAGE_SIZE = 200
         const val MAX_TOTAL_ITEMS = 20_000
         const val PLEX_DISCOVERY_LIFETIME_SECONDS = 10 * 60L
+    }
+}
+
+private data class NormalizedPlaybackReport(
+    val kind: MediaCenterPlaybackReportKind,
+    val state: MediaCenterPlaybackState,
+    val positionMs: Long,
+    val durationMs: Long?,
+    val event: MediaCenterPlaybackEvent?,
+    val canSeek: Boolean,
+    val isMuted: Boolean,
+    val volumePercent: Int?
+)
+
+private fun normalizePlaybackReport(report: MediaCenterPlaybackReport): NormalizedPlaybackReport {
+    val duration = report.durationMs
+        ?.takeIf { it > 0 }
+        ?.coerceAtMost(Long.MAX_VALUE / 10_000L)
+    return NormalizedPlaybackReport(
+        kind = report.kind,
+        state = report.state,
+        positionMs = report.positionMs
+            .coerceAtLeast(0)
+            .coerceAtMost(duration ?: Long.MAX_VALUE / 10_000L),
+        durationMs = duration,
+        event = report.event,
+        canSeek = report.canSeek,
+        isMuted = report.isMuted,
+        volumePercent = report.volumePercent?.coerceIn(0, 100)
+    )
+}
+
+private fun requireSuccessfulReport(response: MediaHttpResponse, provider: String) {
+    require(response.status in 200..299) {
+        "$provider rejected the playback report with HTTP ${response.status}."
     }
 }

@@ -2,6 +2,7 @@ package com.streamvue.player.data
 
 import android.content.ContextWrapper
 import com.google.gson.Gson
+import com.google.gson.JsonParser
 import com.streamvue.player.premium.PremiumAccessPolicy
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -70,6 +71,98 @@ class MediaCenterSecurityTest {
         val plan = service.playbackPlan(connection, snapshot.items.single())
         assertEquals(token, plan.requestHeaders["X-Plex-Token"])
         assertFalse(plan.url.contains(token))
+        service.reportPlayback(
+            connection,
+            plan,
+            MediaCenterPlaybackReport(
+                kind = MediaCenterPlaybackReportKind.Started,
+                state = MediaCenterPlaybackState.Playing,
+                positionMs = 1_000,
+                durationMs = 120_000
+            )
+        )
+        service.reportPlayback(
+            connection,
+            plan,
+            MediaCenterPlaybackReport(
+                kind = MediaCenterPlaybackReportKind.Stopped,
+                state = MediaCenterPlaybackState.Playing,
+                positionMs = 130_000,
+                durationMs = 120_000
+            )
+        )
+        val reports = transport.requests.filter { it.url.path == "/:/timeline" }
+        assertEquals(listOf("playing", "stopped"), reports.map { queryValue(it.url, "state") })
+        assertEquals(listOf("1000", "120000"), reports.map { queryValue(it.url, "time") })
+        assertTrue(reports.all { it.headers["X-Plex-Session-Identifier"] == plan.playSessionId })
+        assertTrue(reports.none { it.url.toASCIIString().contains(token) })
+    }
+
+    @Test
+    fun `emby playback reports preserve session ids and clamp provider payloads`() {
+        val transport = EmbyFixtureTransport()
+        val service = MediaCenterService(transport, MemoryVault(), testDevice, Gson())
+        val connection = service.connectEmby(
+            "https://emby.example",
+            "chris",
+            "fixture-password"
+        )
+        val snapshot = service.snapshot(connection)
+        val plan = service.playbackPlan(connection, snapshot.items.single())
+
+        service.reportPlayback(
+            connection,
+            plan,
+            MediaCenterPlaybackReport(
+                kind = MediaCenterPlaybackReportKind.Started,
+                state = MediaCenterPlaybackState.Playing,
+                positionMs = 1_200,
+                durationMs = 3_600_000,
+                volumePercent = 101
+            )
+        )
+        service.reportPlayback(
+            connection,
+            plan,
+            MediaCenterPlaybackReport(
+                kind = MediaCenterPlaybackReportKind.Progress,
+                state = MediaCenterPlaybackState.Paused,
+                positionMs = 4_000_000,
+                durationMs = 3_600_000,
+                event = MediaCenterPlaybackEvent.Pause
+            )
+        )
+        service.reportPlayback(
+            connection,
+            plan,
+            MediaCenterPlaybackReport(
+                kind = MediaCenterPlaybackReportKind.Stopped,
+                state = MediaCenterPlaybackState.Playing,
+                positionMs = -1
+            )
+        )
+
+        val reports = transport.requests.filter { it.url.path.startsWith("/emby/Sessions/Playing") }
+        assertEquals(
+            listOf(
+                "/emby/Sessions/Playing",
+                "/emby/Sessions/Playing/Progress",
+                "/emby/Sessions/Playing/Stopped"
+            ),
+            reports.map { it.url.path }
+        )
+        val started = JsonParser.parseString(reports[0].body!!.toString(Charsets.UTF_8)).asJsonObject
+        val paused = JsonParser.parseString(reports[1].body!!.toString(Charsets.UTF_8)).asJsonObject
+        val stopped = JsonParser.parseString(reports[2].body!!.toString(Charsets.UTF_8)).asJsonObject
+        assertEquals("play-session-1", started.get("PlaySessionId").asString)
+        assertEquals("live-stream-1", started.get("LiveStreamId").asString)
+        assertEquals(12_000_000L, started.get("PositionTicks").asLong)
+        assertEquals(100, started.get("VolumeLevel").asInt)
+        assertEquals(36_000_000_000L, paused.get("PositionTicks").asLong)
+        assertEquals("Pause", paused.get("EventName").asString)
+        assertEquals(0L, stopped.get("PositionTicks").asLong)
+        assertTrue(reports.all { it.headers["X-Emby-Token"] == EmbyFixtureTransport.TOKEN })
+        assertTrue(reports.none { it.url.toASCIIString().contains(EmbyFixtureTransport.TOKEN) })
     }
 
     @Test
@@ -185,11 +278,58 @@ class MediaCenterSecurityTest {
                         "Part":[{"id":"part-1","key":"/library/parts/part-1/file.mkv?X-Plex-Token=blocked"}]}]
                     }]}}
                 """.trimIndent()
+                "/:/timeline" -> ""
                 else -> error("Unexpected fixture request: ${request.url.path}")
             }
             return MediaHttpResponse(200, body.toByteArray(Charsets.UTF_8))
         }
     }
+
+    private class EmbyFixtureTransport : MediaCenterTransport {
+        val requests = ArrayList<MediaHttpRequest>()
+
+        override fun execute(request: MediaHttpRequest): MediaHttpResponse {
+            requests += request
+            val body = when (request.url.path) {
+                "/emby/System/Info/Public" ->
+                    """{"Id":"emby-server","ServerName":"Fixture Emby"}"""
+                "/emby/Users/AuthenticateByName" ->
+                    """{"AccessToken":"$TOKEN","ServerId":"emby-server","User":{"Id":"user-1","Name":"Chris"}}"""
+                "/emby/Users/user-1/Views" ->
+                    """{"Items":[{"Id":"movies","Name":"Movies","CollectionType":"movies","ChildCount":1}]}"""
+                "/emby/Users/user-1/Items" -> """
+                    {"TotalRecordCount":1,"Items":[{
+                      "Id":"item-1","Name":"Fixture Movie","Type":"Movie","RunTimeTicks":36000000000,
+                      "UserData":{"PlaybackPositionTicks":12000000,"Played":false},
+                      "MediaSources":[{"Id":"source-1","Container":"mkv","SupportsDirectPlay":true,
+                        "SupportsDirectStream":true,"SupportsTranscoding":true,"MediaStreams":[]}]
+                    }]}
+                """.trimIndent()
+                "/emby/Items/item-1/PlaybackInfo" -> """
+                    {"PlaySessionId":"play-session-1","MediaSources":[{
+                      "Id":"source-1","Container":"mkv","SupportsDirectPlay":true,
+                      "SupportsDirectStream":true,"SupportsTranscoding":true,
+                      "DirectStreamUrl":"/Videos/item-1/stream.mkv","LiveStreamId":"live-stream-1"
+                    }]}
+                """.trimIndent()
+                "/emby/Sessions/Playing",
+                "/emby/Sessions/Playing/Progress",
+                "/emby/Sessions/Playing/Stopped" -> ""
+                else -> error("Unexpected Emby fixture request: ${request.url.path}")
+            }
+            return MediaHttpResponse(200, body.toByteArray(Charsets.UTF_8))
+        }
+
+        companion object {
+            const val TOKEN = "emby-fixture-token"
+        }
+    }
+
+    private fun queryValue(uri: URI, name: String): String? = uri.rawQuery
+        ?.split('&')
+        ?.mapNotNull { value -> value.split('=', limit = 2).takeIf { it.size == 2 } }
+        ?.firstOrNull { it[0] == name }
+        ?.get(1)
 
     private companion object {
         val testDevice = MediaCenterDeviceIdentity(

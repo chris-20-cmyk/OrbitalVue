@@ -9,6 +9,7 @@ import com.streamvue.player.data.Catalog
 import com.streamvue.player.data.Channel
 import com.streamvue.player.data.LoadedCatalog
 import com.streamvue.player.data.MediaCenterRepository
+import com.streamvue.player.data.MediaCenterPlaybackReport
 import com.streamvue.player.data.MediaLibraryBrowseMode
 import com.streamvue.player.data.MediaLibraryBrowsePolicy
 import com.streamvue.player.data.MediaLibraryBrowseSummary
@@ -77,6 +78,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         Context.MODE_PRIVATE
     )
     private var playbackResolutionJob: Job? = null
+    private var playbackReportingJob: Job? = null
     private var plexSignInJob: Job? = null
     val state: StateFlow<AppUiState> = mutableState.asStateFlow()
 
@@ -306,6 +308,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 .onFailure { error ->
                     if (mutableState.value.selectedChannel?.id == channel.id) showFailure(error)
                 }
+        }
+    }
+
+    fun reportPlayback(sessionId: String, report: MediaCenterPlaybackReport) {
+        val previous = playbackReportingJob
+        playbackReportingJob = viewModelScope.launch {
+            previous?.join()
+            runCatching { mediaCenterRepository.reportPlayback(sessionId, report) }
         }
     }
 

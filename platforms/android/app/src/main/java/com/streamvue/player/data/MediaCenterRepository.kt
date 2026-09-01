@@ -23,6 +23,8 @@ class MediaCenterRepository internal constructor(
 ) {
     private val snapshotFile = File(context.filesDir, "catalog/media-center-source.json")
     private var cachedSnapshot: MediaCenterSnapshot? = null
+    private val playbackSessionLock = Any()
+    private val playbackSessions = LinkedHashMap<String, ActiveMediaPlayback>()
 
     private fun currentPremiumAccess(): PremiumAccessSnapshot =
         premiumAccessProvider?.invoke() ?: premiumAccess
@@ -162,14 +164,42 @@ class MediaCenterRepository internal constructor(
         val item = snapshot.items.firstOrNull { it.id == locator.itemId }
             ?: error("This media item is no longer available in the protected library snapshot.")
         val plan = service.playbackPlan(snapshot.connection, item)
+        synchronized(playbackSessionLock) {
+            while (playbackSessions.size >= MAX_ACTIVE_PLAYBACK_SESSIONS) {
+                playbackSessions.remove(playbackSessions.keys.first())
+            }
+            playbackSessions[plan.playSessionId] = ActiveMediaPlayback(snapshot.connection, plan)
+        }
         channel.copy(
             streamUri = plan.url,
             requestHeaders = plan.requestHeaders,
-            startPositionMs = plan.resumePositionMs.takeIf { it > 0 }
+            startPositionMs = plan.resumePositionMs.takeIf { it > 0 },
+            playbackReportSessionId = plan.playSessionId
         )
     }
 
+    suspend fun reportPlayback(
+        sessionId: String,
+        report: MediaCenterPlaybackReport
+    ) = withContext(Dispatchers.IO) {
+        val safeSessionId = MediaCenterUrlPolicy.requireIdentifier(sessionId, "playback session")
+        val active = synchronized(playbackSessionLock) { playbackSessions[safeSessionId] }
+            ?: return@withContext
+        try {
+            service.reportPlayback(active.connection, active.plan, report)
+        } finally {
+            if (report.kind == MediaCenterPlaybackReportKind.Stopped) {
+                synchronized(playbackSessionLock) {
+                    if (playbackSessions[safeSessionId] === active) {
+                        playbackSessions.remove(safeSessionId)
+                    }
+                }
+            }
+        }
+    }
+
     suspend fun removeSource() = withContext(Dispatchers.IO) {
+        synchronized(playbackSessionLock) { playbackSessions.clear() }
         val connection = runCatching { currentSnapshot()?.connection }.getOrNull()
         connection?.let(service::disconnect)
         cachedSnapshot = null
@@ -360,6 +390,7 @@ class MediaCenterRepository internal constructor(
 
     private companion object {
         const val MAX_SNAPSHOT_BYTES = 64 * 1_024 * 1_024
+        const val MAX_ACTIVE_PLAYBACK_SESSIONS = 4
         val SENSITIVE_JSON_KEY = Regex(
             "\\\"(?:accessToken|authToken|password|secret|x-emby-token|x-plex-token)\\\"\\s*:",
             RegexOption.IGNORE_CASE
@@ -397,3 +428,8 @@ class MediaCenterRepository internal constructor(
         }
     }
 }
+
+private data class ActiveMediaPlayback(
+    val connection: MediaCenterConnection,
+    val plan: MediaCenterPlaybackPlan
+)
