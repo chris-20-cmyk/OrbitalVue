@@ -80,6 +80,8 @@ public final class StreamPlayerController {
     private var playbackRequested = false
     private var startupBeganAt: ContinuousClock.Instant?
     private var didFallbackForCurrentChannel = false
+    private var resumePositionSeconds: TimeInterval = 0
+    private var lastKSPlaybackSeconds: TimeInterval = 0
 
     public init() {
         player = AVPlayer()
@@ -121,6 +123,10 @@ public final class StreamPlayerController {
         configure(settings: settings)
         stop(clearChannel: false)
         self.channel = channel
+        resumePositionSeconds = channel.canResume
+            ? TimeInterval(channel.media?.resumePositionMs ?? 0) / 1_000
+            : 0
+        lastKSPlaybackSeconds = resumePositionSeconds
         telemetry = PlaybackTelemetry()
         reasonForWaiting = nil
         didFallbackForCurrentChannel = false
@@ -180,6 +186,7 @@ public final class StreamPlayerController {
         item.preferredForwardBufferDuration = settings.bufferPreference.preferredForwardDuration
         installItemObservations(item)
         player.replaceCurrentItem(with: item)
+        seekNativePlayerToResumePosition()
         player.allowsExternalPlayback = settings.allowsExternalPlayback
         playbackRequested = autoPlayOverride ?? settings.autoPlaySelection
         phase = playbackRequested ? .preparing : .paused
@@ -219,6 +226,9 @@ public final class StreamPlayerController {
         options.videoAdaptable = true
         options.canStartPictureInPictureAutomaticallyFromInline = settings.allowsPictureInPicture
         options.autoSelectEmbedSubtitle = settings.preferredSubtitleLanguage != .off
+        if resumePositionSeconds > 0 {
+            options.startPlayTime = resumePositionSeconds
+        }
         if let userAgent = header(named: "User-Agent", in: channel.stream.requestHeaders) {
             options.userAgent = userAgent
         }
@@ -341,6 +351,7 @@ public final class StreamPlayerController {
         #if canImport(KSPlayer)
         guard activeEngine == .ksPlayer, let channel, let settings else { return }
         let shouldContinuePlaying = playbackRequested
+        captureKSResumePosition()
         didFallbackForCurrentChannel = true
         ksLayer?.delegate = nil
         ksVideoView.playerLayer = nil
@@ -477,6 +488,7 @@ public final class StreamPlayerController {
            settings.fallbackPlaybackEngine,
            !didFallbackForCurrentChannel {
             didFallbackForCurrentChannel = true
+            captureKSResumePosition()
             ksLayer?.delegate = nil
             ksVideoView.playerLayer = nil
             ksLayer?.stop()
@@ -501,6 +513,7 @@ public final class StreamPlayerController {
            settings.fallbackPlaybackEngine,
            !didFallbackForCurrentChannel {
             didFallbackForCurrentChannel = true
+            captureNativeResumePosition()
             player.pause()
             player.replaceCurrentItem(with: nil)
             clearItemObservations()
@@ -549,7 +562,12 @@ public final class StreamPlayerController {
         currentTime: TimeInterval,
         totalTime: TimeInterval
     ) {
-        _ = currentTime
+        if currentTime.isFinite, currentTime > resumePositionSeconds {
+            resumePositionSeconds = currentTime
+        }
+        if currentTime.isFinite, currentTime >= 0 {
+            lastKSPlaybackSeconds = currentTime
+        }
         _ = totalTime
         guard layer === ksLayer else { return }
         refreshKSTelemetry(layer)
@@ -588,6 +606,30 @@ public final class StreamPlayerController {
             if telemetry.observedBitrate == nil {
                 telemetry.observedBitrate = Double(videoTrack.bitRate)
             }
+        }
+    }
+    #endif
+
+    private func seekNativePlayerToResumePosition() {
+        guard resumePositionSeconds.isFinite, resumePositionSeconds > 0 else { return }
+        player.seek(
+            to: CMTime(seconds: resumePositionSeconds, preferredTimescale: 600),
+            toleranceBefore: .zero,
+            toleranceAfter: .zero
+        )
+    }
+
+    private func captureNativeResumePosition() {
+        let seconds = player.currentTime().seconds
+        if seconds.isFinite, seconds > resumePositionSeconds {
+            resumePositionSeconds = seconds
+        }
+    }
+
+    #if canImport(KSPlayer)
+    private func captureKSResumePosition() {
+        if lastKSPlaybackSeconds.isFinite, lastKSPlaybackSeconds > resumePositionSeconds {
+            resumePositionSeconds = lastKSPlaybackSeconds
         }
     }
     #endif
