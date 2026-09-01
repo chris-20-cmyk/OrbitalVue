@@ -349,6 +349,84 @@ public enum MediaCenterPlaybackMethod: String, Codable, CaseIterable, Sendable {
     case transcode
 }
 
+public enum MediaCenterPlaybackReportKind: String, Equatable, Sendable {
+    case started
+    case progress
+    case stopped
+}
+
+public enum MediaCenterPlaybackState: String, Equatable, Sendable {
+    case playing
+    case paused
+    case buffering
+}
+
+public enum MediaCenterPlaybackEvent: String, Equatable, Sendable {
+    case timeUpdate
+    case pause
+    case unpause
+    case seek
+}
+
+public struct MediaCenterPlaybackReport: Equatable, Sendable {
+    public let kind: MediaCenterPlaybackReportKind
+    public let state: MediaCenterPlaybackState
+    public let positionMS: Int
+    public let durationMS: Int?
+    public let event: MediaCenterPlaybackEvent?
+    public let canSeek: Bool
+    public let isMuted: Bool
+    public let volumePercent: Int?
+
+    public init(
+        kind: MediaCenterPlaybackReportKind,
+        state: MediaCenterPlaybackState,
+        positionMS: Int,
+        durationMS: Int? = nil,
+        event: MediaCenterPlaybackEvent? = nil,
+        canSeek: Bool = true,
+        isMuted: Bool = false,
+        volumePercent: Int? = nil
+    ) {
+        self.kind = kind
+        self.state = state
+        self.positionMS = positionMS
+        self.durationMS = durationMS
+        self.event = event
+        self.canSeek = canSeek
+        self.isMuted = isMuted
+        self.volumePercent = volumePercent
+    }
+}
+
+struct NormalizedMediaCenterPlaybackReport: Sendable {
+    let kind: MediaCenterPlaybackReportKind
+    let state: MediaCenterPlaybackState
+    let positionMS: Int
+    let durationMS: Int?
+    let event: MediaCenterPlaybackEvent?
+    let canSeek: Bool
+    let isMuted: Bool
+    let volumePercent: Int?
+}
+
+extension MediaCenterPlaybackReport {
+    var normalized: NormalizedMediaCenterPlaybackReport {
+        let maximum = Int.max / 10_000
+        let duration = durationMS.flatMap { $0 > 0 ? min($0, maximum) : nil }
+        return NormalizedMediaCenterPlaybackReport(
+            kind: kind,
+            state: state,
+            positionMS: min(max(0, positionMS), duration ?? maximum),
+            durationMS: duration,
+            event: event,
+            canSeek: canSeek,
+            isMuted: isMuted,
+            volumePercent: volumePercent.map { min(100, max(0, $0)) }
+        )
+    }
+}
+
 /// Ephemeral playback data. Do not persist this value or include it in diagnostics.
 public struct MediaCenterPlaybackPlan: Equatable, Sendable {
     public let itemID: String

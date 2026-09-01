@@ -128,13 +128,19 @@ public struct StreamVueApplicationRoot: View {
     }
 
     private func resolveAndTune(_ channel: CatalogChannel) async {
-        guard let playableChannel = await store.playbackChannel(for: channel) else {
+        guard let resolved = await store.playbackChannel(for: channel) else {
             guard !Task.isCancelled, store.selectedChannel?.id == channel.id else { return }
             player.stop()
             return
         }
         guard !Task.isCancelled, store.selectedChannel?.id == channel.id else { return }
-        player.tune(to: playableChannel, settings: settings)
+        player.tune(
+            to: resolved.channel,
+            settings: settings,
+            reportingSessionID: resolved.reportingSessionID
+        ) { sessionID, report in
+            await store.reportPlayback(sessionID: sessionID, report: report)
+        }
     }
 }
 

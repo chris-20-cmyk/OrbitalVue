@@ -227,6 +227,8 @@ struct MediaCenterTests {
                 return jsonResponse(#"{"MediaContainer":{"Directory":[{"key":"1","title":"Movies","type":"movie","totalSize":1}]}}"#)
             case "/library/sections/1/all":
                 return jsonResponse(#"{"MediaContainer":{"offset":0,"totalSize":1,"Metadata":[{"ratingKey":"movie-1","title":"Repository Movie","type":"movie","year":2026,"duration":7200000,"viewOffset":900000,"addedAt":1777593600,"lastViewedAt":1778457600,"Media":[{"id":"media-1","Part":[{"id":"part-1","key":"/library/parts/1/movie.mkv"}]}]}]}}"#)
+            case "/:/timeline":
+                return MediaCenterHTTPResponse(statusCode: 200, body: Data())
             default:
                 return MediaCenterHTTPResponse(statusCode: 404, body: Data())
             }
@@ -252,6 +254,33 @@ struct MediaCenterTests {
         #expect(channel.canResume)
         let plan = try await repository.playbackPlan(for: channel.stream.uri)
         #expect(plan.requestHeaders["X-Plex-Token"] == token)
+        let sessionID = try #require(plan.playSessionID)
+        try await repository.reportPlayback(
+            sessionID: sessionID,
+            report: MediaCenterPlaybackReport(
+                kind: .started,
+                state: .playing,
+                positionMS: 900_000,
+                durationMS: 7_200_000
+            )
+        )
+        try await repository.reportPlayback(
+            sessionID: sessionID,
+            report: MediaCenterPlaybackReport(
+                kind: .stopped,
+                state: .playing,
+                positionMS: 8_000_000,
+                durationMS: 7_200_000
+            )
+        )
+        let timelineRequests = await http.requests().filter { $0.url.path == "/:/timeline" }
+        #expect(timelineRequests.count == 2)
+        #expect(timelineRequests.map { queryValue("state", in: $0.url) } == ["playing", "stopped"])
+        #expect(timelineRequests.map { queryValue("time", in: $0.url) } == ["900000", "7200000"])
+        #expect(timelineRequests.allSatisfy {
+            $0.headers["X-Plex-Session-Identifier"] == sessionID &&
+                !$0.url.absoluteString.contains(token)
+        })
 
         let snapshotURL = directory.appendingPathComponent("media-center-source.json")
         let serialized = String(data: try Data(contentsOf: snapshotURL), encoding: .utf8) ?? ""
@@ -393,6 +422,8 @@ struct MediaCenterTests {
                 jsonResponse(#"{"TotalRecordCount":1,"Items":[{"Id":"item-1","Name":"A Test Movie","Type":"Movie","ProductionYear":2026,"DateCreated":"2026-05-01T00:00:00Z","RunTimeTicks":72000000000,"UserData":{"PlaybackPositionTicks":120000000,"Played":false,"LastPlayedDate":"2026-05-11T00:00:00Z"},"ImageTags":{"Primary":"image-tag"},"MediaSources":[{"Id":"source-1","Container":"mkv","SupportsDirectPlay":true,"SupportsDirectStream":true,"SupportsTranscoding":true,"DirectStreamUrl":"/Videos/item-1/stream.mkv?api_key=upstream-secret","MediaStreams":[{"Index":0,"Type":"Video","Codec":"hevc","Width":3840,"Height":2160},{"Index":1,"Type":"Audio","Codec":"eac3","Language":"eng","Channels":6}]}]}]}"#)
             case "/emby/Items/item-1/PlaybackInfo":
                 jsonResponse(#"{"PlaySessionId":"session-1","MediaSources":[{"Id":"source-1","SupportsDirectPlay":true,"SupportsDirectStream":true,"SupportsTranscoding":true,"DirectStreamUrl":"/Videos/item-1/stream.mkv?api_key=upstream-secret","RequiredHttpHeaders":{"X-Test":"allowed","X-Emby-Token":"attacker-value"}}]}"#)
+            case "/emby/Sessions/Playing", "/emby/Sessions/Playing/Progress", "/emby/Sessions/Playing/Stopped":
+                MediaCenterHTTPResponse(statusCode: 200, body: Data())
             default:
                 MediaCenterHTTPResponse(statusCode: 404, body: Data())
             }
@@ -408,6 +439,37 @@ struct MediaCenterTests {
         let snapshot = try await service.snapshot(for: connection)
         let item = try #require(snapshot.items.first)
         let playback = try await service.playbackPlan(for: item, connection: connection)
+        try await service.reportPlayback(
+            plan: playback,
+            report: MediaCenterPlaybackReport(
+                kind: .started,
+                state: .playing,
+                positionMS: 12_000,
+                durationMS: 7_200_000,
+                volumePercent: 101
+            ),
+            connection: connection
+        )
+        try await service.reportPlayback(
+            plan: playback,
+            report: MediaCenterPlaybackReport(
+                kind: .progress,
+                state: .paused,
+                positionMS: 8_000_000,
+                durationMS: 7_200_000,
+                event: .pause
+            ),
+            connection: connection
+        )
+        try await service.reportPlayback(
+            plan: playback,
+            report: MediaCenterPlaybackReport(
+                kind: .stopped,
+                state: .playing,
+                positionMS: -1
+            ),
+            connection: connection
+        )
         let catalog = try MediaCenterCatalogFactory.create(from: snapshot)
         let serializedSnapshot = String(
             data: try JSONEncoder().encode(snapshot),
@@ -436,6 +498,21 @@ struct MediaCenterTests {
         #expect(!serializedCatalog.contains(token))
 
         let requests = await http.requests()
+        let playbackReports = requests.filter { $0.url.path.hasPrefix("/emby/Sessions/Playing") }
+        #expect(playbackReports.map(\.url.path) == [
+            "/emby/Sessions/Playing",
+            "/emby/Sessions/Playing/Progress",
+            "/emby/Sessions/Playing/Stopped"
+        ])
+        let startedReport = jsonObject(playbackReports[0].body)
+        let pausedReport = jsonObject(playbackReports[1].body)
+        let stoppedReport = jsonObject(playbackReports[2].body)
+        #expect(startedReport["PlaySessionId"] as? String == "session-1")
+        #expect(startedReport["PositionTicks"] as? Int == 120_000_000)
+        #expect(startedReport["VolumeLevel"] as? Int == 100)
+        #expect(pausedReport["PositionTicks"] as? Int == 72_000_000_000)
+        #expect(pausedReport["EventName"] as? String == "Pause")
+        #expect(stoppedReport["PositionTicks"] as? Int == 0)
         let publicProbes = requests.filter { $0.url.path == "/emby/System/Info/Public" }
         #expect(publicProbes.allSatisfy {
             $0.headers["X-Emby-Token"] == nil && !$0.headers.values.contains(token)
@@ -541,6 +618,21 @@ private func jsonResponse(_ value: String) -> MediaCenterHTTPResponse {
         headers: ["Content-Type": "application/json"],
         body: Data(value.utf8)
     )
+}
+
+private func queryValue(_ name: String, in url: URL) -> String? {
+    URLComponents(url: url, resolvingAgainstBaseURL: false)?
+        .queryItems?
+        .first { $0.name == name }?
+        .value
+}
+
+private func jsonObject(_ data: Data?) -> [String: Any] {
+    guard let data,
+          let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return [:]
+    }
+    return object
 }
 
 private extension Data {

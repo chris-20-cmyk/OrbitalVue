@@ -13,6 +13,8 @@ public actor MediaCenterRepository {
     private let fixedPremiumAccess: PremiumAccessSnapshot?
     private let premiumAccessRuntime: PremiumAccessRuntime
     private var cachedSnapshot: MediaCenterSnapshot?
+    private var activePlaybackSessions: [String: ActiveMediaCenterPlayback] = [:]
+    private var activePlaybackOrder: [String] = []
 
     public init(
         directory: URL? = nil,
@@ -191,11 +193,47 @@ public actor MediaCenterRepository {
               let item = snapshot.items.first(where: { $0.id == locator.itemID }) else {
             throw MediaCenterError.providerMismatch
         }
-        return try await service.playbackPlan(
+        let plan = try await service.playbackPlan(
             for: item,
             connection: snapshot.connection,
             mediaSourceID: mediaSourceID,
             startPositionMS: startPositionMS
+        )
+        if plan.requiresPlaybackReporting, let sessionID = plan.playSessionID {
+            while activePlaybackOrder.count >= 4, let oldest = activePlaybackOrder.first {
+                activePlaybackOrder.removeFirst()
+                activePlaybackSessions.removeValue(forKey: oldest)
+            }
+            activePlaybackOrder.removeAll { $0 == sessionID }
+            activePlaybackOrder.append(sessionID)
+            activePlaybackSessions[sessionID] = ActiveMediaCenterPlayback(
+                connection: snapshot.connection,
+                plan: plan
+            )
+        }
+        return plan
+    }
+
+    public func reportPlayback(
+        sessionID: String,
+        report: MediaCenterPlaybackReport
+    ) async throws {
+        let safeSessionID = try MediaCenterURLPolicy.requireIdentifier(
+            sessionID,
+            label: "playback session"
+        )
+        guard let active = activePlaybackSessions[safeSessionID] else { return }
+        defer {
+            if report.kind == .stopped,
+               activePlaybackSessions[safeSessionID] == active {
+                activePlaybackSessions.removeValue(forKey: safeSessionID)
+                activePlaybackOrder.removeAll { $0 == safeSessionID }
+            }
+        }
+        try await service.reportPlayback(
+            plan: active.plan,
+            report: report,
+            connection: active.connection
         )
     }
 
@@ -222,6 +260,8 @@ public actor MediaCenterRepository {
     }
 
     public func removeSource() async throws {
+        activePlaybackSessions.removeAll()
+        activePlaybackOrder.removeAll()
         let connection = try? currentSnapshot()?.connection
         if let connection { try await service.disconnect(connection) }
         cachedSnapshot = nil
@@ -330,4 +370,9 @@ public actor MediaCenterRepository {
         let access = await currentPremiumAccess()
         try access.requireMediaCenters()
     }
+}
+
+private struct ActiveMediaCenterPlayback: Equatable, Sendable {
+    let connection: MediaCenterConnection
+    let plan: MediaCenterPlaybackPlan
 }

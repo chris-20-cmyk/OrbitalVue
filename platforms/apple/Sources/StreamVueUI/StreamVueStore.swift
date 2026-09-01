@@ -9,6 +9,11 @@ public struct ChannelSection: Identifiable, Sendable {
     public var id: String { name }
 }
 
+public struct ResolvedPlaybackChannel: Sendable {
+    public let channel: CatalogChannel
+    public let reportingSessionID: String?
+}
+
 @MainActor
 @Observable
 public final class StreamVueStore {
@@ -259,32 +264,42 @@ public final class StreamVueStore {
     /// Resolves a cache-safe media-center locator into an ephemeral URL and
     /// protected headers immediately before playback. The resolved descriptor
     /// is never written back to the catalog.
-    public func playbackChannel(for channel: CatalogChannel) async -> CatalogChannel? {
+    public func playbackChannel(for channel: CatalogChannel) async -> ResolvedPlaybackChannel? {
         guard URL(string: channel.stream.uri)?.scheme?.lowercased() == "streamvue-media" else {
-            return channel
+            return ResolvedPlaybackChannel(channel: channel, reportingSessionID: nil)
         }
         do {
             let plan = try await mediaCenterRepository.playbackPlan(for: channel.stream.uri)
-            return CatalogChannel(
-                id: channel.id,
-                number: channel.number,
-                name: channel.name,
-                group: channel.group,
-                kind: channel.kind,
-                sourceId: channel.sourceId,
-                stream: StreamDescriptor(
-                    uri: plan.url.absoluteString,
-                    requestHeaders: plan.requestHeaders
+            return ResolvedPlaybackChannel(
+                channel: CatalogChannel(
+                    id: channel.id,
+                    number: channel.number,
+                    name: channel.name,
+                    group: channel.group,
+                    kind: channel.kind,
+                    sourceId: channel.sourceId,
+                    stream: StreamDescriptor(
+                        uri: plan.url.absoluteString,
+                        requestHeaders: plan.requestHeaders
+                    ),
+                    guide: channel.guide,
+                    catchup: channel.catchup,
+                    tags: channel.tags,
+                    media: channel.media
                 ),
-                guide: channel.guide,
-                catchup: channel.catchup,
-                tags: channel.tags,
-                media: channel.media
+                reportingSessionID: plan.requiresPlaybackReporting ? plan.playSessionID : nil
             )
         } catch {
             show(error)
             return nil
         }
+    }
+
+    public func reportPlayback(
+        sessionID: String,
+        report: MediaCenterPlaybackReport
+    ) async {
+        try? await mediaCenterRepository.reportPlayback(sessionID: sessionID, report: report)
     }
 
     @discardableResult

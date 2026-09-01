@@ -67,8 +67,9 @@ internal object MediaCenterUrlPolicy {
         } else {
             val basePath = baseUrl.rawPath.orEmpty()
             val root = rawUri(baseUrl.scheme, baseUrl.host, baseUrl.port, "/", null)
-            if (raw.startsWith('/') && basePath.isNotEmpty() &&
-                (raw == basePath || raw.startsWith("$basePath/"))) {
+            if (raw.startsWith('/') && (
+                    basePath.isEmpty() || raw == basePath || raw.startsWith("$basePath/")
+                )) {
                 root.resolve(raw)
             } else {
                 val directory = rawUri(

@@ -299,6 +299,84 @@ struct EmbyMediaCenterClient: Sendable {
         )
     }
 
+    func reportPlayback(
+        plan: MediaCenterPlaybackPlan,
+        report: MediaCenterPlaybackReport
+    ) async throws {
+        guard plan.requiresPlaybackReporting else { return }
+        let itemID = try Self.secureIdentifier(
+            plan.itemID,
+            label: "Emby item",
+            excluding: [token]
+        )
+        let sourceID = try Self.secureIdentifier(
+            plan.mediaSourceID,
+            label: "Emby media source",
+            excluding: [token]
+        )
+        let playSessionID = try Self.secureIdentifier(
+            plan.playSessionID ?? "",
+            label: "Emby play session",
+            excluding: [token]
+        )
+        let normalized = report.normalized
+        let endpoint = switch normalized.kind {
+        case .started: "/Sessions/Playing"
+        case .progress: "/Sessions/Playing/Progress"
+        case .stopped: "/Sessions/Playing/Stopped"
+        }
+        var body: [String: Any] = [
+            "QueueableMediaTypes": ["Video"],
+            "CanSeek": normalized.canSeek,
+            "ItemId": itemID,
+            "MediaSourceId": sourceID,
+            "IsPaused": normalized.state == .paused,
+            "IsMuted": normalized.isMuted,
+            "PositionTicks": normalized.positionMS * 10_000,
+            "PlayMethod": switch plan.method {
+            case .directPlay: "DirectPlay"
+            case .directStream: "DirectStream"
+            case .transcode: "Transcode"
+            },
+            "PlaySessionId": playSessionID
+        ]
+        if let durationMS = normalized.durationMS {
+            body["RunTimeTicks"] = durationMS * 10_000
+        }
+        if let volumePercent = normalized.volumePercent {
+            body["VolumeLevel"] = volumePercent
+        }
+        if let liveStreamID = plan.liveStreamID {
+            body["LiveStreamId"] = try Self.secureIdentifier(
+                liveStreamID,
+                label: "Emby live stream",
+                excluding: [token]
+            )
+        }
+        if normalized.kind == .progress {
+            body["EventName"] = if normalized.event == .pause || normalized.state == .paused {
+                "Pause"
+            } else if normalized.event == .unpause {
+                "Unpause"
+            } else {
+                "TimeUpdate"
+            }
+        }
+        let url = try MediaCenterURLPolicy.resolveServerPath(baseURL: apiBaseURL, path: endpoint)
+        let payload = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+        let response = try await httpClient.send(
+            MediaCenterHTTPRequest(
+                method: .post,
+                url: url,
+                headers: headers.merging(["Content-Type": "application/json"]) { _, protected in protected },
+                body: payload
+            )
+        )
+        guard (200...299).contains(response.statusCode) else {
+            throw MediaCenterError.serverStatus(response.statusCode)
+        }
+    }
+
     func artworkPlan(
         for item: MediaCenterItem,
         maximumWidth: Int

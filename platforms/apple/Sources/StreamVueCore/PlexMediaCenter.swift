@@ -164,8 +164,49 @@ struct PlexMediaCenterClient: Sendable {
             url: url,
             requestHeaders: headers,
             sensitiveHeaderNames: ["X-Plex-Token"],
+            playSessionID: "orbitalvue-\(UUID().uuidString.lowercased())",
             requiresPlaybackReporting: true
         )
+    }
+
+    func reportPlayback(
+        plan: MediaCenterPlaybackPlan,
+        report: MediaCenterPlaybackReport
+    ) async throws {
+        guard plan.requiresPlaybackReporting else { return }
+        let itemID = try Self.secureIdentifier(
+            plan.itemID,
+            label: "Plex item",
+            excluding: token
+        )
+        let normalized = report.normalized
+        let state = normalized.kind == .stopped ? "stopped" : normalized.state.rawValue
+        var values = [
+            "key": "/library/metadata/\(itemID)",
+            "ratingKey": itemID,
+            "state": state,
+            "time": String(normalized.positionMS)
+        ]
+        if let durationMS = normalized.durationMS { values["duration"] = String(durationMS) }
+        let endpoint = try MediaCenterURLPolicy.resolveServerPath(
+            baseURL: baseURL,
+            path: "/:/timeline"
+        )
+        let url = try MediaCenterURLPolicy.appendingQuery(values, to: endpoint)
+        var reportHeaders = headers
+        if let playSessionID = plan.playSessionID {
+            reportHeaders["X-Plex-Session-Identifier"] = try Self.secureIdentifier(
+                playSessionID,
+                label: "Plex play session",
+                excluding: token
+            )
+        }
+        let response = try await httpClient.send(
+            MediaCenterHTTPRequest(method: .post, url: url, headers: reportHeaders)
+        )
+        guard (200...299).contains(response.statusCode) else {
+            throw MediaCenterError.serverStatus(response.statusCode)
+        }
     }
 
     func artworkPlan(

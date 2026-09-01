@@ -341,6 +341,23 @@ public actor MediaCenterService {
         }
     }
 
+    public func reportPlayback(
+        plan: MediaCenterPlaybackPlan,
+        report: MediaCenterPlaybackReport,
+        connection: MediaCenterConnection
+    ) async throws {
+        guard plan.requiresPlaybackReporting else { return }
+        let token = try await credential(for: connection)
+        switch connection.provider {
+        case .plex:
+            let client = try await plexClient(connection: connection, token: token)
+            try await client.reportPlayback(plan: plan, report: report)
+        case .emby:
+            let client = try embyClient(connection: connection, token: token)
+            try await client.reportPlayback(plan: plan, report: report)
+        }
+    }
+
     public func artworkPlan(
         for item: MediaCenterItem,
         connection: MediaCenterConnection,

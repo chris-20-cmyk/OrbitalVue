@@ -62,7 +62,9 @@ public final class StreamPlayerController {
     public let player: AVPlayer
     public private(set) var activeEngine: PlaybackEnginePreference = .avKit
     public private(set) var channel: CatalogChannel?
-    public private(set) var phase: PlaybackPhase = .idle
+    public private(set) var phase: PlaybackPhase = .idle {
+        didSet { handlePlaybackPhaseChange(from: oldValue) }
+    }
     public private(set) var telemetry = PlaybackTelemetry()
     public private(set) var isExternalPlaybackActive = false
     public private(set) var reasonForWaiting: String?
@@ -82,6 +84,13 @@ public final class StreamPlayerController {
     private var didFallbackForCurrentChannel = false
     private var resumePositionSeconds: TimeInterval = 0
     private var lastKSPlaybackSeconds: TimeInterval = 0
+    private var lastKSDurationSeconds: TimeInterval = 0
+    private var reportingSessionID: String?
+    private var playbackReportHandler: (@Sendable (String, MediaCenterPlaybackReport) async -> Void)?
+    private var playbackReportTimer: Task<Void, Never>?
+    private var playbackReportDelivery: Task<Void, Never>?
+    private var playbackReportingStarted = false
+    private var suppressPlaybackReportingTransitions = false
 
     public init() {
         player = AVPlayer()
@@ -119,14 +128,24 @@ public final class StreamPlayerController {
         #endif
     }
 
-    public func tune(to channel: CatalogChannel, settings: StreamVueSettings) {
+    public func tune(
+        to channel: CatalogChannel,
+        settings: StreamVueSettings,
+        reportingSessionID: String? = nil,
+        finishCurrentReporting: Bool = true,
+        onPlaybackReport: (@Sendable (String, MediaCenterPlaybackReport) async -> Void)? = nil
+    ) {
         configure(settings: settings)
-        stop(clearChannel: false)
+        stop(clearChannel: false, finishReporting: finishCurrentReporting)
         self.channel = channel
+        self.reportingSessionID = reportingSessionID
+        playbackReportHandler = onPlaybackReport
+        playbackReportingStarted = false
         resumePositionSeconds = channel.canResume
             ? TimeInterval(channel.media?.resumePositionMs ?? 0) / 1_000
             : 0
         lastKSPlaybackSeconds = resumePositionSeconds
+        lastKSDurationSeconds = TimeInterval(channel.media?.durationMs ?? 0) / 1_000
         telemetry = PlaybackTelemetry()
         reasonForWaiting = nil
         didFallbackForCurrentChannel = false
@@ -314,10 +333,26 @@ public final class StreamPlayerController {
 
     public func retry() {
         guard let channel, let settings else { return }
-        tune(to: channel, settings: settings)
+        let sessionID = reportingSessionID
+        let handler = playbackReportHandler
+        tune(
+            to: channel,
+            settings: settings,
+            reportingSessionID: sessionID,
+            finishCurrentReporting: false,
+            onPlaybackReport: handler
+        )
     }
 
-    public func stop(clearChannel: Bool = true) {
+    public func stop(clearChannel: Bool = true, finishReporting: Bool = true) {
+        if finishReporting {
+            finishPlaybackReporting()
+        } else {
+            playbackReportTimer?.cancel()
+            playbackReportTimer = nil
+            playbackReportingStarted = false
+        }
+        suppressPlaybackReportingTransitions = !finishReporting
         playbackRequested = false
         player.pause()
         player.replaceCurrentItem(with: nil)
@@ -331,8 +366,13 @@ public final class StreamPlayerController {
         surfaceGeneration += 1
         if clearChannel { channel = nil }
         phase = .idle
+        suppressPlaybackReportingTransitions = false
         isExternalPlaybackActive = false
         reasonForWaiting = nil
+        if finishReporting {
+            reportingSessionID = nil
+            playbackReportHandler = nil
+        }
     }
 
     public func claimSurface(_ role: StreamPlayerSurfaceRole) {
@@ -427,6 +467,13 @@ public final class StreamPlayerController {
                 queue: .main
             ) { [weak self] _ in
                 Task { @MainActor [weak self] in self?.refreshTelemetry() }
+            },
+            NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime,
+                object: item,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.finishPlaybackReporting() }
             }
         ]
     }
@@ -549,7 +596,10 @@ public final class StreamPlayerController {
         case .bufferFinished:
             phase = playbackRequested ? .playing : .paused
             if playbackRequested { recordStartupIfNeeded() }
-        case .paused, .playedToTheEnd:
+        case .paused:
+            phase = .paused
+        case .playedToTheEnd:
+            finishPlaybackReporting()
             phase = .paused
         case .error:
             handleKSFailure()
@@ -568,7 +618,9 @@ public final class StreamPlayerController {
         if currentTime.isFinite, currentTime >= 0 {
             lastKSPlaybackSeconds = currentTime
         }
-        _ = totalTime
+        if totalTime.isFinite, totalTime > 0 {
+            lastKSDurationSeconds = totalTime
+        }
         guard layer === ksLayer else { return }
         refreshKSTelemetry(layer)
     }
@@ -578,6 +630,7 @@ public final class StreamPlayerController {
         if error != nil {
             handleKSFailure()
         } else {
+            finishPlaybackReporting()
             phase = .paused
         }
     }
@@ -609,6 +662,120 @@ public final class StreamPlayerController {
         }
     }
     #endif
+
+    private func handlePlaybackPhaseChange(from previous: PlaybackPhase) {
+        guard !suppressPlaybackReportingTransitions, reportingSessionID != nil else { return }
+        switch phase {
+        case .playing, .externalPlayback:
+            if !playbackReportingStarted {
+                playbackReportingStarted = true
+                queuePlaybackReport(playbackReport(kind: .started, state: .playing))
+                startPlaybackReportTimer()
+            } else if previous == .paused {
+                queuePlaybackReport(
+                    playbackReport(kind: .progress, state: .playing, event: .unpause)
+                )
+            }
+        case .paused:
+            if playbackReportingStarted, previous != .paused {
+                queuePlaybackReport(
+                    playbackReport(kind: .progress, state: .paused, event: .pause)
+                )
+            }
+        case .buffering:
+            if playbackReportingStarted, previous != .buffering {
+                queuePlaybackReport(
+                    playbackReport(kind: .progress, state: .buffering, event: .timeUpdate)
+                )
+            }
+        case .idle, .failed:
+            finishPlaybackReporting()
+        case .preparing:
+            break
+        }
+    }
+
+    private func startPlaybackReportTimer() {
+        playbackReportTimer?.cancel()
+        playbackReportTimer = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(10))
+                } catch {
+                    return
+                }
+                guard let self, self.playbackReportingStarted, self.phase != .paused else { continue }
+                let state: MediaCenterPlaybackState = self.phase == .buffering ? .buffering : .playing
+                self.queuePlaybackReport(
+                    self.playbackReport(kind: .progress, state: state, event: .timeUpdate)
+                )
+            }
+        }
+    }
+
+    private func finishPlaybackReporting() {
+        playbackReportTimer?.cancel()
+        playbackReportTimer = nil
+        guard playbackReportingStarted else { return }
+        queuePlaybackReport(playbackReport(kind: .stopped, state: .playing))
+        playbackReportingStarted = false
+    }
+
+    private func playbackReport(
+        kind: MediaCenterPlaybackReportKind,
+        state: MediaCenterPlaybackState,
+        event: MediaCenterPlaybackEvent? = nil
+    ) -> MediaCenterPlaybackReport {
+        MediaCenterPlaybackReport(
+            kind: kind,
+            state: state,
+            positionMS: milliseconds(playbackPositionSeconds),
+            durationMS: playbackDurationSeconds.flatMap { seconds in
+                let value = milliseconds(seconds)
+                return value > 0 ? value : nil
+            },
+            event: event,
+            canSeek: activeEngine == .ksPlayer || player.currentItem?.seekableTimeRanges.isEmpty == false,
+            isMuted: player.isMuted,
+            volumePercent: Int((player.volume * 100).rounded()).clamped(to: 0...100)
+        )
+    }
+
+    private var playbackPositionSeconds: TimeInterval {
+        #if canImport(KSPlayer)
+        if activeEngine == .ksPlayer { return max(0, lastKSPlaybackSeconds) }
+        #endif
+        let seconds = player.currentTime().seconds
+        return seconds.isFinite ? max(0, seconds) : 0
+    }
+
+    private var playbackDurationSeconds: TimeInterval? {
+        #if canImport(KSPlayer)
+        if activeEngine == .ksPlayer, lastKSDurationSeconds.isFinite, lastKSDurationSeconds > 0 {
+            return lastKSDurationSeconds
+        }
+        #endif
+        let seconds = player.currentItem?.duration.seconds ?? .nan
+        if seconds.isFinite, seconds > 0 { return seconds }
+        if let durationMS = channel?.media?.durationMs, durationMS > 0 {
+            return TimeInterval(durationMS) / 1_000
+        }
+        return nil
+    }
+
+    private func queuePlaybackReport(_ report: MediaCenterPlaybackReport) {
+        guard let reportingSessionID, let playbackReportHandler else { return }
+        let previous = playbackReportDelivery
+        playbackReportDelivery = Task {
+            await previous?.value
+            await playbackReportHandler(reportingSessionID, report)
+        }
+    }
+
+    private func milliseconds(_ seconds: TimeInterval) -> Int {
+        guard seconds.isFinite, seconds > 0 else { return 0 }
+        return Int(min(seconds * 1_000, TimeInterval(Int.max / 10_000)))
+    }
 
     private func seekNativePlayerToResumePosition() {
         guard resumePositionSeconds.isFinite, resumePositionSeconds > 0 else { return }
@@ -652,6 +819,12 @@ public final class StreamPlayerController {
 private extension String {
     func caseInsensitiveEquals(_ other: String) -> Bool {
         compare(other, options: .caseInsensitive) == .orderedSame
+    }
+}
+
+private extension Comparable {
+    func clamped(to range: ClosedRange<Self>) -> Self {
+        min(range.upperBound, max(range.lowerBound, self))
     }
 }
 #endif
