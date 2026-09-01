@@ -150,8 +150,7 @@ public enum MediaCenterURLPolicy {
         } else {
             let basePath = normalizedBase.path
             if path.hasPrefix("/"),
-               !basePath.isEmpty,
-               (path == basePath || path.hasPrefix("\(basePath)/")) {
+               basePath.isEmpty || path == basePath || path.hasPrefix("\(basePath)/") {
                 var components = URLComponents()
                 components.scheme = normalizedBase.scheme
                 components.host = normalizedBase.host
