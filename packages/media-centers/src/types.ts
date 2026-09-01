@@ -77,6 +77,8 @@ export interface MediaCenterItem {
   durationMs?: number;
   resumePositionMs?: number;
   played: boolean;
+  addedAt?: string;
+  lastPlayedAt?: string;
   artworkPath?: string;
   mediaSources: MediaCenterMediaSource[];
 }

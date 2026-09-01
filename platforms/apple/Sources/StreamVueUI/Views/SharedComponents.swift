@@ -97,6 +97,18 @@ struct ChannelRow: View {
                         }
                         .font(.caption)
                         .foregroundStyle(theme.muted)
+                        if let metadata = channel.mediaMetadataLine {
+                            Text(metadata)
+                                .font(.caption2)
+                                .foregroundStyle(theme.muted)
+                                .lineLimit(1)
+                        }
+                        if let progress = channel.watchProgress {
+                            ProgressView(value: progress)
+                                .tint(theme.accent)
+                                .accessibilityLabel("Watch progress")
+                                .accessibilityValue(channel.watchProgressLabel ?? "")
+                        }
                     }
                     Spacer(minLength: 8)
                     Image(systemName: "play.fill")
@@ -109,7 +121,7 @@ struct ChannelRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(channel.name)
-            .accessibilityValue("\(channel.group), \(channel.kind.label)\(isSelected ? ", selected" : "")")
+            .accessibilityValue("\(channel.group), \(channel.kind.label)\(channel.watchProgressLabel.map { ", \($0)" } ?? "")\(isSelected ? ", selected" : "")")
             .accessibilityHint("Starts playback")
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             Button(action: onFavorite) {

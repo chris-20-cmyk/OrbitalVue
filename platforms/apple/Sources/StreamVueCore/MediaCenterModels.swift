@@ -236,6 +236,8 @@ public struct MediaCenterItem: Codable, Equatable, Sendable, Identifiable {
     public let durationMS: Int?
     public let resumePositionMS: Int?
     public let played: Bool
+    public let addedAt: String?
+    public let lastPlayedAt: String?
     /// Sanitized provider-relative path. Never contains an access token.
     public let artworkPath: String?
     public let mediaSources: [MediaCenterMediaSource]
@@ -256,6 +258,8 @@ public struct MediaCenterItem: Codable, Equatable, Sendable, Identifiable {
         durationMS: Int? = nil,
         resumePositionMS: Int? = nil,
         played: Bool,
+        addedAt: String? = nil,
+        lastPlayedAt: String? = nil,
         artworkPath: String? = nil,
         mediaSources: [MediaCenterMediaSource]
     ) {
@@ -274,6 +278,8 @@ public struct MediaCenterItem: Codable, Equatable, Sendable, Identifiable {
         self.durationMS = durationMS
         self.resumePositionMS = resumePositionMS
         self.played = played
+        self.addedAt = addedAt
+        self.lastPlayedAt = lastPlayedAt
         self.artworkPath = artworkPath
         self.mediaSources = mediaSources
     }
@@ -294,6 +300,8 @@ public struct MediaCenterItem: Codable, Equatable, Sendable, Identifiable {
         case durationMS = "durationMs"
         case resumePositionMS = "resumePositionMs"
         case played
+        case addedAt
+        case lastPlayedAt
         case artworkPath
         case mediaSources
     }

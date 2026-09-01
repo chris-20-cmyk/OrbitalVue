@@ -263,6 +263,10 @@ class MediaCenterRepository internal constructor(
                 "The saved media-center item does not belong to this source."
             }
             MediaCenterUrlPolicy.requireIdentifier(item.id, "item")
+            require(item.durationMs == null || item.durationMs >= 0)
+            require(item.resumePositionMs == null || item.resumePositionMs >= 0)
+            require(item.addedAt == null || runCatching { Instant.parse(item.addedAt) }.isSuccess)
+            require(item.lastPlayedAt == null || runCatching { Instant.parse(item.lastPlayedAt) }.isSuccess)
             item.mediaSources.forEach { source ->
                 MediaCenterUrlPolicy.requireIdentifier(source.id, "media source")
                 require(source.playbackPath == null ||
@@ -301,7 +305,19 @@ class MediaCenterRepository internal constructor(
                     MediaCenterItemKind.Audio -> ChannelKind.Replay
                 },
                 sourceId = sourceId,
-                sourceName = connection.displayName
+                sourceName = connection.displayName,
+                isMediaCenterItem = true,
+                libraryId = item.libraryId,
+                libraryTitle = item.libraryTitle,
+                seriesTitle = item.seriesTitle,
+                seasonNumber = item.seasonNumber,
+                episodeNumber = item.episodeNumber,
+                year = item.year,
+                durationMs = item.durationMs,
+                resumePositionMs = item.resumePositionMs,
+                played = item.played,
+                addedAt = item.addedAt,
+                lastPlayedAt = item.lastPlayedAt
             )
         }
         val truncationNotice = if (snapshot.truncated) {

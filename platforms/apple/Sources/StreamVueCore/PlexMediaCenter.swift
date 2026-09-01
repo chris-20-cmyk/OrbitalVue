@@ -258,6 +258,8 @@ struct PlexMediaCenterClient: Sendable {
             durationMS: nonnegative(raw.integer("duration")),
             resumePositionMS: nonnegative(raw.integer("viewOffset")),
             played: (raw.integer("viewCount") ?? 0) > 0,
+            addedAt: isoDate(epochSeconds: raw.integer("addedAt")),
+            lastPlayedAt: isoDate(epochSeconds: raw.integer("lastViewedAt")),
             artworkPath: artworkPath,
             mediaSources: mediaSources
         )
@@ -419,6 +421,13 @@ struct PlexMediaCenterClient: Sendable {
 
     private func validYear(_ value: Int?) -> Int? {
         value.flatMap { (1800...3000).contains($0) ? $0 : nil }
+    }
+
+    private func isoDate(epochSeconds: Int?) -> String? {
+        guard let epochSeconds, epochSeconds >= 0 else { return nil }
+        let date = Date(timeIntervalSince1970: TimeInterval(epochSeconds))
+        guard date < Date(timeIntervalSince1970: 32_534_352_000) else { return nil }
+        return ISO8601DateFormatter.streamVueString(from: date)
     }
 }
 

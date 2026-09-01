@@ -123,6 +123,9 @@
         "catchup": {
           "$ref": "#/$defs/catchup"
         },
+        "media": {
+          "$ref": "#/$defs/media"
+        },
         "tags": {
           "type": "array",
           "items": {
@@ -131,6 +134,59 @@
             "maxLength": 128
           },
           "uniqueItems": true
+        }
+      }
+    },
+    "media": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "libraryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "libraryTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "seriesTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "seasonNumber": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "episodeNumber": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "year": {
+          "type": "integer",
+          "minimum": 1888,
+          "maximum": 3000
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "resumePositionMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "played": {
+          "type": "boolean"
+        },
+        "addedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastPlayedAt": {
+          "type": "string",
+          "format": "date-time"
         }
       }
     },

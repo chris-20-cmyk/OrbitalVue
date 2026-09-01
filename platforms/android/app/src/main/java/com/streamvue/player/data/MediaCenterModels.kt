@@ -78,6 +78,8 @@ data class MediaCenterItem(
     @SerializedName("durationMs") val durationMs: Long? = null,
     @SerializedName("resumePositionMs") val resumePositionMs: Long? = null,
     @SerializedName("played") val played: Boolean = false,
+    @SerializedName("addedAt") val addedAt: String? = null,
+    @SerializedName("lastPlayedAt") val lastPlayedAt: String? = null,
     @SerializedName("artworkPath") val artworkPath: String? = null,
     @SerializedName("mediaSources") val mediaSources: List<MediaCenterSource> = emptyList()
 )

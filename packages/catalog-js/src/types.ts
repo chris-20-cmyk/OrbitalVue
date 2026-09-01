@@ -29,6 +29,20 @@ export interface CatchupMetadata {
   correctionMinutes: number;
 }
 
+export interface CatalogMediaMetadata {
+  libraryId?: string;
+  libraryTitle?: string;
+  seriesTitle?: string;
+  seasonNumber?: number;
+  episodeNumber?: number;
+  year?: number;
+  durationMs?: number;
+  resumePositionMs?: number;
+  played?: boolean;
+  addedAt?: string;
+  lastPlayedAt?: string;
+}
+
 export interface CatalogChannel {
   id: string;
   number: number;
@@ -39,6 +53,7 @@ export interface CatalogChannel {
   stream: StreamDescriptor;
   guide?: GuideMetadata;
   catchup?: CatchupMetadata;
+  media?: CatalogMediaMetadata;
   tags?: string[];
 }
 

@@ -1,4 +1,11 @@
-import type { CatalogChannel, StreamVueCatalog } from "@streamvue/catalog";
+import {
+  canResumeMedia,
+  matchesMediaLibraryBrowseMode,
+  orderMediaLibraryChannels,
+  type CatalogChannel,
+  type MediaLibraryBrowseMode,
+  type StreamVueCatalog
+} from "@streamvue/catalog";
 import {
   CatalogRepository,
   isMediaCenterCatalog,
@@ -26,6 +33,18 @@ type SourceMode = "playlist" | "plex" | "emby";
 const FAVORITES_KEY = "streamvue-tv-favorites-v1";
 const ALL_GROUPS = "All Channels";
 const FAVORITES_GROUP = "Favorites";
+const CONTINUE_WATCHING_GROUP = "orbitalvue:continue-watching";
+const RECENTLY_ADDED_GROUP = "orbitalvue:recently-added";
+const LIVE_MEDIA_GROUP = "orbitalvue:live";
+const MOVIES_GROUP = "orbitalvue:movies";
+const SERIES_GROUP = "orbitalvue:series";
+const MEDIA_BROWSE_GROUPS = [
+  CONTINUE_WATCHING_GROUP,
+  RECENTLY_ADDED_GROUP,
+  LIVE_MEDIA_GROUP,
+  MOVIES_GROUP,
+  SERIES_GROUP
+] as const;
 const GROUP_WINDOW_SIZE = 8;
 
 export class StreamVueTvApp {
@@ -175,7 +194,7 @@ export class StreamVueTvApp {
           ${groupWindow.items.map((group) => groupButton(group, group === this.selectedGroup, this.groupCount(group), mediaCenter)).join("")}
         </nav>
         <section class="channel-pane" aria-label="${escapeAttribute(this.selectedGroup)}">
-          <div class="pane-heading"><h2>${escapeHtml(mediaCenter && this.selectedGroup === ALL_GROUPS ? "All Media" : this.selectedGroup)}</h2><span>${channels.length.toLocaleString()}</span></div>
+          <div class="pane-heading"><h2>${escapeHtml(groupLabel(this.selectedGroup, mediaCenter))}</h2><span>${channels.length.toLocaleString()}</span></div>
           <div class="channel-list">
             ${channelWindow.items.length > 0
               ? this.channelRows(channelWindow.items, channelWindow.start, selected?.id ?? null)
@@ -214,16 +233,20 @@ export class StreamVueTvApp {
     const preview = mediaCenter
       ? `<div class="media-preview-placeholder"><span>${escapeHtml(channelInitials(channel.name))}</span><small>${escapeHtml(mediaKindLabel(channel))}</small></div>`
       : `<img src="./assets/broadcast-preview.png" alt="" /><span class="preview-live"><i></i> LIVE</span>`;
+    const metadata = mediaMetadataLine(channel);
+    const progress = watchProgressPercent(channel);
     return `<div class="preview-frame">
         ${preview}
       </div>
       <div class="channel-detail-copy">
         <h2>${escapeHtml(channel.name.toUpperCase())}</h2>
         <p class="detail-group">${escapeHtml(channel.group)}</p>
+        ${metadata ? `<p class="detail-metadata">${escapeHtml(metadata)}</p>` : ""}
+        ${progress === null ? "" : `<div class="resume-progress" role="progressbar" aria-label="Watch progress" aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100"><span style="width:${progress}%"></span></div><p class="resume-label">${progress}% watched</p>`}
         <p class="now-line"><i></i><span>${mediaCenter ? "Type:" : "Now:"}</span> ${escapeHtml(demoProgram)}</p>
       </div>
       <div class="detail-actions">
-        <button class="button button-watch" data-action="watch" data-focusable="true">${icon("play")}<span>${mediaCenter ? "Play" : "Watch now"}</span></button>
+        <button class="button button-watch" data-action="watch" data-focusable="true">${icon("play")}<span>${mediaCenter ? canResumeMedia(channel) ? "Resume" : "Play" : "Watch now"}</span></button>
         <button class="button button-favorite${isFavorite ? " is-active" : ""}" data-action="favorite" data-focusable="true">${icon("favorite")}<span>${isFavorite ? "Favorited" : "Favorite"}</span></button>
       </div>`;
   }
@@ -912,12 +935,16 @@ export class StreamVueTvApp {
 
   private groups(): string[] {
     const groups = [...new Set(this.requireCatalog().channels.map((channel) => channel.group))];
-    return [ALL_GROUPS, FAVORITES_GROUP, ...groups];
+    return isMediaCenterCatalog(this.requireCatalog())
+      ? [ALL_GROUPS, FAVORITES_GROUP, ...MEDIA_BROWSE_GROUPS, ...groups]
+      : [ALL_GROUPS, FAVORITES_GROUP, ...groups];
   }
 
   private groupCount(group: string): number {
     if (group === ALL_GROUPS) return this.requireCatalog().channels.length;
     if (group === FAVORITES_GROUP) return this.requireCatalog().channels.filter((channel) => this.favorites.has(channel.id)).length;
+    const mode = mediaBrowseModeForGroup(group);
+    if (mode) return this.requireCatalog().channels.filter((channel) => matchesMediaLibraryBrowseMode(channel, mode)).length;
     return this.requireCatalog().channels.filter((channel) => channel.group === group).length;
   }
 
@@ -925,6 +952,13 @@ export class StreamVueTvApp {
     const channels = this.requireCatalog().channels;
     if (this.selectedGroup === ALL_GROUPS) return channels;
     if (this.selectedGroup === FAVORITES_GROUP) return channels.filter((channel) => this.favorites.has(channel.id));
+    const mode = mediaBrowseModeForGroup(this.selectedGroup);
+    if (mode) {
+      return orderMediaLibraryChannels(
+        channels.filter((channel) => matchesMediaLibraryBrowseMode(channel, mode)),
+        mode
+      );
+    }
     return channels.filter((channel) => channel.group === this.selectedGroup);
   }
 
@@ -959,11 +993,15 @@ export class StreamVueTvApp {
 function groupButton(group: string, active: boolean, count: number, mediaCenter: boolean): string {
   const iconName: IconName = group === ALL_GROUPS ? "grid"
     : group === FAVORITES_GROUP ? "favorite"
+      : group === CONTINUE_WATCHING_GROUP ? "play"
+        : group === RECENTLY_ADDED_GROUP ? "news"
+          : group === LIVE_MEDIA_GROUP ? "sports"
+            : group === MOVIES_GROUP || group === SERIES_GROUP ? "film"
       : /movie|cinema/i.test(group) ? "film"
         : /news/i.test(group) ? "news"
           : /sport/i.test(group) ? "sports"
             : "folder";
-  const label = mediaCenter && group === ALL_GROUPS ? "All Media" : group;
+  const label = groupLabel(group, mediaCenter);
   return `<button class="group-button${active ? " is-active" : ""}" data-action="select-group" data-group="${escapeAttribute(group)}" data-focusable="true" aria-pressed="${active}">${icon(iconName)}<span>${escapeHtml(label)}</span><small>${count.toLocaleString()}</small></button>`;
 }
 
@@ -988,12 +1026,58 @@ function mediaKindLabel(channel: CatalogChannel): string {
 function channelButton(channel: CatalogChannel, selected: boolean, favorite: boolean): string {
   const initials = channelInitials(channel.name);
   const logo = safeImageUrl(channel.guide?.logoUri);
+  const metadata = mediaMetadataLine(channel);
+  const progress = watchProgressPercent(channel);
   return `<button class="channel-row${selected ? " is-selected" : ""}" data-action="select-channel" data-channel-id="${escapeAttribute(channel.id)}" data-focusable="true"${selected ? " data-autofocus='true'" : ""} aria-current="${selected}">
     <span class="channel-mark" data-tone="${channel.number % 5}">${logo ? `<img src="${escapeAttribute(logo)}" alt="" onerror="this.hidden=true" />` : ""}<b>${escapeHtml(initials)}</b></span>
-    <span class="channel-name">${escapeHtml(channel.name)}</span>
+    <span class="channel-copy"><span class="channel-name">${escapeHtml(channel.name)}</span>${metadata ? `<small>${escapeHtml(metadata)}</small>` : ""}${progress === null ? "" : `<span class="channel-progress" aria-hidden="true"><i style="width:${progress}%"></i></span>`}</span>
     ${favorite ? `<span class="favorite-mark">${icon("favorite")}</span>` : ""}
     <span class="live-mark"><i></i>${channel.kind === "live" ? "LIVE" : channel.kind.toUpperCase()}</span>
   </button>`;
+}
+
+function mediaBrowseModeForGroup(group: string): MediaLibraryBrowseMode | null {
+  switch (group) {
+  case CONTINUE_WATCHING_GROUP: return "continue-watching";
+  case RECENTLY_ADDED_GROUP: return "recently-added";
+  case LIVE_MEDIA_GROUP: return "live";
+  case MOVIES_GROUP: return "movies";
+  case SERIES_GROUP: return "series";
+  default: return null;
+  }
+}
+
+function groupLabel(group: string, mediaCenter: boolean): string {
+  switch (group) {
+  case ALL_GROUPS: return mediaCenter ? "All Media" : ALL_GROUPS;
+  case CONTINUE_WATCHING_GROUP: return "Continue Watching";
+  case RECENTLY_ADDED_GROUP: return "Recently Added";
+  case LIVE_MEDIA_GROUP: return "Live TV";
+  case MOVIES_GROUP: return "Movies";
+  case SERIES_GROUP: return "Series";
+  default: return group;
+  }
+}
+
+function mediaMetadataLine(channel: CatalogChannel): string | null {
+  const metadata = channel.media;
+  if (!metadata) return null;
+  const values: string[] = [];
+  if (metadata.seriesTitle) values.push(metadata.seriesTitle);
+  if (metadata.seasonNumber !== undefined && metadata.episodeNumber !== undefined) {
+    values.push(`S${String(metadata.seasonNumber).padStart(2, "0")}E${String(metadata.episodeNumber).padStart(2, "0")}`);
+  }
+  if (metadata.year !== undefined) values.push(String(metadata.year));
+  if (values.length === 0 && metadata.libraryTitle) values.push(metadata.libraryTitle);
+  return values.length === 0 ? null : values.join(" • ");
+}
+
+function watchProgressPercent(channel: CatalogChannel): number | null {
+  if (!canResumeMedia(channel)) return null;
+  const duration = channel.media?.durationMs ?? 0;
+  const position = channel.media?.resumePositionMs ?? 0;
+  if (duration <= 0) return null;
+  return clamp(Math.round((position / duration) * 100), 0, 100);
 }
 
 function brandMark(): string {

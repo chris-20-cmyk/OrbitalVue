@@ -5,6 +5,7 @@ import SwiftUI
 private enum BrowseDestination: Hashable {
     case all
     case favorites
+    case media(MediaLibraryBrowseMode)
     case group(String)
 }
 
@@ -65,7 +66,12 @@ struct MobileRootView: View {
         .onChange(of: browseDestination) { _, destination in
             switch destination {
             case .group(let group): store.selectGroup(group)
-            case .all, .favorites, .none: store.selectGroup(nil)
+            case .media(let mode):
+                store.selectGroup(nil)
+                store.selectBrowseMode(mode)
+            case .all, .favorites, .none:
+                store.selectGroup(nil)
+                store.selectBrowseMode(.all)
             }
         }
     }
@@ -92,6 +98,20 @@ struct MobileRootView: View {
                         .tag(BrowseDestination.all)
                     Label("Favorites", systemImage: "star")
                         .tag(BrowseDestination.favorites)
+                }
+                if store.isMediaCenterSource {
+                    Section("Browse") {
+                        ForEach(MediaLibraryBrowseMode.allCases.filter { $0 != .all }) { mode in
+                            HStack {
+                                Label(mode.sectionTitle, systemImage: mode.systemImage)
+                                Spacer()
+                                Text(store.browseSummary.count(for: mode).formatted())
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(theme.muted)
+                            }
+                            .tag(BrowseDestination.media(mode))
+                        }
+                    }
                 }
                 Section(store.isMediaCenterSource ? "Libraries" : "Playlist groups") {
                     ForEach(store.groups) { group in
@@ -150,6 +170,7 @@ struct MobileRootView: View {
     private var browseTitle: String {
         switch browseDestination {
         case .favorites: "Favorites"
+        case .media(let mode): mode.sectionTitle
         case .group(let group): group
         case .all, .none: store.isMediaCenterSource ? "All media" : "All channels"
         }

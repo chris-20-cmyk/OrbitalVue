@@ -9,6 +9,9 @@ import com.streamvue.player.data.Catalog
 import com.streamvue.player.data.Channel
 import com.streamvue.player.data.LoadedCatalog
 import com.streamvue.player.data.MediaCenterRepository
+import com.streamvue.player.data.MediaLibraryBrowseMode
+import com.streamvue.player.data.MediaLibraryBrowsePolicy
+import com.streamvue.player.data.MediaLibraryBrowseSummary
 import com.streamvue.player.data.PlaylistRepository
 import com.streamvue.player.data.PlexPinChallenge
 import com.streamvue.player.data.PlexServerDiscovery
@@ -45,6 +48,8 @@ data class AppUiState(
     val catalog: Catalog? = null,
     val groups: List<GroupSummary> = emptyList(),
     val selectedGroup: String? = null,
+    val browseMode: MediaLibraryBrowseMode = MediaLibraryBrowseMode.All,
+    val browseSummary: MediaLibraryBrowseSummary = MediaLibraryBrowseSummary(),
     val query: String = "",
     val visibleChannels: List<Channel> = emptyList(),
     val sections: List<ChannelSection> = emptyList(),
@@ -236,7 +241,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectGroup(group: String?) {
         mutableState.update { current ->
-            val browse = buildBrowse(current.catalog, group, current.query)
+            val browse = buildBrowse(current.catalog, group, current.query, current.browseMode)
             current.copy(
                 selectedGroup = group,
                 visibleChannels = browse.channels,
@@ -247,9 +252,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateQuery(value: String) {
         mutableState.update { current ->
-            val browse = buildBrowse(current.catalog, current.selectedGroup, value)
+            val browse = buildBrowse(current.catalog, current.selectedGroup, value, current.browseMode)
             current.copy(
                 query = value,
+                visibleChannels = browse.channels,
+                sections = browse.sections
+            )
+        }
+    }
+
+    fun selectBrowseMode(mode: MediaLibraryBrowseMode) {
+        mutableState.update { current ->
+            val effectiveMode = if (current.isMediaCenterSource) mode else MediaLibraryBrowseMode.All
+            val browse = buildBrowse(current.catalog, current.selectedGroup, current.query, effectiveMode)
+            current.copy(
+                browseMode = effectiveMode,
                 visibleChannels = browse.channels,
                 sections = browse.sections
             )
@@ -318,6 +335,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     catalog = null,
                     groups = emptyList(),
                     selectedGroup = null,
+                    browseMode = MediaLibraryBrowseMode.All,
+                    browseSummary = MediaLibraryBrowseSummary(),
                     visibleChannels = emptyList(),
                     sections = emptyList(),
                     selectedChannel = null,
@@ -385,7 +404,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val selectedChannel = current.selectedChannel?.id?.let { selectedId ->
             catalog.channels.firstOrNull { it.id == selectedId }
         }
-        val browse = buildBrowse(catalog, selectedGroup, current.query)
+        val browseMode = if (catalog.source.type.isMediaCenter) {
+            current.browseMode
+        } else {
+            MediaLibraryBrowseMode.All
+        }
+        val browseSummary = MediaLibraryBrowsePolicy.summarize(catalog.channels)
+        val browse = buildBrowse(catalog, selectedGroup, current.query, browseMode)
 
         mutableState.value = current.copy(
             isLoading = false,
@@ -393,6 +418,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             catalog = catalog,
             groups = groups,
             selectedGroup = selectedGroup,
+            browseMode = browseMode,
+            browseSummary = browseSummary,
             visibleChannels = browse.channels,
             sections = browse.sections,
             selectedChannel = selectedChannel,
@@ -473,12 +500,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun buildBrowse(catalog: Catalog?, group: String?, query: String): BrowseResult {
+    private fun buildBrowse(
+        catalog: Catalog?,
+        group: String?,
+        query: String,
+        mode: MediaLibraryBrowseMode
+    ): BrowseResult {
         if (catalog == null) return BrowseResult(emptyList(), emptyList())
         val search = query.trim().uppercase(Locale.ROOT)
-        val channels = catalog.channels.filter { channel ->
+        val matching = catalog.channels.filter { channel ->
             (group == null || channel.group == group) &&
-                (search.isEmpty() || search in channel.searchText)
+                (search.isEmpty() || search in channel.searchText) &&
+                MediaLibraryBrowsePolicy.matches(channel, mode)
+        }
+        val channels = MediaLibraryBrowsePolicy.order(matching, mode)
+        if (mode.isEditorial) {
+            return BrowseResult(
+                channels = channels,
+                sections = if (channels.isEmpty()) emptyList()
+                else listOf(ChannelSection(mode.sectionTitle, channels))
+            )
         }
         val sectionMap = LinkedHashMap<String, MutableList<Channel>>()
         channels.forEach { channel -> sectionMap.getOrPut(channel.group) { ArrayList() }.add(channel) }

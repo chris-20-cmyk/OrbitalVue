@@ -226,7 +226,7 @@ struct MediaCenterTests {
             case "/library/sections":
                 return jsonResponse(#"{"MediaContainer":{"Directory":[{"key":"1","title":"Movies","type":"movie","totalSize":1}]}}"#)
             case "/library/sections/1/all":
-                return jsonResponse(#"{"MediaContainer":{"offset":0,"totalSize":1,"Metadata":[{"ratingKey":"movie-1","title":"Repository Movie","type":"movie","Media":[{"id":"media-1","Part":[{"id":"part-1","key":"/library/parts/1/movie.mkv"}]}]}]}}"#)
+                return jsonResponse(#"{"MediaContainer":{"offset":0,"totalSize":1,"Metadata":[{"ratingKey":"movie-1","title":"Repository Movie","type":"movie","year":2026,"duration":7200000,"viewOffset":900000,"addedAt":1777593600,"lastViewedAt":1778457600,"Media":[{"id":"media-1","Part":[{"id":"part-1","key":"/library/parts/1/movie.mkv"}]}]}]}}"#)
             default:
                 return MediaCenterHTTPResponse(statusCode: 404, body: Data())
             }
@@ -246,6 +246,10 @@ struct MediaCenterTests {
             token: token
         )
         let channel = try #require(connected.catalog.channels.first)
+        #expect(channel.media?.year == 2026)
+        #expect(channel.media?.addedAt == "2026-05-01T00:00:00.000Z")
+        #expect(channel.media?.lastPlayedAt == "2026-05-11T00:00:00.000Z")
+        #expect(channel.canResume)
         let plan = try await repository.playbackPlan(for: channel.stream.uri)
         #expect(plan.requestHeaders["X-Plex-Token"] == token)
 
@@ -386,7 +390,7 @@ struct MediaCenterTests {
             case "/emby/Users/user-1/Views":
                 jsonResponse(#"{"Items":[{"Id":"library-1","Name":"Movies","CollectionType":"movies","ChildCount":1}]}"#)
             case "/emby/Users/user-1/Items":
-                jsonResponse(#"{"TotalRecordCount":1,"Items":[{"Id":"item-1","Name":"A Test Movie","Type":"Movie","RunTimeTicks":72000000000,"UserData":{"PlaybackPositionTicks":120000000,"Played":false},"ImageTags":{"Primary":"image-tag"},"MediaSources":[{"Id":"source-1","Container":"mkv","SupportsDirectPlay":true,"SupportsDirectStream":true,"SupportsTranscoding":true,"DirectStreamUrl":"/Videos/item-1/stream.mkv?api_key=upstream-secret","MediaStreams":[{"Index":0,"Type":"Video","Codec":"hevc","Width":3840,"Height":2160},{"Index":1,"Type":"Audio","Codec":"eac3","Language":"eng","Channels":6}]}]}]}"#)
+                jsonResponse(#"{"TotalRecordCount":1,"Items":[{"Id":"item-1","Name":"A Test Movie","Type":"Movie","ProductionYear":2026,"DateCreated":"2026-05-01T00:00:00Z","RunTimeTicks":72000000000,"UserData":{"PlaybackPositionTicks":120000000,"Played":false,"LastPlayedDate":"2026-05-11T00:00:00Z"},"ImageTags":{"Primary":"image-tag"},"MediaSources":[{"Id":"source-1","Container":"mkv","SupportsDirectPlay":true,"SupportsDirectStream":true,"SupportsTranscoding":true,"DirectStreamUrl":"/Videos/item-1/stream.mkv?api_key=upstream-secret","MediaStreams":[{"Index":0,"Type":"Video","Codec":"hevc","Width":3840,"Height":2160},{"Index":1,"Type":"Audio","Codec":"eac3","Language":"eng","Channels":6}]}]}]}"#)
             case "/emby/Items/item-1/PlaybackInfo":
                 jsonResponse(#"{"PlaySessionId":"session-1","MediaSources":[{"Id":"source-1","SupportsDirectPlay":true,"SupportsDirectStream":true,"SupportsTranscoding":true,"DirectStreamUrl":"/Videos/item-1/stream.mkv?api_key=upstream-secret","RequiredHttpHeaders":{"X-Test":"allowed","X-Emby-Token":"attacker-value"}}]}"#)
             default:
@@ -417,6 +421,9 @@ struct MediaCenterTests {
         #expect(connection.serverID == "emby-server-1")
         #expect(connection.userID == "user-1")
         #expect(snapshot.libraries.map(\.title) == ["Movies"])
+        #expect(item.addedAt == "2026-05-01T00:00:00.000Z")
+        #expect(item.lastPlayedAt == "2026-05-11T00:00:00.000Z")
+        #expect(catalog.channels.first?.media?.year == 2026)
         #expect(playback.requestHeaders["X-Emby-Token"] == token)
         #expect(playback.requestHeaders["X-Test"] == "allowed")
         #expect(playback.requestHeaders["X-Emby-Token"] != "attacker-value")

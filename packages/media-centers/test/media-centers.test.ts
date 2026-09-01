@@ -377,7 +377,11 @@ describe("Plex integration", () => {
               ratingKey: "100",
               title: "A Test Movie",
               type: "movie",
+              year: 2026,
               duration: 7_200_000,
+              viewOffset: 600_000,
+              addedAt: 1_777_593_600,
+              lastViewedAt: 1_778_457_600,
               thumb: `/library/metadata/100/thumb?x-plex-token=${upstreamToken}`,
               Media: [{
                 id: "media-100",
@@ -429,6 +433,21 @@ describe("Plex integration", () => {
     expect(catalog.sources[0]?.displayLocation).toBe("plex.home:32400");
     expect(catalog.channels[0]?.stream.requestHeaders).toEqual({});
     expect(catalog.channels[0]?.stream.uri).toBe("streamvue-media://plex/plex-server-1/100");
+    expect(item).toMatchObject({
+      year: 2026,
+      resumePositionMs: 600_000,
+      addedAt: "2026-05-01T00:00:00.000Z",
+      lastPlayedAt: "2026-05-11T00:00:00.000Z"
+    });
+    expect(catalog.channels[0]?.media).toMatchObject({
+      libraryId: "1",
+      libraryTitle: "Movies",
+      year: 2026,
+      durationMs: 7_200_000,
+      resumePositionMs: 600_000,
+      addedAt: "2026-05-01T00:00:00.000Z",
+      lastPlayedAt: "2026-05-11T00:00:00.000Z"
+    });
     expect(parseMediaCenterPlaybackUri(catalog.channels[0]!.stream.uri)).toEqual({
       provider: "plex",
       serverId: "plex-server-1",
@@ -510,8 +529,14 @@ describe("Emby integration", () => {
             Id: "item-1",
             Name: "Another Test Movie",
             Type: "Movie",
+            ProductionYear: 2025,
+            DateCreated: "2026-08-20T12:00:00Z",
             RunTimeTicks: 36_000_000_000,
-            UserData: { PlaybackPositionTicks: 12_000_000, Played: false },
+            UserData: {
+              PlaybackPositionTicks: 12_000_000,
+              Played: false,
+              LastPlayedDate: "2026-08-30T12:00:00Z"
+            },
             ImageTags: { Primary: "image-tag-1" },
             MediaSources: [{
               Id: "source-1",
@@ -602,6 +627,18 @@ describe("Emby integration", () => {
     expect(catalog.sources[0]?.displayLocation).toBe("emby.home");
     expect(catalog.channels[0]?.stream.requestHeaders).toEqual({});
     expect(catalog.channels[0]?.stream.uri).toBe("streamvue-media://emby/emby-server-1/item-1");
+    expect(item).toMatchObject({
+      year: 2025,
+      addedAt: "2026-08-20T12:00:00.000Z",
+      lastPlayedAt: "2026-08-30T12:00:00.000Z"
+    });
+    expect(catalog.channels[0]?.media).toMatchObject({
+      libraryId: "lib-1",
+      libraryTitle: "Movies",
+      year: 2025,
+      addedAt: "2026-08-20T12:00:00.000Z",
+      lastPlayedAt: "2026-08-30T12:00:00.000Z"
+    });
     expect(serializedCatalog).not.toContain(password);
     expect(serializedCatalog).not.toContain(embyToken);
     expect(serializedCatalog).not.toContain(upstreamToken);

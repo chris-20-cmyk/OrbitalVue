@@ -239,6 +239,8 @@ export class PlexClient {
     const year = asNumber(metadata.year);
     const durationMs = asNumber(metadata.duration);
     const resumePositionMs = asNumber(metadata.viewOffset);
+    const addedAt = epochSecondsISO(asNumber(metadata.addedAt));
+    const lastPlayedAt = epochSecondsISO(asNumber(metadata.lastViewedAt));
     const rawArtworkPath = asString(metadata.thumb);
     const artworkPath = rawArtworkPath === undefined
       ? undefined
@@ -259,10 +261,20 @@ export class PlexClient {
       ...(durationMs === undefined ? {} : { durationMs }),
       ...(resumePositionMs === undefined ? {} : { resumePositionMs }),
       played: (asNumber(metadata.viewCount) ?? 0) > 0,
+      ...(addedAt === undefined ? {} : { addedAt }),
+      ...(lastPlayedAt === undefined ? {} : { lastPlayedAt }),
       ...(artworkPath === undefined ? {} : { artworkPath }),
       mediaSources
     };
   }
+}
+
+function epochSecondsISO(value: number | undefined): string | undefined {
+  if (value === undefined || !Number.isFinite(value) || value < 0) return undefined;
+  const date = new Date(value * 1_000);
+  return Number.isNaN(date.getTime()) || date.getUTCFullYear() > 3000
+    ? undefined
+    : date.toISOString();
 }
 
 function plexClientHeaders(configuration: {

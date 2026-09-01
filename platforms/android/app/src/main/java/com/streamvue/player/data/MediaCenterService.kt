@@ -410,6 +410,8 @@ internal class MediaCenterService(
             durationMs = raw.number("duration")?.takeIf { it >= 0 },
             resumePositionMs = raw.number("viewOffset")?.takeIf { it >= 0 },
             played = (raw.integer("viewCount") ?: 0) > 0,
+            addedAt = epochSecondsInstant(raw.number("addedAt")),
+            lastPlayedAt = epochSecondsInstant(raw.number("lastViewedAt")),
             artworkPath = artworkPath,
             mediaSources = sources
         )
@@ -490,7 +492,7 @@ internal class MediaCenterService(
                 "ParentId" to library.id,
                 "Recursive" to "true",
                 "IncludeItemTypes" to "Movie,Episode,Video,MusicVideo,Recording,LiveTvChannel,Audio",
-                "Fields" to "MediaSources,MediaStreams,SortName",
+                "Fields" to "MediaSources,MediaStreams,SortName,DateCreated",
                 "EnableImages" to "true",
                 "EnableUserData" to "true",
                 "StartIndex" to start.toString(),
@@ -574,9 +576,19 @@ internal class MediaCenterService(
             durationMs = raw.number("RunTimeTicks")?.takeIf { it >= 0 }?.div(10_000),
             resumePositionMs = userData.number("PlaybackPositionTicks")?.takeIf { it >= 0 }?.div(10_000),
             played = userData.boolean("Played"),
+            addedAt = normalizedInstant(raw.text("DateCreated")),
+            lastPlayedAt = normalizedInstant(userData.text("LastPlayedDate")),
             artworkPath = artworkPath,
             mediaSources = sources
         )
+    }
+
+    private fun epochSecondsInstant(value: Long?): String? = value
+        ?.takeIf { it >= 0 }
+        ?.let { runCatching { Instant.ofEpochSecond(it).takeIf { parsed -> parsed < MAX_MEDIA_DATE }?.toString() }.getOrNull() }
+
+    private fun normalizedInstant(value: String?): String? = value?.let {
+        runCatching { Instant.parse(it).takeIf { parsed -> parsed < MAX_MEDIA_DATE }?.toString() }.getOrNull()
     }
 
     private fun embyPlaybackPlan(
@@ -844,6 +856,7 @@ internal class MediaCenterService(
     )
 
     private companion object {
+        val MAX_MEDIA_DATE: Instant = Instant.parse("3001-01-01T00:00:00Z")
         const val PAGE_SIZE = 200
         const val MAX_TOTAL_ITEMS = 20_000
         const val PLEX_DISCOVERY_LIFETIME_SECONDS = 10 * 60L

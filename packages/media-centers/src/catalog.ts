@@ -183,6 +183,19 @@ function toCatalogChannel(
       uri: mediaCenterPlaybackUri(locator),
       requestHeaders: {}
     },
+    media: {
+      libraryId: item.libraryId,
+      libraryTitle: item.libraryTitle,
+      ...(item.seriesTitle === undefined ? {} : { seriesTitle: item.seriesTitle }),
+      ...(item.seasonNumber === undefined ? {} : { seasonNumber: item.seasonNumber }),
+      ...(item.episodeNumber === undefined ? {} : { episodeNumber: item.episodeNumber }),
+      ...(item.year === undefined ? {} : { year: item.year }),
+      ...(item.durationMs === undefined ? {} : { durationMs: item.durationMs }),
+      ...(item.resumePositionMs === undefined ? {} : { resumePositionMs: item.resumePositionMs }),
+      played: item.played,
+      ...(item.addedAt === undefined ? {} : { addedAt: item.addedAt }),
+      ...(item.lastPlayedAt === undefined ? {} : { lastPlayedAt: item.lastPlayedAt })
+    },
     ...(logoUri === undefined ? {} : { guide: { logoUri } }),
     tags
   };

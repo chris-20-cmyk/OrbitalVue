@@ -172,7 +172,7 @@ struct EmbyMediaCenterClient: Sendable {
                 "ParentId": libraryID,
                 "Recursive": "true",
                 "IncludeItemTypes": "Movie,Episode,Video,MusicVideo,Recording,LiveTvChannel,Audio",
-                "Fields": "MediaSources,MediaStreams,Path,PrimaryImageAspectRatio,SortName,Overview",
+                "Fields": "MediaSources,MediaStreams,Path,PrimaryImageAspectRatio,SortName,Overview,DateCreated",
                 "EnableImages": "true",
                 "EnableUserData": "true",
                 "StartIndex": String(page.start),
@@ -418,6 +418,8 @@ struct EmbyMediaCenterClient: Sendable {
             durationMS: durationTicks.map { $0 / 10_000 },
             resumePositionMS: resumeTicks.map { $0 / 10_000 },
             played: userData.boolean("Played"),
+            addedAt: isoDate(raw.text("DateCreated")),
+            lastPlayedAt: isoDate(userData.text("LastPlayedDate")),
             artworkPath: artworkPath,
             mediaSources: raw.array("MediaSources").enumerated().compactMap { index, value in
                 parseMediaSource(value.objectValue, index: index)
@@ -591,6 +593,13 @@ struct EmbyMediaCenterClient: Sendable {
 
     private func validYear(_ value: Int?) -> Int? {
         value.flatMap { (1800...3000).contains($0) ? $0 : nil }
+    }
+
+    private func isoDate(_ value: String?) -> String? {
+        guard let value,
+              let date = ISO8601DateFormatter.streamVueDate(from: value),
+              date < Date(timeIntervalSince1970: 32_534_352_000) else { return nil }
+        return ISO8601DateFormatter.streamVueString(from: date)
     }
 }
 

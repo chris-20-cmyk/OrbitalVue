@@ -21,6 +21,8 @@ public final class StreamVueStore {
     public private(set) var notice: String?
     public private(set) var errorMessage: String?
     public private(set) var favorites: Set<String>
+    public private(set) var browseMode: MediaLibraryBrowseMode = .all
+    public private(set) var browseSummary = MediaLibraryBrowseSummary(channels: [])
     public var selectedGroup: String?
     public var query = ""
     public var selectedChannel: CatalogChannel?
@@ -173,6 +175,8 @@ public final class StreamVueStore {
             favoriteSections = []
             selectedChannel = nil
             selectedGroup = nil
+            browseMode = .all
+            browseSummary = MediaLibraryBrowseSummary(channels: [])
             query = ""
             notice = "Source removed from this device"
             isLoading = false
@@ -183,6 +187,11 @@ public final class StreamVueStore {
 
     public func selectGroup(_ group: String?) {
         selectedGroup = group
+        rebuildBrowse()
+    }
+
+    public func selectBrowseMode(_ mode: MediaLibraryBrowseMode) {
+        browseMode = mode
         rebuildBrowse()
     }
 
@@ -222,6 +231,8 @@ public final class StreamVueStore {
             favoriteSections = []
             selectedChannel = nil
             selectedGroup = nil
+            browseMode = .all
+            browseSummary = MediaLibraryBrowseSummary(channels: [])
             query = ""
             notice = nil
             errorMessage = "Premium media-center access is no longer verified. Playlist sources remain available."
@@ -267,7 +278,8 @@ public final class StreamVueStore {
                 ),
                 guide: channel.guide,
                 catchup: channel.catchup,
-                tags: channel.tags
+                tags: channel.tags,
+                media: channel.media
             )
         } catch {
             show(error)
@@ -334,6 +346,8 @@ public final class StreamVueStore {
         let selectedID = selectedChannel?.id
         catalog = loaded.catalog
         groups = loaded.catalog.groups
+        browseSummary = MediaLibraryBrowseSummary(channels: loaded.catalog.channels)
+        if !isMediaCenterSource { browseMode = .all }
         if let selectedGroup, !groups.contains(where: { $0.name == selectedGroup }) {
             self.selectedGroup = nil
         }
@@ -358,15 +372,24 @@ public final class StreamVueStore {
             return
         }
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        let matching = catalog.channels.filter { channel in
+        let browsable = isMediaCenterSource
+            ? MediaLibraryBrowsePolicy.ordered(catalog.channels, mode: browseMode)
+            : catalog.channels
+        let matching = browsable.filter { channel in
             (selectedGroup == nil || channel.group == selectedGroup) &&
             (normalizedQuery.isEmpty || channel.searchableText.contains(normalizedQuery))
         }
-        visibleSections = makeSections(matching)
-        favoriteSections = makeSections(matching.filter { favorites.contains($0.id) })
+        visibleSections = makeSections(matching, mode: browseMode)
+        favoriteSections = makeSections(matching.filter { favorites.contains($0.id) }, mode: .all)
     }
 
-    private func makeSections(_ channels: [CatalogChannel]) -> [ChannelSection] {
+    private func makeSections(
+        _ channels: [CatalogChannel],
+        mode: MediaLibraryBrowseMode = .all
+    ) -> [ChannelSection] {
+        if mode == .continueWatching || mode == .recentlyAdded {
+            return channels.isEmpty ? [] : [ChannelSection(name: mode.sectionTitle, channels: channels)]
+        }
         var positions: [String: Int] = [:]
         var values: [(String, [CatalogChannel])] = []
         for channel in channels {

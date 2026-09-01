@@ -99,7 +99,20 @@ public enum MediaCenterCatalogFactory {
                         requestHeaders: [:]
                     ),
                     guide: artwork.map { GuideMetadata(logoUri: $0) },
-                    tags: tags
+                    tags: tags,
+                    media: CatalogMediaMetadata(
+                        libraryId: item.libraryID,
+                        libraryTitle: item.libraryTitle,
+                        seriesTitle: item.seriesTitle,
+                        seasonNumber: item.seasonNumber,
+                        episodeNumber: item.episodeNumber,
+                        year: item.year,
+                        durationMs: item.durationMS,
+                        resumePositionMs: item.resumePositionMS,
+                        played: item.played,
+                        addedAt: item.addedAt,
+                        lastPlayedAt: item.lastPlayedAt
+                    )
                 )
             )
         }

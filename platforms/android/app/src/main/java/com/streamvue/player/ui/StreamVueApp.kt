@@ -91,6 +91,7 @@ import com.streamvue.player.GroupSummary
 import com.streamvue.player.PlexSignInPhase
 import com.streamvue.player.PlexSignInUiState
 import com.streamvue.player.data.Channel
+import com.streamvue.player.data.MediaLibraryBrowseMode
 import com.streamvue.player.playback.PlaybackSignal
 import com.streamvue.player.playback.StreamPlayerSurface
 import com.streamvue.player.playback.VideoScaleMode
@@ -122,6 +123,7 @@ fun StreamVueApp(
     onRestorePremium: () -> Unit,
     onRefresh: () -> Unit,
     onSelectGroup: (String?) -> Unit,
+    onSelectBrowseMode: (MediaLibraryBrowseMode) -> Unit,
     onQueryChanged: (String) -> Unit,
     onSelectChannel: (Channel) -> Unit,
     onDismissNotice: () -> Unit,
@@ -196,6 +198,7 @@ fun StreamVueApp(
                             scaleMode = scaleMode,
                             onScaleModeChanged = { scaleMode = it },
                             onSelectGroup = onSelectGroup,
+                            onSelectBrowseMode = onSelectBrowseMode,
                             onQueryChanged = onQueryChanged,
                             onSelectChannel = onSelectChannel,
                             onFullscreen = { isFullscreen = true }
@@ -207,6 +210,7 @@ fun StreamVueApp(
                             scaleMode = scaleMode,
                             onScaleModeChanged = { scaleMode = it },
                             onSelectGroup = onSelectGroup,
+                            onSelectBrowseMode = onSelectBrowseMode,
                             onQueryChanged = onQueryChanged,
                             onSelectChannel = onSelectChannel,
                             onFullscreen = { isFullscreen = true }
@@ -392,6 +396,7 @@ private fun WideLibrary(
     scaleMode: VideoScaleMode,
     onScaleModeChanged: (VideoScaleMode) -> Unit,
     onSelectGroup: (String?) -> Unit,
+    onSelectBrowseMode: (MediaLibraryBrowseMode) -> Unit,
     onQueryChanged: (String) -> Unit,
     onSelectChannel: (Channel) -> Unit,
     onFullscreen: () -> Unit
@@ -412,6 +417,7 @@ private fun WideLibrary(
         )
         ChannelBrowser(
             state = state,
+            onSelectBrowseMode = onSelectBrowseMode,
             onQueryChanged = onQueryChanged,
             onSelectChannel = onSelectChannel,
             modifier = Modifier.width(360.dp).fillMaxHeight()
@@ -436,6 +442,7 @@ private fun CompactLibrary(
     scaleMode: VideoScaleMode,
     onScaleModeChanged: (VideoScaleMode) -> Unit,
     onSelectGroup: (String?) -> Unit,
+    onSelectBrowseMode: (MediaLibraryBrowseMode) -> Unit,
     onQueryChanged: (String) -> Unit,
     onSelectChannel: (Channel) -> Unit,
     onFullscreen: () -> Unit
@@ -462,6 +469,7 @@ private fun CompactLibrary(
         )
         ChannelBrowser(
             state = state,
+            onSelectBrowseMode = onSelectBrowseMode,
             onQueryChanged = onQueryChanged,
             onSelectChannel = onSelectChannel,
             modifier = Modifier.fillMaxWidth().weight(1f)
@@ -590,6 +598,7 @@ private fun GroupChips(
 @Composable
 private fun ChannelBrowser(
     state: AppUiState,
+    onSelectBrowseMode: (MediaLibraryBrowseMode) -> Unit,
     onQueryChanged: (String) -> Unit,
     onSelectChannel: (Channel) -> Unit,
     modifier: Modifier = Modifier
@@ -602,6 +611,13 @@ private fun ChannelBrowser(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.padding(14.dp)) {
+                if (state.isMediaCenterSource) {
+                    MediaBrowseChips(
+                        state = state,
+                        onSelectBrowseMode = onSelectBrowseMode
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
                 OutlinedTextField(
                     value = state.query,
                     onValueChange = onQueryChanged,
@@ -642,6 +658,38 @@ private fun ChannelBrowser(
                     modifier = Modifier.fillMaxSize()
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun MediaBrowseChips(
+    state: AppUiState,
+    onSelectBrowseMode: (MediaLibraryBrowseMode) -> Unit
+) {
+    val order = listOf(
+        MediaLibraryBrowseMode.All,
+        MediaLibraryBrowseMode.ContinueWatching,
+        MediaLibraryBrowseMode.RecentlyAdded,
+        MediaLibraryBrowseMode.Live,
+        MediaLibraryBrowseMode.Movies,
+        MediaLibraryBrowseMode.Series
+    )
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        items(order, key = MediaLibraryBrowseMode::name) { mode ->
+            val count = when (mode) {
+                MediaLibraryBrowseMode.All -> state.catalog?.channels?.size ?: 0
+                MediaLibraryBrowseMode.ContinueWatching -> state.browseSummary.continueWatchingCount
+                MediaLibraryBrowseMode.RecentlyAdded -> state.browseSummary.recentlyAddedCount
+                MediaLibraryBrowseMode.Live -> state.catalog?.channels?.count { it.kind.label == "LIVE" } ?: 0
+                MediaLibraryBrowseMode.Movies -> state.browseSummary.movieCount
+                MediaLibraryBrowseMode.Series -> state.browseSummary.seriesCount
+            }
+            FilterChip(
+                selected = state.browseMode == mode,
+                onClick = { onSelectBrowseMode(mode) },
+                label = { Text("${mode.label} $count", maxLines = 1) }
+            )
         }
     }
 }
@@ -734,14 +782,32 @@ private fun ChannelRow(channel: Channel, selected: Boolean, onClick: () -> Unit)
                 )
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
-                    channel.group,
+                    channel.mediaMetadataLine ?: channel.group,
                     color = StreamVueMuted,
                     fontSize = 9.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                channel.watchProgress?.let { progress ->
+                    Spacer(modifier = Modifier.height(5.dp))
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth().height(3.dp),
+                        color = StreamVueTeal,
+                        trackColor = StreamVueBorder
+                    )
+                    channel.watchProgressLabel?.let { label ->
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(label, color = StreamVueTeal, fontSize = 8.sp, maxLines = 1)
+                    }
+                }
             }
-            Text(channel.kind.label, color = StreamVueTeal, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+            Text(
+                if (channel.canResume) "RESUME" else channel.kind.label,
+                color = StreamVueTeal,
+                fontSize = 7.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }

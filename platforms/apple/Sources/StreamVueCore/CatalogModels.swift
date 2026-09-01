@@ -83,6 +83,46 @@ public struct CatchupMetadata: Codable, Equatable, Sendable {
     }
 }
 
+public struct CatalogMediaMetadata: Codable, Equatable, Sendable {
+    public let libraryId: String?
+    public let libraryTitle: String?
+    public let seriesTitle: String?
+    public let seasonNumber: Int?
+    public let episodeNumber: Int?
+    public let year: Int?
+    public let durationMs: Int?
+    public let resumePositionMs: Int?
+    public let played: Bool?
+    public let addedAt: String?
+    public let lastPlayedAt: String?
+
+    public init(
+        libraryId: String? = nil,
+        libraryTitle: String? = nil,
+        seriesTitle: String? = nil,
+        seasonNumber: Int? = nil,
+        episodeNumber: Int? = nil,
+        year: Int? = nil,
+        durationMs: Int? = nil,
+        resumePositionMs: Int? = nil,
+        played: Bool? = nil,
+        addedAt: String? = nil,
+        lastPlayedAt: String? = nil
+    ) {
+        self.libraryId = libraryId
+        self.libraryTitle = libraryTitle
+        self.seriesTitle = seriesTitle
+        self.seasonNumber = seasonNumber
+        self.episodeNumber = episodeNumber
+        self.year = year
+        self.durationMs = durationMs
+        self.resumePositionMs = resumePositionMs
+        self.played = played
+        self.addedAt = addedAt
+        self.lastPlayedAt = lastPlayedAt
+    }
+}
+
 public struct CatalogChannel: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let number: Int
@@ -94,6 +134,7 @@ public struct CatalogChannel: Codable, Equatable, Sendable, Identifiable {
     public let guide: GuideMetadata?
     public let catchup: CatchupMetadata?
     public let tags: [String]?
+    public let media: CatalogMediaMetadata?
 
     public init(
         id: String,
@@ -105,7 +146,8 @@ public struct CatalogChannel: Codable, Equatable, Sendable, Identifiable {
         stream: StreamDescriptor,
         guide: GuideMetadata? = nil,
         catchup: CatchupMetadata? = nil,
-        tags: [String]? = nil
+        tags: [String]? = nil,
+        media: CatalogMediaMetadata? = nil
     ) {
         self.id = id
         self.number = number
@@ -117,6 +159,7 @@ public struct CatalogChannel: Codable, Equatable, Sendable, Identifiable {
         self.guide = guide
         self.catchup = catchup
         self.tags = tags
+        self.media = media
     }
 
     public var initials: String {
@@ -127,7 +170,14 @@ public struct CatalogChannel: Codable, Equatable, Sendable, Identifiable {
     }
 
     public var searchableText: String {
-        [name, group, guide?.tvgName ?? ""].joined(separator: "\n").uppercased()
+        [
+            name,
+            group,
+            guide?.tvgName ?? "",
+            media?.libraryTitle ?? "",
+            media?.seriesTitle ?? "",
+            media?.year.map(String.init) ?? ""
+        ].joined(separator: "\n").uppercased()
     }
 }
 

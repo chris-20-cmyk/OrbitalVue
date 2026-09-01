@@ -5,6 +5,7 @@ import SwiftUI
 private enum TVBrowseDestination: Hashable {
     case all
     case favorites
+    case media(MediaLibraryBrowseMode)
     case group(String)
 }
 
@@ -63,7 +64,12 @@ struct AppleTVRootView: View {
         .onChange(of: destination) { _, destination in
             switch destination {
             case .group(let group): store.selectGroup(group)
-            case .all, .favorites: store.selectGroup(nil)
+            case .media(let mode):
+                store.selectGroup(nil)
+                store.selectBrowseMode(mode)
+            case .all, .favorites:
+                store.selectGroup(nil)
+                store.selectBrowseMode(.all)
             }
         }
     }
@@ -159,6 +165,7 @@ private struct TVWorkspace: View {
         switch destination {
         case .all: store.isMediaCenterSource ? "All media" : "All channels"
         case .favorites: "Favorites"
+        case .media(let mode): mode.sectionTitle
         case .group(let name): name
         }
     }
@@ -184,6 +191,16 @@ private struct TVGroupRail: View {
                         value: .all
                     )
                     groupButton("Favorites", count: store.favorites.count, icon: "star", value: .favorites)
+                    if store.isMediaCenterSource {
+                        ForEach(MediaLibraryBrowseMode.allCases.filter { $0 != .all }) { mode in
+                            groupButton(
+                                mode.sectionTitle,
+                                count: store.browseSummary.count(for: mode),
+                                icon: mode.systemImage,
+                                value: .media(mode)
+                            )
+                        }
+                    }
                     ForEach(store.groups) { group in
                         groupButton(group.name, count: group.count, icon: "square.grid.2x2", value: .group(group.name))
                     }
@@ -322,6 +339,18 @@ private struct TVChannelButton: View {
                         }
                     }
                     .font(.caption2.weight(.bold))
+                    if let metadata = channel.mediaMetadataLine {
+                        Text(metadata)
+                            .font(.caption2)
+                            .foregroundStyle(theme.muted)
+                            .lineLimit(1)
+                    }
+                    if let progress = channel.watchProgress {
+                        ProgressView(value: progress)
+                            .tint(theme.accent)
+                            .accessibilityLabel("Watch progress")
+                            .accessibilityValue(channel.watchProgressLabel ?? "")
+                    }
                 }
                 Spacer()
                 Image(systemName: "play.fill")
@@ -343,7 +372,7 @@ private struct TVChannelButton: View {
         .scaleEffect(isFocused ? 1.025 : 1)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isFocused)
         .accessibilityLabel(channel.name)
-        .accessibilityValue("\(channel.kind.label)\(isSelected ? ", selected" : "")")
+        .accessibilityValue("\(channel.kind.label)\(channel.watchProgressLabel.map { ", \($0)" } ?? "")\(isSelected ? ", selected" : "")")
         .accessibilityHint("Starts playback")
     }
 }

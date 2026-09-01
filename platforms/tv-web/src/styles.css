@@ -506,11 +506,52 @@ button:disabled {
 }
 
 .channel-name {
+  display: block;
   overflow: hidden;
   font-size: clamp(21px, 1.45vw, 30px);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.channel-copy {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.channel-copy small,
+.detail-metadata,
+.resume-label {
+  color: var(--muted);
+  font-size: clamp(13px, 0.82vw, 18px);
+}
+
+.channel-progress,
+.resume-progress {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(135, 157, 185, 0.22);
+}
+
+.channel-progress i,
+.resume-progress span {
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.detail-metadata,
+.resume-label {
+  margin: 0 0 10px;
+}
+
+.resume-progress {
+  width: min(520px, 85%);
+  height: 7px;
+  margin-bottom: 7px;
 }
 
 .favorite-mark {

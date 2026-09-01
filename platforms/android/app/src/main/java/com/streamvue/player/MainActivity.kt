@@ -67,6 +67,7 @@ class MainActivity : ComponentActivity() {
                     onRestorePremium = premiumBilling::restorePurchases,
                     onRefresh = viewModel::refresh,
                     onSelectGroup = viewModel::selectGroup,
+                    onSelectBrowseMode = viewModel::selectBrowseMode,
                     onQueryChanged = viewModel::updateQuery,
                     onSelectChannel = viewModel::selectChannel,
                     onDismissNotice = viewModel::dismissNotice,

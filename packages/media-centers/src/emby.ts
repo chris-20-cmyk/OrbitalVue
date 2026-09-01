@@ -165,7 +165,7 @@ export class EmbyClient {
         ParentId: libraryId,
         Recursive: true,
         IncludeItemTypes: "Movie,Episode,Video,MusicVideo,Recording,LiveTvChannel,Audio",
-        Fields: "MediaSources,MediaStreams,Path,PrimaryImageAspectRatio,SortName,Overview",
+        Fields: "MediaSources,MediaStreams,Path,PrimaryImageAspectRatio,SortName,Overview,DateCreated",
         EnableImages: true,
         EnableUserData: true,
         StartIndex: page.start,
@@ -315,6 +315,8 @@ export class EmbyClient {
     const year = asNumber(raw.ProductionYear);
     const durationTicks = asNumber(raw.RunTimeTicks);
     const resumeTicks = asNumber(userData.PlaybackPositionTicks);
+    const addedAt = isoTimestamp(asString(raw.DateCreated));
+    const lastPlayedAt = isoTimestamp(asString(userData.LastPlayedDate));
     const imageTags = asRecord(raw.ImageTags);
     const primaryTag = asString(imageTags.Primary ?? raw.PrimaryImageTag);
     const artworkPath = primaryTag
@@ -336,12 +338,22 @@ export class EmbyClient {
       ...(durationTicks === undefined ? {} : { durationMs: Math.floor(durationTicks / 10_000) }),
       ...(resumeTicks === undefined ? {} : { resumePositionMs: Math.floor(resumeTicks / 10_000) }),
       played: asBoolean(userData.Played),
+      ...(addedAt === undefined ? {} : { addedAt }),
+      ...(lastPlayedAt === undefined ? {} : { lastPlayedAt }),
       ...(artworkPath === undefined ? {} : { artworkPath }),
       mediaSources: asArray(raw.MediaSources).map((value, index) =>
         parseEmbyMediaSource(asRecord(value), index, this.apiBaseUrl)
       )
     };
   }
+}
+
+function isoTimestamp(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) || date.getUTCFullYear() > 3000
+    ? undefined
+    : date.toISOString();
 }
 
 function embyApiBaseUrl(input: string): string {
