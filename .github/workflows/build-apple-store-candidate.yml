@@ -6,11 +6,11 @@ on:
       marketing_version:
         description: App Store version (three numeric components)
         required: true
-        default: 5.1.0
+        default: 5.6.0
       build_number:
         description: New App Store build string (one to three numeric components)
         required: true
-        default: "5010001"
+        default: "5060001"
 
 permissions:
   contents: read
@@ -27,7 +27,7 @@ jobs:
       APPLE_MARKETING_VERSION: ${{ inputs.marketing_version }}
       APPLE_BUILD_NUMBER: ${{ inputs.build_number }}
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
 
       - name: Require exact App Store, premium, and software-license readiness
@@ -256,8 +256,8 @@ jobs:
       - name: Verify signed Store archives
         shell: bash
         run: |
-          ios_app='artifacts/apple-store/archives/StreamVue-iOS.xcarchive/Products/Applications/StreamVue.app'
-          tvos_app='artifacts/apple-store/archives/StreamVue-tvOS.xcarchive/Products/Applications/StreamVueTV.app'
+          ios_app='artifacts/apple-store/archives/StreamVue-iOS.xcarchive/Products/Applications/OrbitalVue.app'
+          tvos_app='artifacts/apple-store/archives/StreamVue-tvOS.xcarchive/Products/Applications/OrbitalVueTV.app'
           test -f "$tvos_app/Assets.car"
           for app in "$ios_app" "$tvos_app"; do
             test -d "$app"
@@ -352,16 +352,16 @@ jobs:
             codesign -dv --verbose=4 "${apps[0]}" 2>&1 | grep -F "TeamIdentifier=$APPLE_TEAM_ID"
             rm -rf -- "$inspection"
           done
-          mv "${ios_ipas[0]}" "artifacts/apple-store/StreamVue-$APPLE_MARKETING_VERSION-$APPLE_BUILD_NUMBER-iOS-App-Store.ipa"
-          mv "${tvos_ipas[0]}" "artifacts/apple-store/StreamVue-$APPLE_MARKETING_VERSION-$APPLE_BUILD_NUMBER-tvOS-App-Store.ipa"
+          mv "${ios_ipas[0]}" "artifacts/apple-store/OrbitalVue-$APPLE_MARKETING_VERSION-$APPLE_BUILD_NUMBER-iOS-App-Store.ipa"
+          mv "${tvos_ipas[0]}" "artifacts/apple-store/OrbitalVue-$APPLE_MARKETING_VERSION-$APPLE_BUILD_NUMBER-tvOS-App-Store.ipa"
           test -f "$APPLE_PACKAGE_RESOLVED"
           cp "$APPLE_PACKAGE_RESOLVED" artifacts/apple-store/APPLE-PACKAGE-RESOLVED.json
           ditto -c -k --sequesterRsrc --keepParent \
             artifacts/apple-store/archives/StreamVue-iOS.xcarchive/dSYMs \
-            "artifacts/apple-store/StreamVue-$APPLE_MARKETING_VERSION-$APPLE_BUILD_NUMBER-iOS-dSYMs.zip"
+            "artifacts/apple-store/OrbitalVue-$APPLE_MARKETING_VERSION-$APPLE_BUILD_NUMBER-iOS-dSYMs.zip"
           ditto -c -k --sequesterRsrc --keepParent \
             artifacts/apple-store/archives/StreamVue-tvOS.xcarchive/dSYMs \
-            "artifacts/apple-store/StreamVue-$APPLE_MARKETING_VERSION-$APPLE_BUILD_NUMBER-tvOS-dSYMs.zip"
+            "artifacts/apple-store/OrbitalVue-$APPLE_MARKETING_VERSION-$APPLE_BUILD_NUMBER-tvOS-dSYMs.zip"
           node - <<'NODE'
           const fs = require('node:fs');
           const distribution = JSON.parse(fs.readFileSync('store/apple-distribution.json', 'utf8'));

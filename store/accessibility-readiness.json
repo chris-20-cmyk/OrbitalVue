@@ -36,7 +36,7 @@
       "ready": false
     },
     "android": {
-      "applicationId": "com.streamvue.player",
+      "applicationId": "com.orbitalvue.player",
       "sourceAudits": {
         "nativeControlSemantics": true,
         "liveStatusAnnouncements": true,
@@ -57,7 +57,7 @@
       "ready": false
     },
     "apple": {
-      "applicationId": "com.streamvue.player",
+      "applicationId": "com.orbitalvue.player",
       "sourceAudits": {
         "nativeControlSemantics": true,
         "playbackControlLabels": true,
@@ -80,7 +80,7 @@
       "ready": false
     },
     "samsung": {
-      "applicationId": "SvTvPlayer.StreamVue",
+      "applicationId": "OvTvPlayer.OrbitalVue",
       "sourceAudits": {
         "semanticHtmlControls": true,
         "liveStatusAnnouncements": true,
@@ -102,7 +102,7 @@
       "ready": false
     },
     "lg": {
-      "applicationId": "com.streamvue.player.tv",
+      "applicationId": "com.orbitalvue.player.tv",
       "sourceAudits": {
         "semanticHtmlControls": true,
         "liveStatusAnnouncements": true,

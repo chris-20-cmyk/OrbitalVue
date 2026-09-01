@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://streamvue.app/contracts/catalog/v1/schema.json",
-  "title": "StreamVue Portable Catalog",
-  "description": "The platform-neutral playlist catalog exchanged by StreamVue clients and conformance tests.",
+  "title": "OrbitalVue Portable Catalog",
+  "description": "The platform-neutral playlist catalog exchanged by OrbitalVue clients and conformance tests.",
   "type": "object",
   "additionalProperties": false,
   "required": [

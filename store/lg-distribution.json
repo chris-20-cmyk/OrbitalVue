@@ -1,6 +1,6 @@
 {
   "contractVersion": "1.0",
-  "appId": "com.streamvue.player.tv",
+  "appId": "com.orbitalvue.player.tv",
   "sellerIcon": "platforms/tv-web/assets/seller-icon-400.png",
   "sellerIconReviewed": false,
   "listingAssetsPrepared": false,

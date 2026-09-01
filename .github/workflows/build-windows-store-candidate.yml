@@ -6,7 +6,7 @@ on:
       package_version:
         description: Four-part MSIX version; the fourth part must be zero
         required: true
-        default: 5.5.0.0
+        default: 5.6.0.0
 
 permissions:
   contents: read
@@ -23,7 +23,7 @@ jobs:
       WINDOWS_PREMIUM_PRODUCT_ID: ${{ vars.STREAMVUE_WINDOWS_PREMIUM_PRODUCT_ID }}
       PACKAGE_VERSION: ${{ inputs.package_version }}
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
 
       - name: Install .NET 10
@@ -74,7 +74,7 @@ jobs:
             -Version $env:PACKAGE_VERSION `
             -PremiumProductId $env:WINDOWS_PREMIUM_PRODUCT_ID `
             -SkipRestore
-          Get-FileHash -Algorithm SHA256 -LiteralPath "artifacts/windows-msix/StreamVue-$($env:PACKAGE_VERSION)-win-x64-microsoft-store-unsigned.msix" |
+          Get-FileHash -Algorithm SHA256 -LiteralPath "artifacts/windows-msix/OrbitalVue-$($env:PACKAGE_VERSION)-win-x64-microsoft-store-unsigned.msix" |
             ForEach-Object { "$($_.Hash)  $($_.Path | Split-Path -Leaf)" } |
             Set-Content -LiteralPath artifacts/windows-msix/SHA256SUMS.txt -Encoding utf8
 
@@ -85,7 +85,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           path: |
-            artifacts/windows-msix/StreamVue-${{ inputs.package_version }}-win-x64-microsoft-store-unsigned.msix
+            artifacts/windows-msix/OrbitalVue-${{ inputs.package_version }}-win-x64-microsoft-store-unsigned.msix
             artifacts/windows-msix/SHA256SUMS.txt
             store/store-listing.json
             store/accessibility-readiness.json

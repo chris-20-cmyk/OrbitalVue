@@ -20,7 +20,7 @@ export default defineConfig({
           DEPLOYMENT_ENVIRONMENT: "local",
           EXPECTED_HOSTNAME: "entitlements.streamvue.test",
           ALLOWED_BROWSER_ORIGINS: "[]",
-          GOOGLE_PLAY_PACKAGE_NAME: "com.streamvue.player",
+          GOOGLE_PLAY_PACKAGE_NAME: "com.orbitalvue.player",
           GOOGLE_PLAY_PRODUCT_ID: "streamvue_premium_once",
           GOOGLE_PLAY_ALLOW_TEST_PURCHASES: "false",
           SAMSUNG_CHECKOUT_APP_ID: "StreamVueCheckout",

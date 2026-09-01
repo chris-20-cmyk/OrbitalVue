@@ -43,7 +43,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
 
       - name: Install .NET 10
@@ -72,8 +72,8 @@ jobs:
           ./tools/build-windows-msix.ps1
           -IdentityName StreamVue.Test.Package
           -Publisher 'CN=00000000-0000-0000-0000-000000000000'
-          -PublisherDisplayName 'StreamVue Test'
-          -Version 5.5.0.0
+          -PublisherDisplayName 'OrbitalVue Test'
+          -Version 5.6.0.0
           -PremiumProductId streamvue-test-premium
           -SkipRestore
 
@@ -91,4 +91,4 @@ jobs:
           name: streamvue-windows-msix-layout-test-not-for-installation
           if-no-files-found: error
           retention-days: 14
-          path: artifacts/windows-msix/StreamVue-5.5.0.0-win-x64-microsoft-store-unsigned.msix
+          path: artifacts/windows-msix/OrbitalVue-5.6.0.0-win-x64-microsoft-store-unsigned.msix

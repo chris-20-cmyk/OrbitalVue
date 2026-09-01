@@ -1,4 +1,4 @@
-# StreamVue for Android and Google TV
+# OrbitalVue for Android and Google TV
 
 This is the native Kotlin/Compose StreamVue 5.2 foundation for Android phones, tablets, Android TV, and Google TV. It uses AndroidX Media3 instead of embedding the Windows player or a browser playback engine.
 
@@ -92,7 +92,7 @@ The wrapper pins Gradle 9.5.0 and verifies the official distribution SHA-256 bef
 
 - Personal test APK: `app/build/outputs/apk/debug/app-debug.apk`
 - Locked foundation AAB: `app/build/outputs/bundle/release/app-release.aab` (unsigned by design)
-- Readiness-gated Play candidate: workflow artifact `StreamVue-<version-name>-<version-code>-google-play-upload.aab`
+- Readiness-gated Play candidate: workflow artifact `OrbitalVue-<version-name>-<version-code>-google-play-upload.aab`
 - Unit-test report: `app/build/reports/tests/testDebugUnitTest/index.html`
 - Android lint report: `app/build/reports/lint-results-debug.html`
 

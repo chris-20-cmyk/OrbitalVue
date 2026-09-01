@@ -13,7 +13,7 @@ public enum PlaylistSourcePolicyError: LocalizedError, Equatable, Sendable {
         case .unsupportedURL:
             "Enter a complete HTTP or HTTPS playlist URL."
         case .invalidEncoding:
-            "StreamVue could not decode that playlist as UTF-8 or UTF-16 text."
+            "OrbitalVue could not decode that playlist as UTF-8 or UTF-16 text."
         case .oversizedPlaylist(let maximumBytes):
             "The playlist is larger than the \(maximumBytes / 1_048_576) MB safety limit."
         }
@@ -82,6 +82,6 @@ public enum PlaylistSourcePolicy {
         if let localized = error as? LocalizedError, let description = localized.errorDescription {
             return description
         }
-        return "StreamVue could not load that source. Your private playlist address was not logged."
+        return "OrbitalVue could not load that source. Your private playlist address was not logged."
     }
 }

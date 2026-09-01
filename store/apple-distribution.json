@@ -1,6 +1,6 @@
 {
   "contractVersion": "1.0",
-  "bundleId": "com.streamvue.player",
+  "bundleId": "com.orbitalvue.player",
   "ksPlayer": {
     "dependency": "kingslay/KSPlayer",
     "version": "2.3.4",

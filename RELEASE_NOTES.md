@@ -1,35 +1,34 @@
-# StreamVue 5.5.0 Protected Plex & Emby Library Artwork
+# OrbitalVue 5.6.0 Rebrand & Premium Library Browsing
 
-StreamVue 5.5 gives Plex and Emby libraries a polished visual catalog on Windows. Posters and thumbnails now appear in the virtualized channel list and Signal desk while provider credentials remain isolated inside the protected media-center service. Existing M3U, Xtream, Plex account discovery, watch-progress sync, DVR, casting, playback-resilience, and in-place updates remain available.
+StreamVue is becoming **OrbitalVue**. Version 5.6 introduces the new public identity across Windows, Android and Google TV, iPhone, iPad, Apple TV, Samsung Tizen, LG webOS, Store listings, support pages, and release packages. The existing Windows updater identity is deliberately retained behind the scenes so current personal installations can update in place without uninstalling.
 
-## Premium library presentation
+## Premium Plex & Emby browsing
 
-- Shows Plex and Emby artwork in the channel library with initials retained as a clean fallback
-- Shows the selected item's artwork in Signal desk without delaying tune or playback
-- Adds `RESUME` and `WATCHED` status badges for protected media-center items
-- Loads only visible, requested artwork instead of downloading an entire large library at once
-- Keeps decoded-image retention to 160 items and reclaims older posters while browsing very large catalogs
+- Adds dedicated **Continue Watching** and **Recently Added** views for connected Plex and Emby libraries
+- Keeps Live, Movies, and Series filters alongside provider library groups
+- Shows year, series, season, episode, watch progress, and resume position where the provider supplies them
+- Sorts Continue Watching by the latest activity and Recently Added by provider date
+- Keeps artwork, credentials, and media-center tokens behind the protected provider service
 
-## Credential and network protection
+## OrbitalVue identity
 
-- Stores only canonical `streamvue-artwork://` locators in playlists and encrypted caches; no provider token or raw authenticated image URL reaches WPF
-- Revalidates the selected provider, normalized server origin, public server identity, protected credential binding, item identifier, and optional Plex artwork version before download
-- Uses Plex and Emby credential headers only; tokens are never materialized in artwork URLs
-- Blocks redirects, cross-provider locators, non-image responses, and responses larger than 8 MB
-- Limits artwork network and decode work to four concurrent requests and cancels it on source replacement, credential deletion, entitlement revocation, or shutdown
-- Fails open so missing or unavailable artwork always falls back to initials and never interrupts browsing or playback
+- Rebrands all customer-facing Windows screens, dialogs, diagnostics, package metadata, and recording defaults
+- Rebrands Android, Google TV, Apple, Samsung, and LG presentation and future Store identities
+- Uses `com.orbitalvue.player` for new Android and Apple Store identities
+- Uses `OvTvPlayer.OrbitalVue` for Samsung and `com.orbitalvue.player.tv` for LG
+- Updates the public website, privacy copy, support copy, Store listing contract, and distribution checks
 
-## Verification and release controls
+## Safe Windows update continuity
 
-- Protocol tests cover Plex image transcoding and Emby primary-image routes with header-only authentication
-- Security tests prove locked entitlements and forged locators never reach the network
-- Response tests reject non-image and oversized payloads
-- Cache tests prove token-free artwork locators survive protected offline catalog storage
-- A dedicated structural gate covers canonical locators, identity binding, bounded concurrency, cancellation, image validation, memory retention, privacy disclosure, and WPF presentation
-- Personal and Microsoft Store build modes remain independently compiled and checked
+- Keeps the existing Windows executable assembly name, Velopack package ID, application-data location, encrypted-data entropy, and legacy backup support
+- Existing personal Windows installations remain on the same in-app update lane
+- Users upgrading from the StreamVue line do not need to uninstall first
+- Microsoft Store builds remain Store-managed and do not contact the GitHub updater
 
-## Updating from Windows 4.0 through 5.4
+## Verification
 
-The personal Windows build remains on the existing Velopack update lane. StreamVue 4.0 through 5.4 can install the 5.5 preview in place; uninstalling first is not required. Microsoft Store builds remain Store-managed and do not contact the GitHub updater.
+- Extends the Windows feature probe with Plex and Emby metadata, watch-progress, recency, and filtering fixtures
+- Keeps personal and Store-mode builds independently compiled and checked
+- Adds release-contract enforcement for the new public platform identifiers while protecting legacy Windows continuity identifiers
 
-This is a prerelease intended for personal testing. Store submission remains locked until the real product, privacy, listing, accessibility, public-site, and Partner Center owner-review gates are complete.
+This is a prerelease intended for personal testing. Store submission remains locked until the real product, privacy, listing, accessibility, public-site, commerce, licensing, and platform-owner review gates are complete.

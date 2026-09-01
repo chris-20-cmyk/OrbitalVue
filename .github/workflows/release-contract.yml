@@ -111,7 +111,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
 
       - name: Set up pnpm
@@ -138,6 +138,7 @@ jobs:
           node tools/verify-premium-store-readiness.mjs
           node tools/verify-premium-verifier-readiness.mjs
           node tools/verify-privacy-readiness.mjs
+          node tools/verify-orbitalvue-brand.mjs
           node tools/verify-store-listing-readiness.mjs
           node tools/verify-accessibility-readiness.mjs
           node tools/verify-public-site-readiness.mjs
@@ -153,7 +154,7 @@ jobs:
       - name: Upload the non-release readiness dossier
         uses: actions/upload-artifact@v7
         with:
-          name: streamvue-release-readiness
+          name: orbitalvue-release-readiness
           path: artifacts/release-readiness/
           if-no-files-found: error
           retention-days: 14

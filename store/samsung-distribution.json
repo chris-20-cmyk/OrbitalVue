@@ -1,8 +1,8 @@
 {
   "contractVersion": "1.0",
-  "widgetId": "https://streamvue.app/tv",
-  "packageId": "SvTvPlayer",
-  "applicationId": "SvTvPlayer.StreamVue",
+  "widgetId": "https://orbitalvue.app/tv",
+  "packageId": "OvTvPlayer",
+  "applicationId": "OvTvPlayer.OrbitalVue",
   "checkoutApplicationId": null,
   "verifierUrl": null,
   "authorCertificateSha256": null,

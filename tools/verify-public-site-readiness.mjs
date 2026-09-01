@@ -70,7 +70,7 @@ if (!validPublicUrl(site.projectUrl) || !validPublicUrl(site.supportRequestUrl))
 }
 if (site.projectUrl !== "https://github.com/chris-20-cmyk/StreamVue"
   || site.supportRequestUrl !== `${site.projectUrl}/issues/new`) {
-  fail("project and support-request URLs must remain on the reviewed StreamVue repository");
+  fail("project and support-request URLs must remain on the reviewed repository until its separate rename is approved");
 }
 if (site.canonicalBaseUrl !== null && !validPublicUrl(site.canonicalBaseUrl)) {
   fail("canonicalBaseUrl must be null or a public HTTPS URL");
@@ -150,13 +150,13 @@ for (const forbidden of [
 }
 
 for (const fragment of [
-  "No StreamVue account",
+  "No OrbitalVue account",
   "advertising",
   "cross-app tracking",
   "automatic telemetry",
-  "The StreamVue developer does not receive those provider credentials",
+  "The OrbitalVue developer does not receive those provider credentials",
   "The developer receives diagnostic information only if you choose to share that export",
-  "StreamVue does not provide channels or media"
+  "OrbitalVue does not provide channels or media"
 ]) {
   if (!pageSources.privacy.includes(fragment) && !pageSources.overview.includes(fragment)) {
     fail(`reviewed privacy copy is missing: ${fragment}`);
@@ -165,7 +165,7 @@ for (const fragment of [
 for (const fragment of [
   "Never post playlist URLs",
   "Open a public issue",
-  "StreamVue does not provide channels or media"
+  "OrbitalVue does not provide channels or media"
 ]) {
   if (!pageSources.support.includes(fragment)) fail(`reviewed support copy is missing: ${fragment}`);
 }

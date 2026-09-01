@@ -260,7 +260,7 @@ fun StreamVueApp(
     state.error?.let { message ->
         AlertDialog(
             onDismissRequest = onDismissError,
-            title = { Text("StreamVue needs attention") },
+            title = { Text("OrbitalVue needs attention") },
             text = { Text(message) },
             confirmButton = {
                 Button(onClick = onDismissError) { Text("Got it") }
@@ -301,7 +301,7 @@ private fun AppHeader(
         Spacer(modifier = Modifier.width(12.dp))
         Column {
             Text(
-                text = "STREAMVUE",
+                text = "ORBITALVUE",
                 color = StreamVueText,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 2.sp,
@@ -1008,7 +1008,7 @@ private fun Onboarding(
                 )
                 Spacer(modifier = Modifier.height(9.dp))
                 Text(
-                    "Connect an M3U playlist or your personal Plex or Emby server. StreamVue protects credentials on this device and refreshes the active library when the app opens.",
+                    "Connect an M3U playlist or your personal Plex or Emby server. OrbitalVue protects credentials on this device and refreshes the active library when the app opens.",
                     color = StreamVueMuted,
                     fontSize = if (isTelevision) 15.sp else 12.sp,
                     lineHeight = if (isTelevision) 23.sp else 19.sp
@@ -1028,7 +1028,7 @@ private fun Onboarding(
                 }
                 Spacer(modifier = Modifier.height(17.dp))
                 Text(
-                    "StreamVue is a player. It never bundles or sells content.",
+                    "OrbitalVue is a player. It never bundles or sells content.",
                     color = StreamVueMuted,
                     fontSize = 9.sp
                 )
@@ -1130,7 +1130,7 @@ private fun ImportSourceDialog(
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        "Online playlists refresh at launch. StreamVue never uploads your list.",
+                        "Online playlists refresh at launch. OrbitalVue never uploads your list.",
                         color = StreamVueMuted,
                         fontSize = 10.sp
                     )

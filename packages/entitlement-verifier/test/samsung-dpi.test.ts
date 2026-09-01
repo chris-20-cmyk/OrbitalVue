@@ -39,7 +39,7 @@ describe("Samsung DPI entitlement verification", () => {
     expect(response.checkoutAvailable).toBe(true);
     expect(response.product).toMatchObject({
       productId: request.productId,
-      title: "StreamVue Personal Media Centers",
+      title: "OrbitalVue Personal Media Centers",
       orderTotal: "9.99",
       currencyId: "USD"
     });
@@ -174,7 +174,7 @@ describe("Samsung DPI entitlement verification", () => {
         expect(body.CheckValue).toBe(await hmac(`${request.appId}${request.countryCode}`));
         const entries = scenario.product ? [{
           ItemID: request.productId,
-          ItemTitle: "StreamVue Personal Media Centers",
+          ItemTitle: "OrbitalVue Personal Media Centers",
           ItemType: 2,
           Price: "9.99",
           CurrencyID: "USD"

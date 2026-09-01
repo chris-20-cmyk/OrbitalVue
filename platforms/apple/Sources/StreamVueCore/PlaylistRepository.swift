@@ -25,7 +25,7 @@ public enum PlaylistRepositoryError: LocalizedError, Equatable, Sendable {
         case .tooManyRedirects:
             "The playlist provider redirected too many times."
         case .keychain:
-            "StreamVue could not access the protected playlist credential."
+            "OrbitalVue could not access the protected playlist credential."
         }
     }
 }
@@ -66,7 +66,7 @@ public final class URLSessionPlaylistHTTPClient: NSObject, PlaylistHTTPClient, U
     public func load(url: URL) async throws -> Data {
         var request = URLRequest(url: url)
         request.setValue("application/x-mpegURL, audio/mpegurl, text/plain, */*", forHTTPHeaderField: "Accept")
-        request.setValue("StreamVue Apple/5.1", forHTTPHeaderField: "User-Agent")
+        request.setValue("OrbitalVue Apple/5.6", forHTTPHeaderField: "User-Agent")
         let (data, response) = try await session.data(for: request)
         defer { clearRedirectCounts() }
         guard let response = response as? HTTPURLResponse else {
@@ -214,7 +214,7 @@ public actor PlaylistRepository {
                 return try buildLoadedCatalog(
                     text: text,
                     record: record,
-                    notice: "The source could not be refreshed. StreamVue protected playback with the last working copy.",
+                    notice: "The source could not be refreshed. OrbitalVue protected playback with the last working copy.",
                     usedCachedFallback: true
                 )
             }

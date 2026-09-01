@@ -106,7 +106,7 @@ struct PlaybackSettingsView: View {
                     }
 
                     Section("KSPlayer distribution license") {
-                        Text("The integrated public KSPlayer package is GPL-3.0. Personal source builds can use it now; an Apple Store binary requires a compatible GPL release of StreamVue or KSPlayer’s separately licensed LGPL/commercial package.")
+                        Text("The integrated public KSPlayer package is GPL-3.0. Personal source builds can use it now; an Apple Store binary requires a compatible GPL release of OrbitalVue or KSPlayer’s separately licensed LGPL/commercial package.")
                             .font(.footnote)
                             .foregroundStyle(theme.muted)
                         Link(
@@ -175,7 +175,7 @@ struct PlaybackSettingsView: View {
                 }
             }
             .confirmationDialog(
-                "Remove this playlist from StreamVue?",
+                "Remove this playlist from OrbitalVue?",
                 isPresented: $confirmRemoval,
                 titleVisibility: .visible
             ) {

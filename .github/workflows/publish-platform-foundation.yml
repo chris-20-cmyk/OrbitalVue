@@ -6,11 +6,11 @@ on:
       release_tag:
         description: Prerelease tag to create or update
         required: true
-        default: v5.2.0-alpha.1
+        default: v5.6.0-alpha.1
       release_title:
         description: Public release title
         required: true
-        default: StreamVue 5.2 Android Plex Account & Resilience
+        default: OrbitalVue 5.6 Cross-Platform Foundation
 
 permissions:
   contents: write
@@ -25,7 +25,7 @@ jobs:
       RELEASE_TITLE: ${{ inputs.release_title }}
 
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
 
       - name: Set up Java
@@ -102,10 +102,10 @@ jobs:
         run: |
           PACKAGE_VERSION="${RELEASE_TAG#v}"
           mkdir -p artifacts/platform-foundation
-          cp platforms/android/app/build/outputs/apk/debug/app-debug.apk "artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-android-personal-test.apk"
-          cp platforms/android/app/build/outputs/bundle/release/app-release.aab "artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-google-play-store-locked-unsigned.aab"
-          (cd platforms/tv-web/dist/samsung && zip -q -r "../../../../artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-samsung-tizen-store-locked-unsigned.zip" .)
-          (cd platforms/tv-web/dist/webos && zip -q -r "../../../../artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-lg-webos-store-locked-unsigned.zip" .)
+          cp platforms/android/app/build/outputs/apk/debug/app-debug.apk "artifacts/platform-foundation/OrbitalVue-${PACKAGE_VERSION}-android-personal-test.apk"
+          cp platforms/android/app/build/outputs/bundle/release/app-release.aab "artifacts/platform-foundation/OrbitalVue-${PACKAGE_VERSION}-google-play-store-locked-unsigned.aab"
+          (cd platforms/tv-web/dist/samsung && zip -q -r "../../../../artifacts/platform-foundation/OrbitalVue-${PACKAGE_VERSION}-samsung-tizen-store-locked-unsigned.zip" .)
+          (cd platforms/tv-web/dist/webos && zip -q -r "../../../../artifacts/platform-foundation/OrbitalVue-${PACKAGE_VERSION}-lg-webos-store-locked-unsigned.zip" .)
           (cd artifacts/platform-foundation && sha256sum * > SHA256SUMS.txt)
 
       - name: Create or update the prerelease
@@ -121,7 +121,7 @@ jobs:
       - name: Upload the reproducible workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: streamvue-5.2-cross-platform-foundation
+          name: orbitalvue-5.6-cross-platform-foundation
           if-no-files-found: error
           retention-days: 14
           path: artifacts/platform-foundation/

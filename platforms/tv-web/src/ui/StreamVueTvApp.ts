@@ -133,7 +133,7 @@ export class StreamVueTvApp {
       <header class="onboarding-header">${brandMark()}<span>Television edition</span></header>
       <section class="onboarding-copy">
         <h1>Connect your content</h1>
-        <p>Bring an M3U playlist or your personal Plex or Emby library to the television. StreamVue includes no content of its own.</p>
+        <p>Bring an M3U playlist or your personal Plex or Emby library to the television. OrbitalVue includes no content of its own.</p>
         ${this.error ? `<div class="message message-error" role="alert">${escapeHtml(this.error)}</div>` : ""}
         <label class="field-label" for="playlist-url">M3U playlist URL</label>
         <input id="playlist-url" class="tv-input" data-focusable="true" data-autofocus="true" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://provider.example/playlist.m3u" />
@@ -997,7 +997,7 @@ function channelButton(channel: CatalogChannel, selected: boolean, favorite: boo
 }
 
 function brandMark(): string {
-  return `<div class="brand" aria-label="StreamVue"><span>STREAM</span><b>VUE</b></div>`;
+  return `<div class="brand" aria-label="OrbitalVue"><span>ORBITAL</span><b>VUE</b></div>`;
 }
 
 function sourceStatus(catalog: StreamVueCatalog): string {

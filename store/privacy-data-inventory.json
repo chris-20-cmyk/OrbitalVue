@@ -74,7 +74,7 @@
       "storage": "store-controlled plus minimal on-device entitlement state",
       "transmittedTo": [
         "platform-store-service",
-        "streamvue-android-or-samsung-entitlement-verifier-when-enabled"
+        "orbitalvue-android-or-samsung-entitlement-verifier-when-enabled"
       ],
       "developerAccess": "transient-verifier-processing-only-for-android-or-samsung; no request-body logging; purchaser rate-limit binding receives only a keyed hmac identifier",
       "availability": "implementation-present-but-production-deployment-and-store-builds-currently-release-locked"
@@ -108,7 +108,7 @@
       "ready": false
     },
     "android": {
-      "applicationId": "com.streamvue.player",
+      "applicationId": "com.orbitalvue.player",
       "privacyPolicyUrl": null,
       "supportUrl": null,
       "declarations": {
@@ -120,7 +120,7 @@
       "ready": false
     },
     "apple": {
-      "applicationId": "com.streamvue.player",
+      "applicationId": "com.orbitalvue.player",
       "privacyPolicyUrl": null,
       "supportUrl": null,
       "declarations": {
@@ -133,7 +133,7 @@
       "ready": false
     },
     "samsung": {
-      "applicationId": "SvTvPlayer.StreamVue",
+      "applicationId": "OvTvPlayer.OrbitalVue",
       "privacyPolicyUrl": null,
       "supportUrl": null,
       "declarations": {
@@ -145,7 +145,7 @@
       "ready": false
     },
     "lg": {
-      "applicationId": "com.streamvue.player.tv",
+      "applicationId": "com.orbitalvue.player.tv",
       "privacyPolicyUrl": null,
       "supportUrl": null,
       "declarations": {

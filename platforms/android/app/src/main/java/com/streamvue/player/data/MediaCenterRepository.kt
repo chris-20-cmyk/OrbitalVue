@@ -46,7 +46,7 @@ class MediaCenterRepository internal constructor(
                 cachedSnapshot = saved
                 loadedCatalog(
                     saved,
-                    "The media server could not be refreshed. StreamVue opened the last protected library snapshot.",
+                    "The media server could not be refreshed. OrbitalVue opened the last protected library snapshot.",
                     usedCachedFallback = true
                 )
             }
@@ -144,7 +144,7 @@ class MediaCenterRepository internal constructor(
             onFailure = {
                 loadedCatalog(
                     saved,
-                    "The media server could not be refreshed. StreamVue kept the last protected library snapshot.",
+                    "The media server could not be refreshed. OrbitalVue kept the last protected library snapshot.",
                     usedCachedFallback = true
                 )
             }
@@ -357,10 +357,10 @@ class MediaCenterRepository internal constructor(
                     preferences.edit(commit = true) { putString("device_id", generated) }
                 }
             return MediaCenterDeviceIdentity(
-                client = "StreamVue",
+                client = "OrbitalVue",
                 device = "Android",
                 deviceId = id,
-                version = "5.2.0"
+                version = "5.6.0"
             )
         }
 

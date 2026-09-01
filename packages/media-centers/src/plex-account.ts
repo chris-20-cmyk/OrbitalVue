@@ -72,7 +72,7 @@ export class PlexAccountClient {
       configuration.clientIdentifier,
       "Plex client identifier"
     );
-    this.product = safeHeaderValue(configuration.product, "StreamVue");
+    this.product = safeHeaderValue(configuration.product, "OrbitalVue");
     this.now = configuration.now ?? (() => new Date());
     this.headers = {
       Accept: "application/json",

@@ -13,7 +13,7 @@
       "verificationProvider": "microsoft-store-license"
     },
     "android": {
-      "applicationId": "com.streamvue.player",
+      "applicationId": "com.orbitalvue.player",
       "distributionTarget": "google-play",
       "artifactKind": "upload-key-signed-aab",
       "candidateWorkflow": ".github/workflows/build-google-play-candidate.yml",
@@ -21,7 +21,7 @@
       "verificationProvider": "google-play-developer-api"
     },
     "apple": {
-      "applicationId": "com.streamvue.player",
+      "applicationId": "com.orbitalvue.player",
       "distributionTarget": "apple-app-store",
       "artifactKind": "distribution-signed-ipa-set",
       "candidateWorkflow": ".github/workflows/build-apple-store-candidate.yml",
@@ -29,7 +29,7 @@
       "verificationProvider": "storekit2-verified-transactions"
     },
     "samsung": {
-      "applicationId": "SvTvPlayer.StreamVue",
+      "applicationId": "OvTvPlayer.OrbitalVue",
       "distributionTarget": "samsung-seller-office",
       "artifactKind": "author-partner-signed-wgt",
       "candidateWorkflow": ".github/workflows/build-samsung-store-candidate.yml",
@@ -37,7 +37,7 @@
       "verificationProvider": "samsung-dpi-purchase-history"
     },
     "lg": {
-      "applicationId": "com.streamvue.player.tv",
+      "applicationId": "com.orbitalvue.player.tv",
       "distributionTarget": "lg-seller-lounge",
       "artifactKind": "webos-ipk",
       "candidateWorkflow": ".github/workflows/build-lg-seller-lounge-candidate.yml",

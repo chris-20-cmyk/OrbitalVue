@@ -83,7 +83,7 @@ class GooglePlayPremiumBilling(
                     it.copy(
                         isBusy = false,
                         canPurchase = false,
-                        message = "Google Play disconnected. StreamVue will reconnect when you try again."
+                        message = "Google Play disconnected. OrbitalVue will reconnect when you try again."
                     )
                 }
             }

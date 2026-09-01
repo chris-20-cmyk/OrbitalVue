@@ -110,7 +110,8 @@ public partial class MainWindow : Window
     private DateTimeOffset _lastGuidePresentationUpdate;
     private DateTimeOffset _guideWindowStart = AlignTimelineStart(DateTimeOffset.UtcNow);
     private string _guideFilter = "All";
-    private string _kindFilter = "All";
+    private MediaLibraryBrowseMode _libraryBrowseMode = MediaLibraryBrowseMode.All;
+    private MediaLibraryBrowseSummary _libraryBrowseSummary = new(false, 0, 0, 0, 0);
     private string _categoryFilter = string.Empty;
     private bool _favoritesOnly;
     private bool _windowReady;
@@ -1556,12 +1557,17 @@ public partial class MainWindow : Window
         _channelView = CollectionViewSource.GetDefaultView(_channels);
         _channelView.Filter = FilterChannel;
         _categoryFilter = string.Empty;
+        _libraryBrowseSummary = MediaLibraryBrowsePolicy.Summarize(_channels);
         ApplyChannelGrouping();
         ChannelList.ItemsSource = _channelView;
         SourceNameText.Text = result.DisplayName;
 
         CategoryBox.Items.Clear();
-        CategoryBox.Items.Add(new ComboBoxItem { Content = "All groups", Tag = string.Empty });
+        CategoryBox.Items.Add(new ComboBoxItem
+        {
+            Content = _libraryBrowseSummary.IsMediaCenterLibrary ? "All libraries" : "All groups",
+            Tag = string.Empty
+        });
         foreach (var group in _channels
                      .GroupBy(channel => channel.Group, StringComparer.OrdinalIgnoreCase)
                      .Select(group => new { group.Key, Count = group.Count() }))
@@ -1570,8 +1576,20 @@ public partial class MainWindow : Window
         }
 
         CategoryBox.SelectedIndex = 0;
-        _kindFilter = "All";
+        _libraryBrowseMode = MediaLibraryBrowseMode.All;
         AllFilter.IsChecked = true;
+        ContinueWatchingFilter.Visibility = _libraryBrowseSummary.IsMediaCenterLibrary
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        ContinueWatchingFilter.Content = $"Continue ({_libraryBrowseSummary.ContinueWatchingCount:N0})";
+        RecentlyAddedFilter.Visibility = _libraryBrowseSummary.IsMediaCenterLibrary
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        RecentlyAddedFilter.Content = $"Recent ({_libraryBrowseSummary.RecentlyAddedCount:N0})";
+        CatalogHeading.Text = _libraryBrowseSummary.IsMediaCenterLibrary ? "Library" : "Channels";
+        SearchHint.Text = _libraryBrowseSummary.IsMediaCenterLibrary
+            ? "Search titles, series, or libraries"
+            : "Search channels or groups";
         RefreshChannelCount();
         var alternateFeedCount = Math.Max(0, _allChannels.Count - _channels.Count);
         NowPlayingSubheading.Text = alternateFeedCount == 0
@@ -2144,7 +2162,7 @@ public partial class MainWindow : Window
             new() { Number = 5, Name = "Night Sessions", Group = "Music", Url = "https://example.invalid/live/5.ts", Kind = ChannelKind.Live },
             new() { Number = 6, Name = "Archive Series", Group = "Series", Url = "https://example.invalid/series/6.mkv", Kind = ChannelKind.Series }
         };
-        ApplyPlaylist(new PlaylistResult(previewChannels, "StreamVue editorial preview", "preview", DateTimeOffset.Now));
+        ApplyPlaylist(new PlaylistResult(previewChannels, "OrbitalVue editorial preview", "preview", DateTimeOffset.Now));
         HideModal(ImportOverlay);
         FooterStatusDot.Fill = LiveBrush;
         FooterStatusText.Text = "Native interface preview • Direct MPEG-TS ready";
@@ -2244,7 +2262,7 @@ public partial class MainWindow : Window
         catalog["FS1.US2"] = "FOX Sports 1";
         catalog["SPECTRUMSPORTSNET.US2"] = "Spectrum SportsNet";
         catalog["REDBULLTV.US2"] = "Red Bull TV";
-        return new EpgSchedule(programmes, aliases, "StreamVue guide preview", now, catalog);
+        return new EpgSchedule(programmes, aliases, "OrbitalVue guide preview", now, catalog);
     }
 
     private async Task RunGuideSmokeAsync(string playlistPath, string reportPath, string capturePath)
@@ -2658,7 +2676,7 @@ public partial class MainWindow : Window
     {
         if (item is not ChannelItem channel) return false;
         if (_favoritesOnly && !channel.IsFavorite) return false;
-        if (_kindFilter != "All" && !channel.Kind.ToString().Equals(_kindFilter, StringComparison.OrdinalIgnoreCase)) return false;
+        if (!MediaLibraryBrowsePolicy.Matches(channel, _libraryBrowseMode)) return false;
         if (_categoryFilter.Length > 0 && !channel.Group.Equals(_categoryFilter, StringComparison.OrdinalIgnoreCase)) return false;
 
         var query = SearchBox.Text.Trim();
@@ -2678,9 +2696,10 @@ public partial class MainWindow : Window
     {
         var visible = ChannelList.Items.Count;
         FavoritesEmptyState.Visibility = _favoritesOnly && visible == 0 ? Visibility.Visible : Visibility.Collapsed;
+        var unit = _libraryBrowseSummary.IsMediaCenterLibrary ? "titles" : "channels";
         var channelText = visible == _channels.Count
-            ? $"{_channels.Count:N0} channels"
-            : $"{visible:N0} of {_channels.Count:N0} channels";
+            ? $"{_channels.Count:N0} {unit}"
+            : $"{visible:N0} of {_channels.Count:N0} {unit}";
         var visibleGroups = _channelView?.Groups?.Count ?? 0;
         ChannelCountText.Text = _categoryFilter.Length == 0 && visibleGroups > 0
             ? $"{channelText} • {visibleGroups:N0} groups"
@@ -3484,8 +3503,14 @@ public partial class MainWindow : Window
 
     private void KindFilter_Checked(object sender, RoutedEventArgs e)
     {
-        if (sender is RadioButton { Tag: string kind }) _kindFilter = kind;
-        if (_windowReady) RefreshFilters();
+        if (sender is RadioButton { Tag: string mode } &&
+            Enum.TryParse<MediaLibraryBrowseMode>(mode, ignoreCase: true, out var parsed))
+            _libraryBrowseMode = parsed;
+        if (_windowReady)
+        {
+            ApplyChannelGrouping();
+            RefreshFilters();
+        }
     }
 
     private void CategoryBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -3502,11 +3527,16 @@ public partial class MainWindow : Window
     {
         if (_channelView is null) return;
         _channelView.GroupDescriptions.Clear();
-        if (_categoryFilter.Length == 0)
+        _channelView.SortDescriptions.Clear();
+        if (_categoryFilter.Length == 0 && !MediaLibraryBrowsePolicy.UsesEditorialOrder(_libraryBrowseMode))
             _channelView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ChannelItem.Group))
             {
                 StringComparison = StringComparison.OrdinalIgnoreCase
             });
+        if (_libraryBrowseMode == MediaLibraryBrowseMode.ContinueWatching)
+            _channelView.SortDescriptions.Add(new SortDescription(nameof(ChannelItem.LastPlayedAtUtc), ListSortDirection.Descending));
+        else if (_libraryBrowseMode == MediaLibraryBrowseMode.RecentlyAdded)
+            _channelView.SortDescriptions.Add(new SortDescription(nameof(ChannelItem.AddedAtUtc), ListSortDirection.Descending));
     }
 
     private void WatchNavigation_Checked(object sender, RoutedEventArgs e)
@@ -3515,7 +3545,7 @@ public partial class MainWindow : Window
         SetMultiviewMode(false);
         SetGuideMode(false);
         _favoritesOnly = false;
-        CatalogHeading.Text = "Channels";
+        CatalogHeading.Text = _libraryBrowseSummary.IsMediaCenterLibrary ? "Library" : "Channels";
         RefreshFilters();
         if (_currentChannel is not null && _playback?.MediaPlayer.Media is null)
             RetuneCurrentPlayback();
@@ -4082,7 +4112,7 @@ public partial class MainWindow : Window
         _favoritesOnly = false;
         SearchBox.Clear();
         CategoryBox.SelectedIndex = 0;
-        _kindFilter = "All";
+        _libraryBrowseMode = MediaLibraryBrowseMode.All;
         AllFilter.IsChecked = true;
         RefreshFilters();
         ChannelList.SelectedItem = channel;
@@ -4379,7 +4409,7 @@ public partial class MainWindow : Window
         ImportStatusText.Text = "Ready to connect";
         ImportDetailText.Text = (_settings.PlaylistSources ?? []).Count > 0
             ? "Choose a saved source, refresh the unified library, or add another provider."
-            : "Nothing is uploaded; StreamVue reads the source directly.";
+            : "Nothing is uploaded; OrbitalVue reads the source directly.";
     }
 
     private void AddPlaylistSource_Click(object sender, RoutedEventArgs e)
@@ -4413,7 +4443,7 @@ public partial class MainWindow : Window
             ? $"{source.Name} will refresh at launch"
             : $"{source.Name} will open its offline copy at launch";
         ImportDetailText.Text = source.RefreshOnStartup
-            ? "StreamVue will check this provider whenever the app opens."
+            ? "OrbitalVue will check this provider whenever the app opens."
             : "Use Refresh enabled whenever you want to contact this provider manually.";
     }
 
@@ -4553,7 +4583,7 @@ public partial class MainWindow : Window
         if (sender is not Button { Tag: PlaylistSourceDefinition source }) return;
         var confirmation = MessageBox.Show(
             this,
-            $"Remove {source.Name} from StreamVue?\n\nIts encrypted offline playlist will also be removed. Other sources and the currently playing channel are not affected.",
+            $"Remove {source.Name} from OrbitalVue?\n\nIts encrypted offline playlist will also be removed. Other sources and the currently playing channel are not affected.",
             "Remove playlist source",
             MessageBoxButton.YesNo,
             MessageBoxImage.Question,
@@ -4918,7 +4948,7 @@ public partial class MainWindow : Window
             if (!ReferenceEquals(_plexAccountCancellation, cancellation)) return;
             _plexAccountChallenge = challenge;
             PlexAccountStatusText.Text =
-                $"Approval code {challenge.Code} is ready. Complete approval in Plex; StreamVue will detect it automatically.";
+                $"Approval code {challenge.Code} is ready. Complete approval in Plex; OrbitalVue will detect it automatically.";
             PlexAccountOpenButton.Visibility = Visibility.Visible;
             OpenPlexAccountApproval(challenge);
 
@@ -4941,7 +4971,7 @@ public partial class MainWindow : Window
             PlexAccountServerBox.SelectedIndex = 0;
             PlexAccountPicker.Visibility = Visibility.Visible;
             PlexAccountStatusText.Text =
-                $"Plex approved StreamVue and returned {discovery.Servers.Count:N0} server(s). Choose the connection to keep on this PC.";
+                $"Plex approved OrbitalVue and returned {discovery.Servers.Count:N0} server(s). Choose the connection to keep on this PC.";
             PlexAccountSignInButton.Content = "Use another Plex account";
             PlexAccountSignInButton.IsEnabled = true;
             PlexAccountOpenButton.Visibility = Visibility.Collapsed;
@@ -5038,7 +5068,7 @@ public partial class MainWindow : Window
         if (!connection.IsSecure && PlexAccountAllowHttpBox.IsChecked != true)
         {
             PlexAccountStatusText.Text =
-                "This address uses HTTP. Confirm the trusted local-network warning before StreamVue can send the server token.";
+                "This address uses HTTP. Confirm the trusted local-network warning before OrbitalVue can send the server token.";
             return;
         }
 
@@ -5343,7 +5373,7 @@ public partial class MainWindow : Window
             : string.Empty;
         if (!profile.HasOverrides)
         {
-            CurrentChannelProfileText.Text = $"{_currentChannel.Name} • {snapshot?.TuneStrategy ?? "PC defaults"}{startup}. StreamVue will learn and remember any recovery this channel needs.";
+            CurrentChannelProfileText.Text = $"{_currentChannel.Name} • {snapshot?.TuneStrategy ?? "PC defaults"}{startup}. OrbitalVue will learn and remember any recovery this channel needs.";
             return;
         }
         var parts = new List<string>();
@@ -5512,11 +5542,11 @@ public partial class MainWindow : Window
     {
         var dialog = new SaveFileDialog
         {
-            Title = "Back up StreamVue",
-            FileName = $"StreamVue-backup-{DateTime.Now:yyyy-MM-dd}.streamvue-backup",
-            DefaultExt = ".streamvue-backup",
+            Title = "Back up OrbitalVue",
+            FileName = $"OrbitalVue-backup-{DateTime.Now:yyyy-MM-dd}.orbitalvue-backup",
+            DefaultExt = ".orbitalvue-backup",
             AddExtension = true,
-            Filter = "StreamVue backup (*.streamvue-backup)|*.streamvue-backup"
+            Filter = "OrbitalVue backup (*.orbitalvue-backup)|*.orbitalvue-backup|Legacy StreamVue backup (*.streamvue-backup)|*.streamvue-backup"
         };
         if (dialog.ShowDialog(this) != true) return;
 
@@ -5525,7 +5555,7 @@ public partial class MainWindow : Window
             await _settingsStore.SaveAsync(_settings);
             var fileCount = await _maintenanceService.CreateBackupAsync(dialog.FileName);
             FooterStatusDot.Fill = LiveBrush;
-            FooterStatusText.Text = $"StreamVue backup created • {fileCount} protected data files";
+            FooterStatusText.Text = $"OrbitalVue backup created • {fileCount} protected data files";
         }
         catch (Exception exception)
         {
@@ -5538,16 +5568,16 @@ public partial class MainWindow : Window
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Restore a StreamVue backup",
+            Title = "Restore an OrbitalVue backup",
             CheckFileExists = true,
-            Filter = "StreamVue backup (*.streamvue-backup)|*.streamvue-backup"
+            Filter = "OrbitalVue backup (*.orbitalvue-backup)|*.orbitalvue-backup|Legacy StreamVue backup (*.streamvue-backup)|*.streamvue-backup"
         };
         if (dialog.ShowDialog(this) != true) return;
 
         var confirmation = MessageBox.Show(
             this,
-            "Restoring this backup will replace the playlists, favorites, guide data, settings, and Playback IQ profiles currently saved on this Windows account. StreamVue will restart afterward.\n\nContinue?",
-            "Restore StreamVue backup",
+            "Restoring this backup will replace the playlists, favorites, guide data, settings, and Playback IQ profiles currently saved on this Windows account. OrbitalVue will restart afterward.\n\nContinue?",
+            "Restore OrbitalVue backup",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning,
             MessageBoxResult.No);
@@ -5563,7 +5593,7 @@ public partial class MainWindow : Window
             var fileCount = await _maintenanceService.RestoreBackupAsync(dialog.FileName);
             MessageBox.Show(
                 this,
-                $"Restored {fileCount} StreamVue data files. A recovery copy of the replaced data was kept, and StreamVue will now restart.",
+                $"Restored {fileCount} OrbitalVue data files. A recovery copy of the replaced data was kept, and OrbitalVue will now restart.",
                 "Backup restored",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -5582,8 +5612,8 @@ public partial class MainWindow : Window
     {
         var dialog = new SaveFileDialog
         {
-            Title = "Export StreamVue diagnostics",
-            FileName = $"StreamVue-diagnostics-{DateTime.Now:yyyyMMdd-HHmm}.zip",
+            Title = "Export OrbitalVue diagnostics",
+            FileName = $"OrbitalVue-diagnostics-{DateTime.Now:yyyyMMdd-HHmm}.zip",
             DefaultExt = ".zip",
             AddExtension = true,
             Filter = "ZIP archive (*.zip)|*.zip"
@@ -5630,7 +5660,7 @@ public partial class MainWindow : Window
         FileNotFoundException => "The selected file could not be found.",
         InvalidDataException invalidData => invalidData.Message,
         IOException => "The file is being used or there is not enough available storage.",
-        _ => "StreamVue could not complete that operation."
+        _ => "OrbitalVue could not complete that operation."
     };
 
     private BufferPreset ReadSelectedBufferPreset()
@@ -5779,7 +5809,7 @@ public partial class MainWindow : Window
                 UpdateNavigationText.Text = "UPDATE READY";
                 UpdateNavigationButton.Background = new SolidColorBrush(Color.FromRgb(22, 61, 54));
                 UpdateNavigationButton.BorderBrush = LiveBrush;
-                UpdateNavigationButton.ToolTip = $"StreamVue {result.AvailableVersion} is ready to install";
+                UpdateNavigationButton.ToolTip = $"OrbitalVue {result.AvailableVersion} is ready to install";
             }
         }
         catch
@@ -5795,7 +5825,7 @@ public partial class MainWindow : Window
         UpdateNavigationButton.ClearValue(BorderBrushProperty);
         UpdateNavigationButton.ToolTip = _appUpdateService.IsStoreManaged
             ? "Updates are managed by Microsoft Store"
-            : "Check for a new StreamVue version";
+            : "Check for a new OrbitalVue version";
     }
 
     private void OpenUpdateModal()
@@ -5810,7 +5840,7 @@ public partial class MainWindow : Window
             ? "Updates are managed by Microsoft Store"
             : "Ready to check for a new version";
         UpdateDetailText.Text = _appUpdateService.IsStoreManaged
-            ? "Microsoft Store installs signed StreamVue updates automatically according to your Store settings. No separate StreamVue download is required."
+            ? "Microsoft Store installs signed OrbitalVue updates automatically according to your Store settings. No separate OrbitalVue download is required."
             : $"Checking the {UpdateChannelLabel} channel. Your playlists and settings stay on this PC.";
         UpdateSubtitleText.Text = _appUpdateService.IsStoreManaged
             ? "Microsoft Store keeps this installation current."
@@ -5848,7 +5878,7 @@ public partial class MainWindow : Window
         SetUpdateBusy(true);
         UpdateStateBadgeText.Text = "CHECKING";
         UpdateStatusText.Text = "Checking for updates…";
-        UpdateDetailText.Text = $"Contacting the StreamVue {UpdateChannelLabel} release service.";
+        UpdateDetailText.Text = $"Contacting the OrbitalVue {UpdateChannelLabel} release service.";
         UpdateProgress.Visibility = Visibility.Visible;
         UpdateProgress.IsIndeterminate = true;
 
@@ -5864,8 +5894,8 @@ public partial class MainWindow : Window
                     UpdateStateBadge.Background = new SolidColorBrush(Color.FromRgb(23, 54, 47));
                     UpdateStateBadgeText.Foreground = LiveBrush;
                     UpdateStateBadgeText.Text = "AVAILABLE";
-                    UpdateStatusText.Text = $"StreamVue {result.AvailableVersion} is ready";
-                    UpdateDetailText.Text = "Download the update now. StreamVue will close, install it in place, and reopen automatically.";
+                    UpdateStatusText.Text = $"OrbitalVue {result.AvailableVersion} is ready";
+                    UpdateDetailText.Text = "Download the update now. OrbitalVue will close, install it in place, and reopen automatically.";
                     UpdateActionButton.Content = "Download & restart";
                     break;
                 case AppUpdateState.Current:
@@ -5874,14 +5904,14 @@ public partial class MainWindow : Window
                     UpdateStateBadgeText.Foreground = new SolidColorBrush(Color.FromRgb(170, 182, 200));
                     UpdateStateBadgeText.Text = "CURRENT";
                     UpdateStatusText.Text = "You’re up to date";
-                    UpdateDetailText.Text = $"StreamVue {result.CurrentVersion} is the newest published {UpdateChannelLabel} version.";
+                    UpdateDetailText.Text = $"OrbitalVue {result.CurrentVersion} is the newest published {UpdateChannelLabel} version.";
                     UpdateActionButton.Content = "Check again";
                     break;
                 case AppUpdateState.DeveloperBuild:
                     UpdateStateBadge.Background = new SolidColorBrush(Color.FromRgb(62, 48, 27));
                     UpdateStateBadgeText.Foreground = WarningBrush;
                     UpdateStateBadgeText.Text = "DEV BUILD";
-                    UpdateStatusText.Text = "Install StreamVue once to enable updates";
+                    UpdateStatusText.Text = "Install OrbitalVue once to enable updates";
                     UpdateDetailText.Text = "This copy is running directly from a build folder. The installed release can update itself from this screen without uninstalling first.";
                     UpdateActionButton.Content = "Check again";
                     break;
@@ -5891,7 +5921,7 @@ public partial class MainWindow : Window
                     UpdateStateBadgeText.Foreground = new SolidColorBrush(Color.FromRgb(170, 182, 200));
                     UpdateStateBadgeText.Text = "STORE";
                     UpdateStatusText.Text = "Updates are managed by Microsoft Store";
-                    UpdateDetailText.Text = "Microsoft Store installs signed StreamVue updates automatically according to your Store settings. No separate StreamVue download is required.";
+                    UpdateDetailText.Text = "Microsoft Store installs signed OrbitalVue updates automatically according to your Store settings. No separate OrbitalVue download is required.";
                     UpdateActionButton.Content = "Managed by Store";
                     break;
             }
@@ -5932,7 +5962,7 @@ public partial class MainWindow : Window
         SetUpdateBusy(true);
         UpdateStateBadgeText.Text = "DOWNLOADING";
         UpdateStatusText.Text = "Downloading the update…";
-        UpdateDetailText.Text = "Keep StreamVue open. It will restart as soon as the verified package is ready.";
+        UpdateDetailText.Text = "Keep OrbitalVue open. It will restart as soon as the verified package is ready.";
         UpdateProgress.Visibility = Visibility.Visible;
         UpdateProgress.IsIndeterminate = false;
         UpdateProgress.Value = 0;
@@ -5990,7 +6020,7 @@ public partial class MainWindow : Window
         UpdateStatusText.Text = $"{UpdateChannelLabel} channel selected";
         UpdateDetailText.Text = channel == AppUpdateChannel.Stable
             ? "Stable installs only finished public releases. Choose Check for updates when you’re ready."
-            : "Preview includes the early builds used to review new StreamVue features. Choose Check for updates when you’re ready.";
+            : "Preview includes the early builds used to review new OrbitalVue features. Choose Check for updates when you’re ready.";
         UpdateActionButton.Content = "Check for updates";
     }
 
@@ -6013,7 +6043,7 @@ public partial class MainWindow : Window
                 _settings.Updates.LastRollbackVersion = restored.RestoredVersion;
                 await _settingsStore.SaveAsync(_settings);
                 FooterStatusDot.Fill = WarningBrush;
-                FooterStatusText.Text = $"Update recovery restored StreamVue {restored.RestoredVersion}";
+                FooterStatusText.Text = $"Update recovery restored OrbitalVue {restored.RestoredVersion}";
             }
             return;
         }
@@ -6030,7 +6060,7 @@ public partial class MainWindow : Window
         if (priorNotice is not null)
         {
             FooterStatusDot.Fill = WarningBrush;
-            FooterStatusText.Text = $"Update recovery restored StreamVue {priorNotice.RestoredVersion}";
+            FooterStatusText.Text = $"Update recovery restored OrbitalVue {priorNotice.RestoredVersion}";
         }
     }
 
@@ -6252,7 +6282,7 @@ public partial class MainWindow : Window
             {
                 var result = MessageBox.Show(
                     this,
-                    $"{candidate.ProgramTitle} overlaps {overlap.ProgramTitle}. StreamVue records the higher-priority schedule and uses start time as the tie-breaker.\n\nSchedule it anyway?",
+                    $"{candidate.ProgramTitle} overlaps {overlap.ProgramTitle}. OrbitalVue records the higher-priority schedule and uses start time as the tie-breaker.\n\nSchedule it anyway?",
                     "Recording schedule conflict",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Warning,
@@ -6436,7 +6466,7 @@ public partial class MainWindow : Window
             {
                 if (recording.StopUtc > now)
                 {
-                    ScheduleRecordingRecovery(recording, "Recorder resumed after Windows or StreamVue restarted", now);
+                    ScheduleRecordingRecovery(recording, "Recorder resumed after Windows or OrbitalVue restarted", now);
                 }
                 else
                 {
@@ -6684,11 +6714,11 @@ public partial class MainWindow : Window
         {
             recording.OutputPaths ??= [];
             if (recording.StopUtc > now)
-                ScheduleRecordingRecovery(recording, "Ready to resume after StreamVue restarted", now);
+                ScheduleRecordingRecovery(recording, "Ready to resume after OrbitalVue restarted", now);
             else
             {
                 recording.Status = HasPlayableRecordingSegment(recording) ? "Partial" : "Missed";
-                recording.Detail = HasPlayableRecordingSegment(recording) ? "Playable segment preserved before shutdown" : "StreamVue closed before completion";
+                recording.Detail = HasPlayableRecordingSegment(recording) ? "Playable segment preserved before shutdown" : "OrbitalVue closed before completion";
             }
         }
         foreach (var recording in _settings.ScheduledRecordings)
@@ -7105,7 +7135,7 @@ public partial class MainWindow : Window
     {
         var dialog = new OpenFolderDialog
         {
-            Title = "Choose the StreamVue recordings folder",
+            Title = "Choose the OrbitalVue recordings folder",
             InitialDirectory = ResolveRecordingsFolder(RecordingFolderBox.Text),
             Multiselect = false
         };
@@ -7280,7 +7310,7 @@ public partial class MainWindow : Window
         BroadcastTitle.Visibility = Visibility.Collapsed;
         UpdateNavigationButton.Visibility = Visibility.Collapsed;
         MiniPlayerButtonText.Text = "FULL APP";
-        MiniPlayerButton.ToolTip = "Return to the complete StreamVue workspace (Ctrl+Shift+M)";
+        MiniPlayerButton.ToolTip = "Return to the complete OrbitalVue workspace (Ctrl+Shift+M)";
 
         MinWidth = 480;
         MinHeight = 300;
@@ -7806,7 +7836,7 @@ public partial class MainWindow : Window
         if (_automationRun || _trayIcon is not null) return;
         var menu = new System.Windows.Forms.ContextMenuStrip();
         _trayStatusItem = new System.Windows.Forms.ToolStripMenuItem("Background recorder ready") { Enabled = false };
-        var openItem = new System.Windows.Forms.ToolStripMenuItem("Open StreamVue");
+        var openItem = new System.Windows.Forms.ToolStripMenuItem("Open OrbitalVue");
         openItem.Click += (_, _) => Dispatcher.BeginInvoke(OpenFromBackground);
         var dvrItem = new System.Windows.Forms.ToolStripMenuItem("Open DVR center");
         dvrItem.Click += (_, _) => Dispatcher.BeginInvoke(() =>
@@ -7822,7 +7852,7 @@ public partial class MainWindow : Window
             ApplyDvrScheduleState(snapshot);
             UpdateDvrUi(snapshot);
         });
-        var exitItem = new System.Windows.Forms.ToolStripMenuItem("Exit StreamVue");
+        var exitItem = new System.Windows.Forms.ToolStripMenuItem("Exit OrbitalVue");
         exitItem.Click += (_, _) => Dispatcher.BeginInvoke(ExitFromTray);
         menu.Items.AddRange([
             _trayStatusItem,
@@ -7848,7 +7878,7 @@ public partial class MainWindow : Window
         _trayIcon = new System.Windows.Forms.NotifyIcon
         {
             Icon = icon,
-            Text = "StreamVue • background recorder ready",
+            Text = "OrbitalVue • background recorder ready",
             ContextMenuStrip = menu,
             Visible = true
         };
@@ -7872,8 +7902,8 @@ public partial class MainWindow : Window
             _trayNoticeShown = true;
             _trayIcon.ShowBalloonTip(
                 2500,
-                "StreamVue recorder is still running",
-                "Scheduled recordings and wake timers remain armed. Double-click the tray icon to reopen StreamVue.",
+                "OrbitalVue recorder is still running",
+                "Scheduled recordings and wake timers remain armed. Double-click the tray icon to reopen OrbitalVue.",
                 System.Windows.Forms.ToolTipIcon.Info);
         }
     }
@@ -7912,7 +7942,7 @@ public partial class MainWindow : Window
             OpenFromBackground();
             var result = MessageBox.Show(
                 this,
-                $"{futureSchedules:N0} upcoming recording{(futureSchedules == 1 ? string.Empty : "s")} will not start after StreamVue exits.\n\nExit anyway?",
+                $"{futureSchedules:N0} upcoming recording{(futureSchedules == 1 ? string.Empty : "s")} will not start after OrbitalVue exits.\n\nExit anyway?",
                 "Exit background recorder",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning,
@@ -8012,7 +8042,7 @@ public partial class MainWindow : Window
         {
             var result = MessageBox.Show(
                 this,
-                $"StreamVue is recording {_dvrRecording.Snapshot.ChannelName}. Closing now will stop and save the recording.\n\nStop recording and close StreamVue?",
+                $"OrbitalVue is recording {_dvrRecording.Snapshot.ChannelName}. Closing now will stop and save the recording.\n\nStop recording and close OrbitalVue?",
                 "Recording in progress",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning,
@@ -8023,7 +8053,7 @@ public partial class MainWindow : Window
                 _allowFinalClose = false;
                 return;
             }
-            var snapshot = _dvrRecording.Stop("Recording stopped when StreamVue closed");
+            var snapshot = _dvrRecording.Stop("Recording stopped when OrbitalVue closed");
             ApplyDvrScheduleState(snapshot);
             _ = _settingsStore.SaveAsync(_settings);
         }
@@ -8053,7 +8083,7 @@ public partial class MainWindow : Window
         _updateCancellation?.Cancel();
         CancelMediaPlaybackResolution(clearResume: true);
         _guideCancellation?.Cancel();
-        CancelPlexAccountSignInCore("Plex account sign-in was canceled because StreamVue is closing.");
+        CancelPlexAccountSignInCore("Plex account sign-in was canceled because OrbitalVue is closing.");
         _displayRefreshRate?.Dispose();
         VideoSurface.MediaPlayer = null;
         MultiviewTiles.ItemsSource = null;
@@ -8112,9 +8142,9 @@ public partial class MainWindow : Window
 
     private static string SafeUpdateErrorMessage(Exception exception) => exception switch
     {
-        HttpRequestException => "Check your internet connection and try again. StreamVue could not read the public release feed.",
+        HttpRequestException => "Check your internet connection and try again. OrbitalVue could not read the public release feed.",
         TaskCanceledException => "The update service took too long to respond. Try again in a moment.",
-        UnauthorizedAccessException => "Windows blocked access to the update folder. Restart StreamVue normally and try again.",
+        UnauthorizedAccessException => "Windows blocked access to the update folder. Restart OrbitalVue normally and try again.",
         IOException => "Windows could not save the update package. Check free disk space and try again.",
         _ => "The current installation was left unchanged. Try again, or use the newest installer if the problem continues."
     };

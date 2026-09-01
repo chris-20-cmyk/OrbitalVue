@@ -317,7 +317,7 @@ public sealed class MicrosoftStorePremiumService : IDisposable
     private static string SafeStoreError(Exception exception) => exception switch
     {
         InvalidOperationException invalid when !string.IsNullOrWhiteSpace(invalid.Message) => invalid.Message,
-        UnauthorizedAccessException => "Microsoft Store purchases are unavailable while StreamVue is running elevated.",
+        UnauthorizedAccessException => "Microsoft Store purchases are unavailable while OrbitalVue is running elevated.",
         _ => "The Microsoft Store license service is unavailable. Your existing playlist sources remain available."
     };
 

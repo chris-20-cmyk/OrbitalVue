@@ -1,6 +1,6 @@
-# StreamVue for Samsung Tizen and LG webOS
+# OrbitalVue for Samsung Tizen and LG webOS
 
-This project is the shared television UI for StreamVue 5.1. It deliberately uses framework-free TypeScript and a small Vite bundle so remote navigation and startup remain responsive on embedded television browsers.
+This project is the shared television UI for OrbitalVue 5.6. It deliberately uses framework-free TypeScript and a small Vite bundle so remote navigation and startup remain responsive on embedded television browsers.
 
 ## What works
 
@@ -20,7 +20,7 @@ This project is the shared television UI for StreamVue 5.1. It deliberately uses
 
 Raw playlist locations never appear in normal browsing; only the provider host and optional port are displayed. The full source URL remains in app-private television storage so it can refresh at launch.
 
-Plex and Emby credentials are kept outside the catalog database. Samsung builds use Tizen KeyManager. LG webOS 24 and newer use Key Manager 3 backed by the television's trusted execution environment; older or unsupported televisions intentionally keep the credential for the current app session only and ask the user to reconnect after a restart. Public server identity is verified before a protected request is sent, and cached media snapshots contain only opaque StreamVue locators.
+Plex and Emby credentials are kept outside the catalog database. Samsung builds use Tizen KeyManager. LG webOS 24 and newer use Key Manager 3 backed by the television's trusted execution environment; older or unsupported televisions intentionally keep the credential for the current app session only and ask the user to reconnect after a restart. Public server identity is verified before a protected request is sent, and cached media snapshots contain only opaque OrbitalVue locators.
 
 Personal builds include media-center access. Setting `VITE_STREAMVUE_DISTRIBUTION_MODE=store` produces the fail-closed store surface: it shows the locked premium state, renders no credential inputs, and blocks refresh and playback before the credential vault or media-server network is touched. Samsung packages can unlock after an exact Seller Office/DPI non-consumable and HTTPS entitlement verifier are configured; the DPI security key must remain on that backend. LG packages stay locked until a reviewed third-party billing provider is contracted and server-side verification is implemented. See [premium access and store readiness](../../docs/premium-entitlements.md).
 
@@ -36,9 +36,9 @@ pnpm tv:build
 
 The exact request/response boundary is committed in [`contracts/samsung-checkout-verifier-v1.schema.json`](../../contracts/samsung-checkout-verifier-v1.schema.json). The backend response includes `checkoutAvailable`, computed with Samsung DPI's signed country-availability request; no DPI security key or check value is sent to the TV. The normal unsigned CI artifact does not set these values and remains visibly store-locked.
 
-The television's native player cannot attach arbitrary authorization headers. StreamVue therefore materializes the provider token into the native playback URL only for the active playback request, clears that URL when playback stops, and never stores it in source metadata or offline snapshots.
+The television's native player cannot attach arbitrary authorization headers. OrbitalVue therefore materializes the provider token into the native playback URL only for the active playback request, clears that URL when playback stops, and never stores it in source metadata or offline snapshots.
 
-Samsung AVPlay exposes User-Agent and Cookie streaming properties but not an arbitrary Referer property. LG's portable HTML5 video path cannot guarantee custom request headers. StreamVue reports that limitation instead of sending a private source through a proxy.
+Samsung AVPlay exposes User-Agent and Cookie streaming properties but not an arbitrary Referer property. LG's portable HTML5 video path cannot guarantee custom request headers. OrbitalVue reports that limitation instead of sending a private source through a proxy.
 
 ## Build and verify
 
@@ -71,7 +71,7 @@ LG uses the free Developer Mode app and the current webOS CLI. Register the TV, 
 ```text
 node node_modules/@webos-tools/cli/bin/ares-setup-device.js
 node node_modules/@webos-tools/cli/bin/ares-package.js platforms/tv-web/dist/webos
-node node_modules/@webos-tools/cli/bin/ares-install.js --device YOUR_TV com.streamvue.player.tv_5.1.0_all.ipk
+node node_modules/@webos-tools/cli/bin/ares-install.js --device YOUR_TV com.orbitalvue.player.tv_5.6.0_all.ipk
 ```
 
 The repository pins `@webos-tools/cli` 3.2.5 in `pnpm-lock.yaml`. These direct Node entry points also avoid a Windows command-shim issue observed with `pnpm exec`. LG Developer Mode is time limited, so extend the session before it expires or the TV will remove developer-installed apps.
@@ -104,7 +104,7 @@ The distributor certificate must have the Partner privilege level because `sso.p
 
 ## LG Seller Lounge candidate
 
-The manual **Build LG webOS Seller Lounge candidate** workflow produces a free Store-mode IPK with Plex and Emby visibly locked. This is deliberate: LG no longer provides its native television billing service, and StreamVue will not simulate ownership with a local flag or a client-side payment callback. Ordinary authorized M3U sources remain available.
+The manual **Build LG webOS Seller Lounge candidate** workflow produces a free Store-mode IPK with Plex and Emby visibly locked. This is deliberate: LG no longer provides its native television billing service, and OrbitalVue will not simulate ownership with a local flag or a client-side payment callback. Ordinary authorized M3U sources remain available.
 
 Before the workflow can run, complete `store/lg-distribution.json` with the real Seller Lounge account type and mark each human prerequisite true only after it is actually finished:
 
@@ -115,6 +115,6 @@ Before the workflow can run, complete `store/lg-distribution.json` with the real
 - privacy disclosures reviewed
 - real-TV model matrix completed
 
-The verifier also locks the permanent `com.streamvue.player.tv` identity, validates the package icons, splash, and separate 400×400 Seller Lounge icon, and proves that LG remains null/unready in `store/premium-products.json`. The workflow stamps only generated `appinfo.json`, invokes the pinned official CLI, independently opens the resulting IPK, and emits the IPK, store icon, package analysis, audit record, and checksums. It does not use or invent an author certificate, accept Seller Lounge terms, upload the app, or claim LG approval.
+The verifier also locks the permanent `com.orbitalvue.player.tv` identity, validates the package icons, splash, and separate 400×400 Seller Lounge icon, and proves that LG remains null/unready in `store/premium-products.json`. The workflow stamps only generated `appinfo.json`, invokes the pinned official CLI, independently opens the resulting IPK, and emits the IPK, store icon, package analysis, audit record, and checksums. It does not use or invent an author certificate, accept Seller Lounge terms, upload the app, or claim LG approval.
 
 LG requires a UX scenario and a fully completed self-checklist for submission, and every later update receives its own QA review. See LG's [app approval process](https://webostv.developer.lge.com/distribute/app-approval-process), [app self-checklist](https://webostv.developer.lge.com/distribute/app-self-checklist), and [app resource requirements](https://webostv.developer.lge.com/develop/getting-started/app-resources).

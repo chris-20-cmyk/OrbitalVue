@@ -86,7 +86,7 @@ struct MediaCenterConnectView: View {
                     Label("Security warning", systemImage: "exclamationmark.shield.fill")
                         .foregroundStyle(theme.warning)
                 } footer: {
-                    Text("HTTP can expose your sign-in and viewing activity to devices on this network. StreamVue saves this approval only for the verified server.")
+                    Text("HTTP can expose your sign-in and viewing activity to devices on this network. OrbitalVue saves this approval only for the verified server.")
                 }
             }
 

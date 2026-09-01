@@ -3,5 +3,5 @@
     { "filename" : "Front.png", "idiom" : "tv", "scale" : "1x" },
     { "filename" : "Front@2x.png", "idiom" : "tv", "scale" : "2x" }
   ],
-  "info" : { "author" : "com.streamvue.player", "version" : 1 }
+  "info" : { "author" : "com.orbitalvue.player", "version" : 1 }
 }

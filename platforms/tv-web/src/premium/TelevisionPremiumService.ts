@@ -158,7 +158,7 @@ export class SamsungCheckoutPremiumService implements TelevisionPremiumService {
       "samsung-checkout",
       config
         ? "Samsung Checkout is preparing the one-time premium product."
-        : "Samsung Checkout needs an exact Seller Office app ID, non-consumable product ID, and HTTPS StreamVue verifier before purchases can be offered."
+        : "Samsung Checkout needs an exact Seller Office app ID, non-consumable product ID, and HTTPS OrbitalVue verifier before purchases can be offered."
     );
   }
 

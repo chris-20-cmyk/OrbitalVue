@@ -53,7 +53,7 @@ struct MediaCenterTests {
         let client = try PlexAccountClient(
             httpClient: http,
             clientIdentifier: "streamvue-test-device",
-            product: "StreamVue\r\nX-Injected: blocked",
+            product: "OrbitalVue\r\nX-Injected: blocked",
             version: "5.1-test",
             now: { now }
         )

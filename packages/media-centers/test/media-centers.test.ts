@@ -310,7 +310,7 @@ describe("Plex integration", () => {
     const now = new Date("2026-08-26T12:00:00.000Z");
     const client = new PlexAccountClient(mock.transport, {
       clientIdentifier: "streamvue-test-device",
-      product: "StreamVue\r\nX-Injected: blocked",
+      product: "OrbitalVue\r\nX-Injected: blocked",
       version: "5.1-test",
       now: () => now
     });
@@ -406,7 +406,7 @@ describe("Plex integration", () => {
       token: plexToken,
       credentialBinding: createMediaCenterCredentialBinding(connection),
       clientIdentifier: "streamvue-test-device",
-      product: "StreamVue\r\nX-Injected: no",
+      product: "OrbitalVue\r\nX-Injected: no",
       version: "5.1-test"
     });
 
@@ -463,7 +463,7 @@ describe("Emby integration", () => {
       token,
       credentialBinding: createMediaCenterCredentialBinding(connection),
       device: {
-        client: "StreamVue",
+        client: "OrbitalVue",
         device: "Vitest",
         deviceId: "streamvue-identity-test",
         version: "5.1-test"
@@ -551,7 +551,7 @@ describe("Emby integration", () => {
       throw new Error(`Unexpected Emby request: ${request.url}`);
     });
     const device = {
-      client: "StreamVue",
+      client: "OrbitalVue",
       device: "Vitest",
       deviceId: "streamvue-test-device",
       version: "5.1-test"

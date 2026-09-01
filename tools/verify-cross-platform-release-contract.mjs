@@ -60,7 +60,7 @@ const expectedPlatforms = {
     ]
   },
   android: {
-    applicationId: "com.streamvue.player",
+    applicationId: "com.orbitalvue.player",
     distributionTarget: "google-play",
     artifactKind: "upload-key-signed-aab",
     candidateWorkflow: ".github/workflows/build-google-play-candidate.yml",
@@ -83,7 +83,7 @@ const expectedPlatforms = {
     ]
   },
   apple: {
-    applicationId: "com.streamvue.player",
+    applicationId: "com.orbitalvue.player",
     distributionTarget: "apple-app-store",
     artifactKind: "distribution-signed-ipa-set",
     candidateWorkflow: ".github/workflows/build-apple-store-candidate.yml",
@@ -106,7 +106,7 @@ const expectedPlatforms = {
     ]
   },
   samsung: {
-    applicationId: "SvTvPlayer.StreamVue",
+    applicationId: "OvTvPlayer.OrbitalVue",
     distributionTarget: "samsung-seller-office",
     artifactKind: "author-partner-signed-wgt",
     candidateWorkflow: ".github/workflows/build-samsung-store-candidate.yml",
@@ -129,7 +129,7 @@ const expectedPlatforms = {
     ]
   },
   lg: {
-    applicationId: "com.streamvue.player.tv",
+    applicationId: "com.orbitalvue.player.tv",
     distributionTarget: "lg-seller-lounge",
     artifactKind: "webos-ipk",
     candidateWorkflow: ".github/workflows/build-lg-seller-lounge-candidate.yml",
@@ -252,12 +252,17 @@ if (lg.appId !== expectedPlatforms.lg.applicationId
 }
 
 const androidBuild = await readText("platforms/android/app/build.gradle.kts");
-for (const field of ["namespace", "applicationId"]) {
-  const identityPattern = new RegExp(`\\b${field}\\s*=\\s*\"${escapePattern(expectedPlatforms.android.applicationId)}\"`);
-  if (!identityPattern.test(androidBuild)) fail(`Android ${field} does not match the release contract`);
+const androidApplicationPattern = new RegExp(
+  `\\bapplicationId\\s*=\\s*\"${escapePattern(expectedPlatforms.android.applicationId)}\"`
+);
+if (!androidApplicationPattern.test(androidBuild)) {
+  fail("Android applicationId does not match the release contract");
+}
+if (!/\bnamespace\s*=\s*"com\.streamvue\.player"/.test(androidBuild)) {
+  fail("Android must retain its internal Kotlin namespace during the OrbitalVue identity bridge");
 }
 const appleProject = await readText("platforms/apple/project.yml");
-const appleIdentities = appleProject.match(/PRODUCT_BUNDLE_IDENTIFIER:\s*com\.streamvue\.player/g) ?? [];
+const appleIdentities = appleProject.match(/PRODUCT_BUNDLE_IDENTIFIER:\s*com\.orbitalvue\.player/g) ?? [];
 if (appleIdentities.length !== 2) fail("iOS and tvOS must keep the same reviewed Apple bundle ID");
 const windowsWorkflow = await readText(expectedPlatforms.windows.candidateWorkflow);
 if (!windowsWorkflow.includes("vars.STREAMVUE_WINDOWS_IDENTITY_NAME")
@@ -274,7 +279,7 @@ const releaseContractWorkflow = await readText(".github/workflows/release-contra
 for (const fragment of [
   "node tools/generate-release-readiness-report.mjs",
   "artifacts/release-readiness/",
-  "streamvue-release-readiness"
+  "orbitalvue-release-readiness"
 ]) {
   if (!releaseContractWorkflow.includes(fragment)) {
     fail(`release contract workflow is missing readiness report fragment: ${fragment}`);

@@ -1,4 +1,5 @@
 using System.IO;
+using System.Globalization;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -13,7 +14,7 @@ public sealed partial class MediaCenterSourceService
     private const int PageSize = 200;
     private const int MaximumItems = 20_000;
     private const int MaximumResponseBytes = 32 * 1024 * 1024;
-    private const string ClientVersion = "5.5.0";
+    private const string ClientVersion = "5.6.0";
 
     private readonly MediaCenterCredentialStore _credentialStore;
     private readonly HttpClient _http;
@@ -251,7 +252,7 @@ public sealed partial class MediaCenterSourceService
                     ("ParentId", library.Id),
                     ("Recursive", "true"),
                     ("IncludeItemTypes", "Movie,Episode,Video,MusicVideo,Recording,LiveTvChannel,Audio"),
-                    ("Fields", "MediaSources,MediaStreams,Path,PrimaryImageAspectRatio,SortName,Overview"),
+                    ("Fields", "MediaSources,MediaStreams,Path,PrimaryImageAspectRatio,SortName,Overview,DateCreated,ProductionYear"),
                     ("EnableImages", "true"),
                     ("EnableUserData", "true"),
                     ("StartIndex", start.ToString()),
@@ -465,7 +466,15 @@ public sealed partial class MediaCenterSourceService
                     : null,
                 DurationMilliseconds = Math.Max(0, item.DurationMilliseconds),
                 ResumePositionMilliseconds = Math.Max(0, item.ResumePositionMilliseconds),
-                IsPlayed = item.Played
+                IsPlayed = item.Played,
+                SourceName = credential.DisplayName,
+                MediaLibraryTitle = libraryNames.GetValueOrDefault(item.LibraryId) ?? item.LibraryTitle,
+                SeriesTitle = item.SeriesTitle,
+                SeasonNumber = item.SeasonNumber,
+                EpisodeNumber = item.EpisodeNumber,
+                ReleaseYear = item.ReleaseYear,
+                AddedAtUtc = item.AddedAtUtc,
+                LastPlayedAtUtc = item.LastPlayedAtUtc
             });
         }
         return new PlaylistResult(
@@ -495,6 +504,9 @@ public sealed partial class MediaCenterSourceService
             ReadLong(element, "duration") ?? 0,
             ReadLong(element, "viewOffset") ?? 0,
             (ReadInt(element, "viewCount") ?? 0) > 0,
+            ReadInt(element, "year"),
+            ReadUnixTimestamp(element, "addedAt"),
+            ReadUnixTimestamp(element, "lastViewedAt"),
             TryReadPlexArtworkVersion(ReadString(element, "thumb"), id, out var artworkVersion),
             artworkVersion);
     }
@@ -523,6 +535,9 @@ public sealed partial class MediaCenterSourceService
             Math.Max(0, durationTicks / 10_000),
             Math.Max(0, resumeTicks / 10_000),
             userData is not null && ReadBool(userData.Value, "Played"),
+            ReadInt(element, "ProductionYear"),
+            ReadTimestamp(element, "DateCreated"),
+            userData is null ? null : ReadTimestamp(userData.Value, "LastPlayedDate"),
             !string.IsNullOrWhiteSpace(ReadString(element, "PrimaryImageTag")) ||
             imageTags is not null && !string.IsNullOrWhiteSpace(ReadString(imageTags.Value, "Primary")),
             null);
@@ -567,6 +582,32 @@ public sealed partial class MediaCenterSourceService
         return prefix.Length == 0 ? item.Title : $"{prefix} • {item.Title}";
     }
 
+    private static DateTimeOffset? ReadUnixTimestamp(JsonElement element, string name)
+    {
+        var value = ReadLong(element, name);
+        if (value is null or <= 0) return null;
+        try
+        {
+            return DateTimeOffset.FromUnixTimeSeconds(value.Value);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return null;
+        }
+    }
+
+    private static DateTimeOffset? ReadTimestamp(JsonElement element, string name)
+    {
+        var value = ReadString(element, name);
+        return DateTimeOffset.TryParse(
+            value,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+            out var timestamp)
+            ? timestamp
+            : null;
+    }
+
     private static MediaCenterCredential CreateCredential(
         string provider,
         string serverId,
@@ -599,7 +640,7 @@ public sealed partial class MediaCenterSourceService
         {
             ["Accept"] = "application/json",
             ["X-Plex-Client-Identifier"] = _deviceId,
-            ["X-Plex-Product"] = "StreamVue",
+            ["X-Plex-Product"] = "OrbitalVue",
             ["X-Plex-Version"] = ClientVersion,
             ["X-Plex-Provides"] = "controller"
         };
@@ -611,7 +652,7 @@ public sealed partial class MediaCenterSourceService
     {
         var authorization = new List<KeyValuePair<string, string>>
         {
-            new("Client", "StreamVue"),
+            new("Client", "OrbitalVue"),
             new("Device", "Windows PC"),
             new("DeviceId", _deviceId),
             new("Version", ClientVersion)
@@ -675,7 +716,7 @@ public sealed partial class MediaCenterSourceService
         {
             Timeout = TimeSpan.FromSeconds(45)
         };
-        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("StreamVue", ClientVersion));
+        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("OrbitalVue", ClientVersion));
         return client;
     }
 
@@ -837,6 +878,9 @@ public sealed partial class MediaCenterSourceService
         long DurationMilliseconds,
         long ResumePositionMilliseconds,
         bool Played,
+        int? ReleaseYear,
+        DateTimeOffset? AddedAtUtc,
+        DateTimeOffset? LastPlayedAtUtc,
         bool HasArtwork,
         string? ArtworkVersionTag);
 }

@@ -50,7 +50,7 @@ jobs:
     name: Shared catalog and television packages
     runs-on: ubuntu-latest
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -93,7 +93,7 @@ jobs:
       - name: Upload unsigned television projects
         uses: actions/upload-artifact@v7
         with:
-          name: streamvue-tv-5.1-store-locked-foundation
+          name: orbitalvue-tv-5.6-store-locked-foundation
           if-no-files-found: error
           retention-days: 14
           path: |

@@ -45,7 +45,7 @@ const MAX_PLAYLIST_BYTES = 64 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 const MEDIA_CENTER_PAGE_SIZE = 200;
 const MAX_MEDIA_CENTER_ITEMS = 20_000;
-const MEDIA_CENTER_VERSION = "5.1.0";
+const MEDIA_CENTER_VERSION = "5.6.0";
 
 export interface CatalogLoadResult {
   catalog: StreamVueCatalog;
@@ -121,7 +121,7 @@ export class CatalogRepository {
     } catch {
       return {
         catalog: saved.catalog,
-        notice: "The source is offline. StreamVue kept the last working channel catalog.",
+        notice: "The source is offline. OrbitalVue kept the last working channel catalog.",
         refreshed: false
       };
     }
@@ -199,7 +199,7 @@ export class CatalogRepository {
     const identity = await probePlexServerIdentity(this.mediaTransport, {
       baseUrl,
       clientIdentifier: televisionDeviceId(),
-      product: "StreamVue Television",
+      product: "OrbitalVue Television",
       version: MEDIA_CENTER_VERSION,
       allowInsecureHttp: request.allowInsecureHttp
     });
@@ -353,7 +353,7 @@ export class CatalogRepository {
       if (strict) throw error;
       return {
         catalog: saved.catalog,
-        notice: "The media server is unavailable. StreamVue kept the last token-free library snapshot.",
+        notice: "The media server is unavailable. OrbitalVue kept the last token-free library snapshot.",
         refreshed: false
       };
     }
@@ -404,7 +404,7 @@ export class CatalogRepository {
       token: credential.accessToken,
       credentialBinding: credential.binding,
       clientIdentifier: televisionDeviceId(),
-      product: "StreamVue Television",
+      product: "OrbitalVue Television",
       version: MEDIA_CENTER_VERSION
     });
   }
@@ -632,7 +632,7 @@ function televisionDeviceIdentity(): {
       ? "LG webOS TV"
       : "Television browser";
   return {
-    client: "StreamVue",
+    client: "OrbitalVue",
     device: platform,
     deviceId: televisionDeviceId(),
     version: MEDIA_CENTER_VERSION
@@ -650,7 +650,7 @@ function televisionDeviceId(): string {
     localStorage.setItem(storageKey, generated);
     return generated;
   } catch {
-    const userAgent = typeof navigator === "undefined" ? "StreamVue television" : navigator.userAgent;
+    const userAgent = typeof navigator === "undefined" ? "OrbitalVue television" : navigator.userAgent;
     return `streamvue-tv-${sha256Hex(userAgent).slice(0, 40).toLowerCase()}`;
   }
 }

@@ -167,7 +167,7 @@ $buildAudit = [ordered]@{
     ($buildAudit | ConvertTo-Json -Depth 3),
     [Text.UTF8Encoding]::new($false))
 
-$packageName = "StreamVue-$Version-win-x64-microsoft-store-unsigned.msix"
+$packageName = "OrbitalVue-$Version-win-x64-microsoft-store-unsigned.msix"
 $packagePath = Join-Path $artifactRoot $packageName
 if (Test-Path -LiteralPath $packagePath) { Remove-Item -LiteralPath $packagePath -Force }
 $makeAppx = Get-MakeAppxPath

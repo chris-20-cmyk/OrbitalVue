@@ -12,10 +12,10 @@ import java.time.Instant
 class PlexAccountClientTest {
     private val clock = Instant.parse("2026-08-30T12:00:00Z")
     private val device = MediaCenterDeviceIdentity(
-        client = "StreamVue",
+        client = "OrbitalVue",
         device = "Android",
         deviceId = "streamvue-android-test",
-        version = "5.2.0"
+        version = "5.6.0"
     )
 
     @Test

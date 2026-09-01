@@ -96,7 +96,7 @@ internal fun PlexAccountConnectPanel(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "Approve StreamVue in Plex, then choose one of the servers Plex discovers for your account. StreamVue never receives your Plex password.",
+                "Approve OrbitalVue in Plex, then choose one of the servers Plex discovers for your account. OrbitalVue never receives your Plex password.",
                 color = StreamVueMuted,
                 fontSize = 9.sp
             )
@@ -125,14 +125,14 @@ private fun PlexSignInChallenge(
         PlexQrCode(authorizationUrl)
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            "Scan to approve StreamVue in Plex",
+            "Scan to approve OrbitalVue in Plex",
             color = StreamVueText,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            "StreamVue checks the protected PIN automatically. This request expires in about $minutes minutes.",
+            "OrbitalVue checks the protected PIN automatically. This request expires in about $minutes minutes.",
             color = StreamVueMuted,
             fontSize = 9.sp,
             textAlign = TextAlign.Center

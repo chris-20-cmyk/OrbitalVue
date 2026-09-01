@@ -163,8 +163,8 @@ internal class PlexAccountClient(
         get() = mapOf(
             "Accept" to "application/json",
             "X-Plex-Client-Identifier" to clientIdentifier,
-            "X-Plex-Product" to safeHeader(device.client, "StreamVue"),
-            "X-Plex-Version" to safeHeader(device.version, "5.2.0")
+            "X-Plex-Product" to safeHeader(device.client, "OrbitalVue"),
+            "X-Plex-Version" to safeHeader(device.version, "5.6.0")
         )
 
     private fun authenticatedHeaders(token: String): Map<String, String> =
@@ -262,7 +262,7 @@ internal class PlexAccountClient(
         val query = linkedMapOf(
             "clientID" to clientIdentifier,
             "code" to code,
-            "context[device][product]" to safeHeader(device.client, "StreamVue")
+            "context[device][product]" to safeHeader(device.client, "OrbitalVue")
         ).entries.joinToString("&") { (name, value) ->
             "${encode(name)}=${encode(value)}"
         }

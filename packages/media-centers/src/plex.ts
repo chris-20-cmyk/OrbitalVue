@@ -276,9 +276,9 @@ function plexClientHeaders(configuration: {
       configuration.clientIdentifier,
       "Plex client identifier"
     ),
-    "X-Plex-Product": safeHeaderValue(configuration.product, "StreamVue"),
+    "X-Plex-Product": safeHeaderValue(configuration.product, "OrbitalVue"),
     "X-Plex-Version": safeHeaderValue(configuration.version, "5.1.0"),
-    "X-Plex-Platform": "StreamVue",
+    "X-Plex-Platform": "OrbitalVue",
     "X-Plex-Pms-Api-Version": "1.2.2"
   };
 }

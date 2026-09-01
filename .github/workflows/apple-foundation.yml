@@ -36,7 +36,7 @@ jobs:
     name: Portable catalog contract
     runs-on: ubuntu-latest
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
       - name: Validate contract fixtures
         run: |
@@ -53,7 +53,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 45
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
 
       - name: Select the App Store toolchain
@@ -75,7 +75,7 @@ jobs:
       - name: Generate the Xcode project
         working-directory: platforms/apple
         run: |
-          test "$(grep -c 'PRODUCT_BUNDLE_IDENTIFIER: com.streamvue.player' project.yml)" = "2"
+          test "$(grep -c 'PRODUCT_BUNDLE_IDENTIFIER: com.orbitalvue.player' project.yml)" = "2"
           xcodegen generate --spec project.yml
 
       - name: Test the shared Swift catalog and source layer
@@ -200,18 +200,18 @@ jobs:
             ONLY_ACTIVE_ARCH=YES \
             SWIFT_ENABLE_BATCH_MODE=NO \
             build
-          test "$(plutil -extract StreamVueDistributionMode raw -o - artifacts/apple-derived-data/store-ios/Build/Products/Store-iphonesimulator/StreamVue.app/Info.plist)" = "store"
-          test "$(plutil -extract StreamVueDistributionMode raw -o - artifacts/apple-derived-data/store-tvos/Build/Products/Store-appletvsimulator/StreamVueTV.app/Info.plist)" = "store"
-          test "$(plutil -extract CFBundleIdentifier raw -o - artifacts/apple-derived-data/store-ios/Build/Products/Store-iphonesimulator/StreamVue.app/Info.plist)" = "com.streamvue.player"
-          test "$(plutil -extract CFBundleIdentifier raw -o - artifacts/apple-derived-data/store-tvos/Build/Products/Store-appletvsimulator/StreamVueTV.app/Info.plist)" = "com.streamvue.player"
+          test "$(plutil -extract StreamVueDistributionMode raw -o - artifacts/apple-derived-data/store-ios/Build/Products/Store-iphonesimulator/OrbitalVue.app/Info.plist)" = "store"
+          test "$(plutil -extract StreamVueDistributionMode raw -o - artifacts/apple-derived-data/store-tvos/Build/Products/Store-appletvsimulator/OrbitalVueTV.app/Info.plist)" = "store"
+          test "$(plutil -extract CFBundleIdentifier raw -o - artifacts/apple-derived-data/store-ios/Build/Products/Store-iphonesimulator/OrbitalVue.app/Info.plist)" = "com.orbitalvue.player"
+          test "$(plutil -extract CFBundleIdentifier raw -o - artifacts/apple-derived-data/store-tvos/Build/Products/Store-appletvsimulator/OrbitalVueTV.app/Info.plist)" = "com.orbitalvue.player"
           resolved='platforms/apple/StreamVueApple.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved'
           if [[ -f "$resolved" ]] && grep -Eiq 'ksplayer|kingslay' "$resolved"; then
             echo 'The AVKit-only Store graph unexpectedly resolved KSPlayer.' >&2
             exit 1
           fi
           if find \
-            artifacts/apple-derived-data/store-ios/Build/Products/Store-iphonesimulator/StreamVue.app \
-            artifacts/apple-derived-data/store-tvos/Build/Products/Store-appletvsimulator/StreamVueTV.app \
+            artifacts/apple-derived-data/store-ios/Build/Products/Store-iphonesimulator/OrbitalVue.app \
+            artifacts/apple-derived-data/store-tvos/Build/Products/Store-appletvsimulator/OrbitalVueTV.app \
             -iname '*ksplayer*' -print | grep -q .; then
             echo 'An AVKit-only Store product contains a KSPlayer-named bundle artifact.' >&2
             exit 1
@@ -219,6 +219,6 @@ jobs:
 
       - name: Verify simulator products without distributing them
         run: |
-          test -d artifacts/apple-derived-data/ios/Build/Products/Debug-iphonesimulator/StreamVue.app
-          test -d artifacts/apple-derived-data/tvos/Build/Products/Debug-appletvsimulator/StreamVueTV.app
+          test -d artifacts/apple-derived-data/ios/Build/Products/Debug-iphonesimulator/OrbitalVue.app
+          test -d artifacts/apple-derived-data/tvos/Build/Products/Debug-appletvsimulator/OrbitalVueTV.app
           echo "Personal simulator products include pinned KSPlayer; Store simulator products are AVKit-only and remain inside CI."

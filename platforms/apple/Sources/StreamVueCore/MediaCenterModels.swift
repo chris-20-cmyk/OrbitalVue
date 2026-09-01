@@ -390,10 +390,10 @@ public struct MediaCenterDeviceIdentity: Equatable, Sendable {
     }
 
     public static let appleDefault = MediaCenterDeviceIdentity(
-        client: "StreamVue",
+        client: "OrbitalVue",
         device: "Apple",
         deviceID: "streamvue-apple",
-        version: "5.1.0"
+        version: "5.6.0"
     )
 }
 

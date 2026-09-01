@@ -13,7 +13,7 @@ const catalogRoot = join(
   "Assets.xcassets"
 );
 const brandRoot = join(catalogRoot, "App Icon.brandassets");
-const expectedAuthor = "com.streamvue.player";
+const expectedAuthor = "com.orbitalvue.player";
 
 const fail = (message) => {
   throw new Error(`Apple brand asset verification failed: ${message}`);

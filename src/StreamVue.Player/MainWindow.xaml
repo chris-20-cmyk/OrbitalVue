@@ -7,7 +7,7 @@
         xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
         xmlns:controls="clr-namespace:StreamVue.Player.Controls"
         mc:Ignorable="d"
-        Title="StreamVue"
+        Title="OrbitalVue"
         Width="1540"
         Height="930"
         MinWidth="1180"
@@ -77,7 +77,7 @@
                     <Button x:Name="MiniPlayerButton" Margin="0,0,8,0" Height="32" Padding="12,0" Style="{StaticResource SecondaryButton}" Click="ToggleMiniPlayer_Click" ToolTip="Compact always-on-top player (Ctrl+Shift+M)">
                         <TextBlock x:Name="MiniPlayerButtonText" VerticalAlignment="Center" FontSize="9.5" FontWeight="Bold" Text="MINI" />
                     </Button>
-                    <Button x:Name="UpdateNavigationButton" Margin="0,0,10,0" Height="32" Padding="14,0" Style="{StaticResource SecondaryButton}" Click="OpenUpdate_Click" ToolTip="Check for a new StreamVue version">
+                    <Button x:Name="UpdateNavigationButton" Margin="0,0,10,0" Height="32" Padding="14,0" Style="{StaticResource SecondaryButton}" Click="OpenUpdate_Click" ToolTip="Check for a new OrbitalVue version">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Margin="0,0,7,0" FontSize="14" Foreground="{StaticResource AccentBrush}" Text="↥" />
                             <TextBlock x:Name="UpdateNavigationText" VerticalAlignment="Center" FontSize="10" FontWeight="Bold" Text="UPDATE" />
@@ -175,18 +175,24 @@
                     </Grid>
 
                     <Grid Grid.Row="2" Margin="20,0,20,12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Horizontal">
-                            <RadioButton x:Name="AllFilter" GroupName="KindFilter" IsChecked="True" Checked="KindFilter_Checked" Tag="All" Content="All" Style="{StaticResource FilterPill}" />
-                            <RadioButton GroupName="KindFilter" Checked="KindFilter_Checked" Tag="Live" Content="Live" Style="{StaticResource FilterPill}" />
-                            <RadioButton GroupName="KindFilter" Checked="KindFilter_Checked" Tag="Movie" Content="Movies" Style="{StaticResource FilterPill}" />
-                        </StackPanel>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" PanningMode="HorizontalOnly">
+                            <StackPanel Orientation="Horizontal">
+                                <RadioButton x:Name="AllFilter" GroupName="KindFilter" IsChecked="True" Checked="KindFilter_Checked" Tag="All" Content="All" Style="{StaticResource FilterPill}" />
+                                <RadioButton x:Name="ContinueWatchingFilter" GroupName="KindFilter" Checked="KindFilter_Checked" Tag="ContinueWatching" Content="Continue" Style="{StaticResource FilterPill}" Visibility="Collapsed" />
+                                <RadioButton x:Name="RecentlyAddedFilter" GroupName="KindFilter" Checked="KindFilter_Checked" Tag="RecentlyAdded" Content="Recent" Style="{StaticResource FilterPill}" Visibility="Collapsed" />
+                                <RadioButton GroupName="KindFilter" Checked="KindFilter_Checked" Tag="Live" Content="Live" Style="{StaticResource FilterPill}" />
+                                <RadioButton GroupName="KindFilter" Checked="KindFilter_Checked" Tag="Movies" Content="Movies" Style="{StaticResource FilterPill}" />
+                                <RadioButton GroupName="KindFilter" Checked="KindFilter_Checked" Tag="Series" Content="Series" Style="{StaticResource FilterPill}" />
+                            </StackPanel>
+                        </ScrollViewer>
                         <ComboBox x:Name="CategoryBox"
-                                  Grid.Column="1"
-                                  Width="164"
+                                  Grid.Row="1"
+                                  Margin="0,9,0,0"
+                                  HorizontalAlignment="Stretch"
                                   ScrollViewer.CanContentScroll="True"
                                   VirtualizingPanel.IsVirtualizing="True"
                                   VirtualizingPanel.VirtualizationMode="Recycling"
@@ -277,7 +283,10 @@
                                         </Grid>
                                         <StackPanel Grid.Column="1" Margin="7,0,8,0" VerticalAlignment="Center">
                                             <TextBlock Foreground="{StaticResource TextBrush}" FontSize="13" FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" Text="{Binding Group}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock x:Name="GroupLine" Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" Text="{Binding Group}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock x:Name="LibraryMetadataLine" Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" Text="{Binding LibraryMetadataLine}" TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
+                                            <TextBlock x:Name="WatchProgressText" Margin="0,4,0,0" Foreground="#62CFC4" FontSize="9" FontWeight="SemiBold" Text="{Binding WatchProgressLabel}" TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
+                                            <ProgressBar x:Name="WatchProgressBar" Margin="0,5,0,0" Height="3" Minimum="0" Maximum="100" Value="{Binding WatchProgressPercent}" Foreground="{StaticResource AccentBrush}" Background="#223044" BorderThickness="0" Visibility="Collapsed" />
                                             <TextBlock x:Name="GuideLineText" Margin="0,4,0,0" Foreground="#62CFC4" FontSize="9" Text="{Binding GuideLine}" TextTrimming="CharacterEllipsis">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
@@ -309,6 +318,14 @@
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding IsFavorite}" Value="True">
                                         <Setter TargetName="FavoriteButton" Property="Foreground" Value="#F4BD6B" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsProtectedMedia}" Value="True">
+                                        <Setter TargetName="GroupLine" Property="Visibility" Value="Collapsed" />
+                                        <Setter TargetName="LibraryMetadataLine" Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding HasWatchProgress}" Value="True">
+                                        <Setter TargetName="WatchProgressText" Property="Visibility" Value="Visible" />
+                                        <Setter TargetName="WatchProgressBar" Property="Visibility" Value="Visible" />
                                     </DataTrigger>
                                 </DataTemplate.Triggers>
                             </DataTemplate>
@@ -931,7 +948,7 @@
                     <StackPanel x:Name="GuideEmptyState" Panel.ZIndex="10" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="430">
                         <TextBlock HorizontalAlignment="Center" Foreground="{StaticResource AccentBrush}" FontSize="36" Text="▦" />
                         <TextBlock Margin="0,12,0,0" HorizontalAlignment="Center" FontFamily="{StaticResource DisplayFont}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Guide data is being prepared" />
-                        <TextBlock Margin="0,7,0,0" TextAlignment="Center" Foreground="{StaticResource TextMutedBrush}" FontSize="11" LineHeight="17" Text="StreamVue can use an advertised XMLTV source, a local file, or the verified US guide pack." TextWrapping="Wrap" />
+                        <TextBlock Margin="0,7,0,0" TextAlignment="Center" Foreground="{StaticResource TextMutedBrush}" FontSize="11" LineHeight="17" Text="OrbitalVue can use an advertised XMLTV source, a local file, or the verified US guide pack." TextWrapping="Wrap" />
                         <Button Margin="0,17,0,0" HorizontalAlignment="Center" Style="{StaticResource PrimaryButton}" Click="OpenGuideSource_Click" Content="Choose guide source" />
                     </StackPanel>
                 </Grid>
@@ -1105,7 +1122,7 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Ellipse x:Name="FooterStatusDot" Width="6" Height="6" Fill="#5B687C" />
-                    <TextBlock x:Name="FooterStatusText" Margin="8,0,0,0" Foreground="#7E8CA1" FontSize="9.5" Text="StreamVue is ready" />
+                    <TextBlock x:Name="FooterStatusText" Margin="8,0,0,0" Foreground="#7E8CA1" FontSize="9.5" Text="OrbitalVue is ready" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Foreground="#566176" FontSize="9" Text="F11 TRUE FULLSCREEN" />
@@ -1114,7 +1131,7 @@
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
                     <TextBlock Foreground="#566176" FontSize="9" Text="↑↓ CHANNELS • BACKSPACE LAST" />
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
-                    <TextBlock Foreground="#566176" FontSize="9" Text="5.5 LIBRARY ART" />
+                    <TextBlock Foreground="#566176" FontSize="9" Text="5.6 MEDIA LIBRARY" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -1327,7 +1344,7 @@
                                             </Border>
                                             <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextBrush}" FontSize="11.5" FontWeight="SemiBold" Text="Sign in with your Plex account" />
                                         </DockPanel>
-                                        <TextBlock x:Name="PlexAccountStatusText" Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" Text="Approve StreamVue in Plex, then choose an automatically discovered server. Your Plex password never enters StreamVue." TextWrapping="Wrap" />
+                                        <TextBlock x:Name="PlexAccountStatusText" Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" Text="Approve OrbitalVue in Plex, then choose an automatically discovered server. Your Plex password never enters OrbitalVue." TextWrapping="Wrap" />
                                         <ProgressBar x:Name="PlexAccountProgress" Width="120" Height="3" Margin="0,12,0,0" HorizontalAlignment="Left" Foreground="{StaticResource AccentBrush}" IsIndeterminate="True" Visibility="Collapsed" />
                                         <WrapPanel Margin="0,13,0,0">
                                             <Button x:Name="PlexAccountSignInButton" Style="{StaticResource PrimaryButton}" Click="StartPlexAccountSignIn_Click" Content="Sign in with Plex" />
@@ -1375,7 +1392,7 @@
                                         <PasswordBox x:Name="PlexTokenBox" Height="43" Padding="12,9" Foreground="{StaticResource TextBrush}" Background="#0B1018" BorderBrush="{StaticResource BorderBrush}" />
                                         <CheckBox x:Name="PlexAllowHttpBox" Margin="0,13,0,0" Foreground="#9EACBF" FontSize="10" Content="Allow unencrypted HTTP on a trusted local network" />
                                         <Grid Margin="0,16,0,0">
-                                            <TextBlock VerticalAlignment="Center" Foreground="#718198" FontSize="9.5" Text="Identity is checked before StreamVue sends the server token." />
+                                            <TextBlock VerticalAlignment="Center" Foreground="#718198" FontSize="9.5" Text="Identity is checked before OrbitalVue sends the server token." />
                                             <Button x:Name="PlexConnectButton" HorizontalAlignment="Right" Style="{StaticResource PrimaryButton}" Click="LoadPlex_Click" Content="Connect Plex" />
                                         </Grid>
                                     </StackPanel>
@@ -1469,7 +1486,7 @@
                         <Grid>
                             <StackPanel>
                                 <TextBlock x:Name="ImportStatusText" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Ready to connect" />
-                                <TextBlock x:Name="ImportDetailText" Margin="0,4,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" Text="Nothing is uploaded; StreamVue reads the source directly." />
+                                <TextBlock x:Name="ImportDetailText" Margin="0,4,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" Text="Nothing is uploaded; OrbitalVue reads the source directly." />
                             </StackPanel>
                             <ProgressBar x:Name="ImportProgress" Width="90" Height="4" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}" Visibility="Collapsed" />
                         </Grid>
@@ -1486,7 +1503,7 @@
                     <Grid>
                         <StackPanel>
                             <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Playlist health" />
-                            <TextBlock Margin="0,6,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="StreamVue verifies the source at launch and protects the last working copy." />
+                            <TextBlock Margin="0,6,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="OrbitalVue verifies the source at launch and protects the last working copy." />
                         </StackPanel>
                         <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="ClosePlaylistHealth_Click" ToolTip="Close playlist health center"><TextBlock FontSize="18" Text="×" /></Button>
                     </Grid>
@@ -1595,7 +1612,7 @@
 
                     <Grid Margin="28,24,28,18">
                         <StackPanel>
-                            <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="StreamVue settings" />
+                            <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="OrbitalVue settings" />
                             <TextBlock Margin="0,6,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Text="Tune playback, convenience, recovery, and private support tools for this PC." />
                         </StackPanel>
                         <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseSettings_Click" ToolTip="Close playback settings">
@@ -1774,7 +1791,7 @@
                                     <CheckBox x:Name="ResumeLastChannelCheck" Foreground="{StaticResource TextBrush}" Checked="SettingsChanged" Unchecked="SettingsChanged">
                                         <StackPanel Margin="9,0,0,0">
                                             <TextBlock FontSize="12" FontWeight="SemiBold" Text="Reopen the last channel at startup" />
-                                            <TextBlock Margin="0,4,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" Text="After the playlist refreshes, return to the channel that was playing when StreamVue closed." TextWrapping="Wrap" />
+                                            <TextBlock Margin="0,4,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" Text="After the playlist refreshes, return to the channel that was playing when OrbitalVue closed." TextWrapping="Wrap" />
                                         </StackPanel>
                                     </CheckBox>
                                     <Border Height="1" Margin="0,14" Background="#222D3E" />
@@ -1809,14 +1826,14 @@
                                     <Border Height="1" Margin="0,14" Background="#222D3E" />
                                     <TextBlock Foreground="#AAB6C8" FontSize="10" FontWeight="SemiBold" Text="BACKUP &amp; SUPPORT" />
                                     <WrapPanel Margin="0,10,0,0">
-                                        <Button Margin="0,0,8,8" Padding="12,7" Style="{StaticResource SecondaryButton}" Click="CreateBackup_Click" Content="Back up StreamVue" />
+                                        <Button Margin="0,0,8,8" Padding="12,7" Style="{StaticResource SecondaryButton}" Click="CreateBackup_Click" Content="Back up OrbitalVue" />
                                         <Button Margin="0,0,8,8" Padding="12,7" Style="{StaticResource SecondaryButton}" Click="RestoreBackup_Click" Content="Restore backup" />
                                         <Button Margin="0,0,0,8" Padding="12,7" Style="{StaticResource PrimaryButton}" Click="ExportDiagnostics_Click" Content="Export diagnostics" />
                                     </WrapPanel>
                                     <TextBlock Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="9.5" LineHeight="15" Text="Backups include encrypted playlist, guide, account, favorite, and Playback IQ data for this Windows user. Diagnostics exclude playlist addresses, credentials, channel names, and guide titles." TextWrapping="Wrap" />
 
                                     <Border Margin="0,14,0,0" Padding="12,10" CornerRadius="10" Background="#111A27" BorderBrush="#29384D" BorderThickness="1">
-                                        <TextBlock Foreground="#8797AD" FontSize="9.5" LineHeight="15" Text="KEYS  •  F11 fullscreen  •  Ctrl+Shift+C Cast  •  Ctrl+Shift+M Mini Player  •  Ctrl+K search  •  Ctrl+D favorite  •  Ctrl+↑/↓ channels  •  Backspace previous  •  Space play/pause  •  Media keys when StreamVue is focused" TextWrapping="Wrap" />
+                                        <TextBlock Foreground="#8797AD" FontSize="9.5" LineHeight="15" Text="KEYS  •  F11 fullscreen  •  Ctrl+Shift+C Cast  •  Ctrl+Shift+M Mini Player  •  Ctrl+K search  •  Ctrl+D favorite  •  Ctrl+↑/↓ channels  •  Backspace previous  •  Space play/pause  •  Media keys when OrbitalVue is focused" TextWrapping="Wrap" />
                                     </Border>
                                 </StackPanel>
                             </Border>
@@ -1853,7 +1870,7 @@
 
                     <Grid Margin="28,24,28,18">
                         <StackPanel>
-                            <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="StreamVue update" />
+                            <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="OrbitalVue update" />
                             <TextBlock x:Name="UpdateSubtitleText" Margin="0,6,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Text="Install the newest release without uninstalling your current version." />
                         </StackPanel>
                         <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseUpdate_Click" ToolTip="Close update window">
@@ -1884,7 +1901,7 @@
 
                                     <StackPanel Grid.Row="2">
                                         <TextBlock x:Name="UpdateStatusText" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Ready to check for a new version" TextWrapping="Wrap" />
-                                        <TextBlock x:Name="UpdateDetailText" Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" LineHeight="17" Text="StreamVue checks the official public release feed. Your playlists and settings stay on this PC." TextWrapping="Wrap" />
+                                        <TextBlock x:Name="UpdateDetailText" Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" LineHeight="17" Text="OrbitalVue checks the official public release feed. Your playlists and settings stay on this PC." TextWrapping="Wrap" />
                                         <ProgressBar x:Name="UpdateProgress" Margin="0,18,0,0" Height="5" Minimum="0" Maximum="100" Foreground="{StaticResource AccentBrush}" Visibility="Collapsed" />
                                     </StackPanel>
                                 </Grid>
@@ -1906,7 +1923,7 @@
                                     <CheckBox x:Name="UpdateRollbackCheck" IsChecked="True" Foreground="{StaticResource TextBrush}" Checked="UpdateRollback_Changed" Unchecked="UpdateRollback_Changed">
                                         <StackPanel Margin="9,0,0,0">
                                             <TextBlock FontSize="11.5" FontWeight="SemiBold" Text="Restore the last working version automatically" />
-                                            <TextBlock Margin="0,4,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" LineHeight="15" Text="If a new build cannot open successfully, StreamVue rolls back without touching playlists or settings." TextWrapping="Wrap" />
+                                            <TextBlock Margin="0,4,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" LineHeight="15" Text="If a new build cannot open successfully, OrbitalVue rolls back without touching playlists or settings." TextWrapping="Wrap" />
                                         </StackPanel>
                                     </CheckBox>
                                 </StackPanel>
@@ -1947,12 +1964,12 @@
                     <Grid Margin="28,24,28,18">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Cast StreamVue" />
+                                <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Cast OrbitalVue" />
                                 <Border Margin="10,3,0,0" Padding="8,4" VerticalAlignment="Top" CornerRadius="6" Background="#17312F">
                                     <TextBlock Foreground="{StaticResource AccentBrush}" FontSize="8" FontWeight="Bold" Text="WINDOWS WIRELESS DISPLAY" />
                                 </Border>
                             </StackPanel>
-                            <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Mirror StreamVue video and sound to a nearby compatible TV, projector, or PC." />
+                            <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Mirror OrbitalVue video and sound to a nearby compatible TV, projector, or PC." />
                         </StackPanel>
                         <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseCast_Click" ToolTip="Close">
                             <TextBlock FontSize="18" Text="×" />
@@ -1998,7 +2015,7 @@
                                 <Border Padding="14" CornerRadius="12" Background="#101822" BorderBrush="#273247" BorderThickness="1">
                                     <StackPanel>
                                         <TextBlock Foreground="{StaticResource AccentBrush}" FontSize="9" FontWeight="Bold" Text="FORMAT SAFE" />
-                                        <TextBlock Margin="0,6,0,0" Foreground="#98A7BB" FontSize="9.5" LineHeight="14" Text="StreamVue keeps decoding every IPTV format on this PC." TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,6,0,0" Foreground="#98A7BB" FontSize="9.5" LineHeight="14" Text="OrbitalVue keeps decoding every IPTV format on this PC." TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>
                                 <Border Grid.Column="2" Padding="14" CornerRadius="12" Background="#101822" BorderBrush="#273247" BorderThickness="1">
@@ -2018,7 +2035,7 @@
                             <Border Margin="0,14,0,0" Padding="17,14" CornerRadius="13" Background="#0D131D" BorderBrush="#273247" BorderThickness="1">
                                 <StackPanel>
                                     <TextBlock Foreground="#DDE5F0" FontSize="10.5" FontWeight="SemiBold" Text="Before you connect" />
-                                    <TextBlock Margin="0,9,0,0" Foreground="#8797AD" FontSize="9.8" LineHeight="16" Text="1  Turn on the target TV or display and enable its Screen Mirroring or Miracast mode.&#x0a;2  Choose Find nearby displays, then select the device in Windows Cast.&#x0a;3  If Windows asks for a layout, choose Duplicate to mirror StreamVue." TextWrapping="Wrap" />
+                                    <TextBlock Margin="0,9,0,0" Foreground="#8797AD" FontSize="9.8" LineHeight="16" Text="1  Turn on the target TV or display and enable its Screen Mirroring or Miracast mode.&#x0a;2  Choose Find nearby displays, then select the device in Windows Cast.&#x0a;3  If Windows asks for a layout, choose Duplicate to mirror OrbitalVue." TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
 
@@ -2056,7 +2073,7 @@
                                     <TextBlock Foreground="#FF7184" FontSize="8" FontWeight="Bold" Text="DIRECT TRANSPORT STREAM" />
                                 </Border>
                             </StackPanel>
-                            <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Record live channels, schedule from the TV Guide, and play your saved library without leaving StreamVue." />
+                            <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Record live channels, schedule from the TV Guide, and play your saved library without leaving OrbitalVue." />
                         </StackPanel>
                         <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseDvr_Click" ToolTip="Close"><TextBlock FontSize="18" Text="×" /></Button>
                     </Grid>
@@ -2112,7 +2129,7 @@
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                     <StackPanel>
                                         <TextBlock Foreground="#718198" FontSize="8.5" FontWeight="Bold" Text="RECORDINGS FOLDER" />
-                                        <TextBox x:Name="RecordingFolderBox" Height="38" Margin="0,8,12,0" Padding="11,8" ToolTip="Where StreamVue saves .ts recordings" />
+                                        <TextBox x:Name="RecordingFolderBox" Height="38" Margin="0,8,12,0" Padding="11,8" ToolTip="Where OrbitalVue saves .ts recordings" />
                                         <TextBlock x:Name="DvrStorageText" Margin="0,8,12,0" Foreground="#8090A6" FontSize="9" Text="Storage information will appear here" />
                                         <ProgressBar x:Name="DvrStorageProgress" Height="3" Margin="0,6,12,0" Minimum="0" Maximum="100" Value="0" Foreground="{StaticResource AccentBrush}" Background="#253145" />
                                     </StackPanel>
@@ -2331,7 +2348,7 @@
                             </Border>
 
                             <Border Margin="0,14,0,2" Padding="15,12" CornerRadius="12" Background="#251D13" BorderBrush="#4B3A22" BorderThickness="1">
-                                <TextBlock Foreground="#D4B47D" FontSize="9.8" LineHeight="15" Text="Recording opens a separate direct stream so your picture is never interrupted. Closing the window leaves the tray recorder and wake timer armed; choose Exit StreamVue from the tray only when you want scheduled recording to stop." TextWrapping="Wrap" />
+                                <TextBlock Foreground="#D4B47D" FontSize="9.8" LineHeight="15" Text="Recording opens a separate direct stream so your picture is never interrupted. Closing the window leaves the tray recorder and wake timer armed; choose Exit OrbitalVue from the tray only when you want scheduled recording to stop." TextWrapping="Wrap" />
                             </Border>
                         </StackPanel>
                     </ScrollViewer>
@@ -2389,7 +2406,7 @@
                                     <Grid>
                                         <StackPanel>
                                             <TextBlock x:Name="SignalRouteHeadingText" Foreground="#E8F0F8" FontSize="13" FontWeight="SemiBold" Text="Select a channel route" />
-                                            <TextBlock x:Name="SignalRouteSummaryText" Margin="0,5,0,0" Foreground="#85A8A5" FontSize="9.5" Text="Feed scores improve as StreamVue observes real playback." />
+                                            <TextBlock x:Name="SignalRouteSummaryText" Margin="0,5,0,0" Foreground="#85A8A5" FontSize="9.5" Text="Feed scores improve as OrbitalVue observes real playback." />
                                         </StackPanel>
                                         <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="9,5" CornerRadius="7" Background="#17312F">
                                             <TextBlock x:Name="SignalRouteStatusText" Foreground="{StaticResource AccentBrush}" FontSize="8.5" FontWeight="Bold" Text="READY" />

@@ -193,7 +193,7 @@ function workerEnv(overrides: Partial<Env> = {}): Env {
     DEPLOYMENT_ENVIRONMENT: "local",
     EXPECTED_HOSTNAME: TEST_HOST,
     ALLOWED_BROWSER_ORIGINS: "[]",
-    GOOGLE_PLAY_PACKAGE_NAME: "com.streamvue.player",
+    GOOGLE_PLAY_PACKAGE_NAME: "com.orbitalvue.player",
     GOOGLE_PLAY_PRODUCT_ID: "streamvue_premium_once",
     GOOGLE_PLAY_ALLOW_TEST_PURCHASES: "false",
     SAMSUNG_CHECKOUT_APP_ID: "StreamVueCheckout",
@@ -231,7 +231,7 @@ function googleRequest(): Request {
   return jsonRequest("/google-play/verify", {
     schemaVersion: 1,
     platform: "google-play",
-    packageName: "com.streamvue.player",
+    packageName: "com.orbitalvue.player",
     productId: "streamvue_premium_once",
     purchaseToken: "transient-purchase-token"
   });

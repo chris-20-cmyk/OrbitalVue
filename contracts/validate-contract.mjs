@@ -298,5 +298,5 @@ validateSamsungResponse(samsungVerifiedResponse, true);
 validateSamsungResponse(samsungUnavailableResponse, false);
 
 console.log(
-  `StreamVue contracts 1.0 are valid (${catalog.channels.length} playlist channels, ${mediaCenter.items.length} media-center items, personal/store/unknown premium access, Google Play and Samsung verifier exchanges).`
+  `OrbitalVue contracts 1.0 are valid (${catalog.channels.length} playlist channels, ${mediaCenter.items.length} media-center items, personal/store/unknown premium access, Google Play and Samsung verifier exchanges).`
 );

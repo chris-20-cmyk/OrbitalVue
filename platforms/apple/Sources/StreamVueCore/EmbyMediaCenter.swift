@@ -516,7 +516,7 @@ struct EmbyMediaCenterClient: Sendable {
         ] + (userID.map { [("UserId", $0)] } ?? [])
             + (token.map { [("Token", $0)] } ?? [])
         return "Emby " + fields.map { name, value in
-            let safeValue = MediaCenterHeaderPolicy.applicationValue(value, fallback: "StreamVue")
+            let safeValue = MediaCenterHeaderPolicy.applicationValue(value, fallback: "OrbitalVue")
             return "\(name)=\"\(safeValue)\""
         }.joined(separator: ", ")
     }

@@ -363,11 +363,11 @@ struct PlexMediaCenterClient: Sendable {
             ),
             "X-Plex-Product": MediaCenterHeaderPolicy.applicationValue(
                 device.client,
-                fallback: "StreamVue"
+                fallback: "OrbitalVue"
             ),
             "X-Plex-Version": MediaCenterHeaderPolicy.applicationValue(
                 device.version,
-                fallback: "5.1.0"
+                fallback: "5.6.0"
             ),
             "X-Plex-Platform": "Apple",
             "X-Plex-Pms-Api-Version": "1.2.2"

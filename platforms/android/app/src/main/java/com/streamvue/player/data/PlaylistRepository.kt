@@ -49,7 +49,7 @@ class PlaylistRepository(private val context: Context) {
                     type = type,
                     displayLocation = displayLocation,
                     usedCachedFallback = true,
-                    notice = "The source could not be refreshed. StreamVue protected playback with the last working copy."
+                    notice = "The source could not be refreshed. OrbitalVue protected playback with the last working copy."
                 )
             }
         }
@@ -140,7 +140,7 @@ class PlaylistRepository(private val context: Context) {
             connection.readTimeout = 30_000
             connection.instanceFollowRedirects = false
             connection.setRequestProperty("Accept", "application/x-mpegURL, audio/mpegurl, text/plain, */*")
-            connection.setRequestProperty("User-Agent", "StreamVue Android/${BuildConfig.VERSION_NAME}")
+            connection.setRequestProperty("User-Agent", "OrbitalVue Android/${BuildConfig.VERSION_NAME}")
 
             try {
                 val status = connection.responseCode

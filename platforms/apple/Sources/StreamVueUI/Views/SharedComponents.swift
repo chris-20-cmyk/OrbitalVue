@@ -23,7 +23,7 @@ struct BrandMark: View {
             .frame(width: compact ? 40 : 52, height: compact ? 40 : 52)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("STREAMVUE")
+                Text("ORBITALVUE")
                     .font(.system(size: compact ? 15 : 20, weight: .black, design: .rounded))
                     .tracking(compact ? 2 : 3)
                 Text("YOUR SIGNAL. BEAUTIFULLY ORGANIZED.")
@@ -34,7 +34,7 @@ struct BrandMark: View {
         }
         .foregroundStyle(theme.text)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("StreamVue")
+        .accessibilityLabel("OrbitalVue")
     }
 }
 

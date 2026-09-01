@@ -411,7 +411,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 isLoading = false,
                 loadingLabel = "",
                 isResolvingPlayback = false,
-                error = error.message ?: "StreamVue could not load that source."
+                error = error.message ?: "OrbitalVue could not load that source."
             )
         }
     }

@@ -19,7 +19,7 @@ struct PlexAccountConnectSection: View {
         } header: {
             Text("Plex account")
         } footer: {
-            Text("Plex account and server tokens stay outside this screen and are never written to the StreamVue catalog. The selected server credential is saved in Apple Keychain only after its identity is verified.")
+            Text("Plex account and server tokens stay outside this screen and are never written to the OrbitalVue catalog. The selected server credential is saved in Apple Keychain only after its identity is verified.")
         }
         .task(id: model.challengeID) {
             guard model.challengeID != nil else { return }
@@ -70,10 +70,10 @@ struct PlexAccountConnectSection: View {
                 .padding(10)
                 .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-            Text("Scan to approve StreamVue in Plex")
+            Text("Scan to approve OrbitalVue in Plex")
                 .font(.headline)
                 .multilineTextAlignment(.center)
-            Text("Or open Plex sign-in on this device. StreamVue checks the protected PIN automatically and never receives your Plex password.")
+            Text("Or open Plex sign-in on this device. OrbitalVue checks the protected PIN automatically and never receives your Plex password.")
                 .font(.footnote)
                 .foregroundStyle(theme.muted)
                 .multilineTextAlignment(.center)

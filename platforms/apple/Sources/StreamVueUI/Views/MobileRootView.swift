@@ -52,7 +52,7 @@ struct MobileRootView: View {
             FullscreenPlayerView(channel: channel)
         }
         .alert(
-            "StreamVue needs attention",
+            "OrbitalVue needs attention",
             isPresented: Binding(
                 get: { store.errorMessage != nil },
                 set: { if !$0 { store.dismissError() } }
@@ -60,7 +60,7 @@ struct MobileRootView: View {
         ) {
             Button("Got it", role: .cancel) { store.dismissError() }
         } message: {
-            Text(store.errorMessage ?? "StreamVue could not complete that request.")
+            Text(store.errorMessage ?? "OrbitalVue could not complete that request.")
         }
         .onChange(of: browseDestination) { _, destination in
             switch destination {

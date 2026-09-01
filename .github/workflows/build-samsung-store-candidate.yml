@@ -6,7 +6,7 @@ on:
       version:
         description: Samsung TV package version (major.minor.patch)
         required: true
-        default: 5.1.0
+        default: 5.6.0
 
 permissions:
   contents: read
@@ -27,7 +27,7 @@ jobs:
       SAMSUNG_VERIFICATION_URL: ${{ vars.STREAMVUE_SAMSUNG_VERIFICATION_URL }}
       SAMSUNG_AUTHOR_CERT_SHA256: ${{ vars.STREAMVUE_SAMSUNG_AUTHOR_CERT_SHA256 }}
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
 
       - name: Set up Node.js
@@ -88,7 +88,7 @@ jobs:
       TIZEN_WEB_CLI_URL: https://download.tizen.org/sdk/Installer/tizen-studio_6.1/web-cli_Tizen_Studio_6.1_ubuntu-64.bin
       TIZEN_WEB_CLI_SHA256: 7F33FE09EDA4EB5D50463CF997E8F676D455060720470070AE1932994413AAF4
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
 
       - name: Set up pnpm
@@ -161,9 +161,9 @@ jobs:
           project='platforms/tv-web/dist/samsung'
           test -s "$project/config.xml"
           test -s "$project/index.html"
-          grep -Fq 'id="https://streamvue.app/tv"' "$project/config.xml"
-          grep -Fq 'id="SvTvPlayer.StreamVue"' "$project/config.xml"
-          grep -Fq 'package="SvTvPlayer"' "$project/config.xml"
+          grep -Fq 'id="https://orbitalvue.app/tv"' "$project/config.xml"
+          grep -Fq 'id="OvTvPlayer.OrbitalVue"' "$project/config.xml"
+          grep -Fq 'package="OvTvPlayer"' "$project/config.xml"
           grep -Fq "version=\"$SAMSUNG_PACKAGE_VERSION\"" "$project/config.xml"
           grep -Fq '\$WEBAPIS/webapis/webapis.js' "$project/index.html"
           grep -RFq -- "$SAMSUNG_CHECKOUT_APP_ID" "$project/assets"
@@ -250,12 +250,12 @@ jobs:
           actual_author_fingerprint="$(openssl x509 -in "$author_pem" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
           expected_author_fingerprint="$(tr -d ':' <<< "$SAMSUNG_AUTHOR_CERT_SHA256" | tr '[:lower:]' '[:upper:]')"
           if [[ ! "$expected_author_fingerprint" =~ ^[0-9A-F]{64}$ || "$actual_author_fingerprint" != "$expected_author_fingerprint" ]]; then
-            echo 'The author certificate does not match the continuity fingerprint registered for StreamVue.' >&2
+            echo 'The author certificate does not match the continuity fingerprint registered for OrbitalVue.' >&2
             exit 1
           fi
 
           tizen security-profiles add \
-            -n StreamVueCandidate \
+            -n OrbitalVueCandidate \
             -a "$author" \
             -p "$SAMSUNG_AUTHOR_CERTIFICATE_PASSWORD" \
             -d "$distributor" \
@@ -273,7 +273,7 @@ jobs:
           project='platforms/tv-web/dist/samsung'
           tizen build-web -- "$project"
           test -d "$project/.buildResult"
-          tizen package -t wgt -s StreamVueCandidate -- "$project/.buildResult"
+          tizen package -t wgt -s OrbitalVueCandidate -- "$project/.buildResult"
 
           mapfile -t packages < <(find "$project/.buildResult" -maxdepth 1 -type f -name '*.wgt' -print)
           if [[ "${#packages[@]}" != 1 || ! -s "${packages[0]}" ]]; then
@@ -314,19 +314,19 @@ jobs:
             fi
           done < <(find "$signature_certificates" -maxdepth 1 -type f -name '*.der' -print)
           if [[ "$author_match" != true ]]; then
-            echo 'The WGT author signature does not contain the registered StreamVue author certificate.' >&2
+            echo 'The WGT author signature does not contain the registered OrbitalVue author certificate.' >&2
             exit 1
           fi
 
           packaged_config="$(unzip -p "$package" config.xml)"
-          grep -Fq 'id="https://streamvue.app/tv"' <<< "$packaged_config"
-          grep -Fq 'id="SvTvPlayer.StreamVue"' <<< "$packaged_config"
-          grep -Fq 'package="SvTvPlayer"' <<< "$packaged_config"
+          grep -Fq 'id="https://orbitalvue.app/tv"' <<< "$packaged_config"
+          grep -Fq 'id="OvTvPlayer.OrbitalVue"' <<< "$packaged_config"
+          grep -Fq 'package="OvTvPlayer"' <<< "$packaged_config"
           grep -Fq "version=\"$SAMSUNG_PACKAGE_VERSION\"" <<< "$packaged_config"
 
           output_dir='artifacts/samsung-tv'
           mkdir -p "$output_dir"
-          output_package="$output_dir/StreamVue-$SAMSUNG_PACKAGE_VERSION-Samsung-TV-Store-Candidate.wgt"
+          output_package="$output_dir/OrbitalVue-$SAMSUNG_PACKAGE_VERSION-Samsung-TV-Store-Candidate.wgt"
           cp "$package" "$output_package"
           printf '%s\n' "$STREAMVUE_SAMSUNG_AUTHOR_FINGERPRINT" > "$output_dir/AUTHOR-CERT-SHA256.txt"
           PACKAGE_PATH="$output_package" node - <<'NODE'

@@ -1610,6 +1610,13 @@ static async Task RunMediaCenterSelfTestAsync(string testRoot)
         !plexItem.IsProtectedMedia ||
         plexItem.Kind != ChannelKind.Movie ||
         plexItem.ResumePositionMilliseconds != 60_000 ||
+        plexItem.ReleaseYear != 2026 ||
+        plexItem.AddedAtUtc != DateTimeOffset.FromUnixTimeSeconds(1_786_363_200) ||
+        plexItem.LastPlayedAtUtc != DateTimeOffset.FromUnixTimeSeconds(1_786_548_600) ||
+        plexItem.MediaLibraryTitle != "Movies" ||
+        plexItem.SourceName != "Probe Plex" ||
+        !plexItem.HasWatchProgress ||
+        plexItem.WatchProgressPercent is < 0.8 or > 0.9 ||
         plexItem.Url.Contains(plexToken, StringComparison.Ordinal) ||
         !MediaCenterSecurity.IsArtworkLocator(plexItem.LogoUrl) ||
         plexItem.LogoUrl?.Contains(plexToken, StringComparison.Ordinal) == true)
@@ -1733,12 +1740,29 @@ static async Task RunMediaCenterSelfTestAsync(string testRoot)
         !embyItem.IsProtectedMedia ||
         embyItem.Kind != ChannelKind.Series ||
         embyItem.ResumePositionMilliseconds != 90_000 ||
+        embyItem.ReleaseYear != 2025 ||
+        embyItem.AddedAtUtc != new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero) ||
+        embyItem.LastPlayedAtUtc != new DateTimeOffset(2026, 8, 22, 17, 30, 0, TimeSpan.Zero) ||
+        embyItem.SeriesTitle != "Probe Series" ||
+        embyItem.MediaLibraryTitle != "Shows" ||
+        embyItem.SourceName != "Probe Emby" ||
         embyItem.Url.Contains(embyToken, StringComparison.Ordinal) ||
         embyItem.Url.Contains(embyPassword, StringComparison.Ordinal) ||
         !MediaCenterSecurity.IsArtworkLocator(embyItem.LogoUrl) ||
         embyItem.LogoUrl?.Contains(embyToken, StringComparison.Ordinal) == true ||
         embyItem.LogoUrl?.Contains(embyPassword, StringComparison.Ordinal) == true)
         throw new InvalidOperationException("The Emby catalog did not produce one token-free resumable episode.");
+    var mediaBrowseNow = new DateTimeOffset(2026, 8, 30, 12, 0, 0, TimeSpan.Zero);
+    var mediaBrowseSummary = MediaLibraryBrowsePolicy.Summarize([plexItem, embyItem], mediaBrowseNow);
+    if (!mediaBrowseSummary.IsMediaCenterLibrary ||
+        mediaBrowseSummary.ContinueWatchingCount != 2 ||
+        mediaBrowseSummary.RecentlyAddedCount != 2 ||
+        mediaBrowseSummary.MovieCount != 1 ||
+        mediaBrowseSummary.SeriesCount != 1 ||
+        !MediaLibraryBrowsePolicy.Matches(plexItem, MediaLibraryBrowseMode.Movies, mediaBrowseNow) ||
+        MediaLibraryBrowsePolicy.Matches(plexItem, MediaLibraryBrowseMode.Series, mediaBrowseNow) ||
+        !MediaLibraryBrowsePolicy.Matches(embyItem, MediaLibraryBrowseMode.Series, mediaBrowseNow))
+        throw new InvalidOperationException("Premium media-center browse sections lost their provider-neutral filter semantics.");
     var embyLocator = MediaCenterSecurity.ParsePlaybackLocator(embyItem.Url);
     if (embyLocator.Provider != "emby" || embyLocator.ServerId != "emby-server-1" || embyLocator.ItemId != "200")
         throw new InvalidOperationException("The Emby catalog locator was not canonical.");
@@ -2459,7 +2483,7 @@ sealed class MediaCenterProbeHandler(
                                    {"MediaContainer":{"Directory":[{"key":"1","title":"Movies","type":"movie"}]}}
                                    """,
             "/library/sections/1/all" => """
-                                         {"MediaContainer":{"totalSize":1,"Metadata":[{"ratingKey":"100","title":"Probe Movie","type":"movie","thumb":"/library/metadata/100/thumb/1700000000","duration":7200000,"viewOffset":60000,"viewCount":0}]}}
+                                         {"MediaContainer":{"totalSize":1,"Metadata":[{"ratingKey":"100","title":"Probe Movie","type":"movie","thumb":"/library/metadata/100/thumb/1700000000","duration":7200000,"viewOffset":60000,"viewCount":0,"year":2026,"addedAt":1786363200,"lastViewedAt":1786548600}]}}
                                          """,
             "/library/metadata/100" => """
                                        {"MediaContainer":{"Metadata":[{"Media":[{"Part":[{"key":"/library/parts/part-1/file.mkv?X-Plex-Token=upstream-plex-token"}]}]}]}}
@@ -2620,7 +2644,7 @@ sealed class MediaCenterProbeHandler(
                                            {"Items":[{"Id":"library-1","Name":"Shows","CollectionType":"tvshows"}]}
                                            """,
             "/emby/Users/user-1/Items" => """
-                                           {"TotalRecordCount":1,"Items":[{"Id":"200","Name":"Probe Episode","Type":"Episode","SeriesName":"Probe Series","ParentIndexNumber":1,"IndexNumber":2,"ImageTags":{"Primary":"primary-tag-200"},"RunTimeTicks":27000000000,"UserData":{"PlaybackPositionTicks":900000000,"Played":false}}]}
+                                           {"TotalRecordCount":1,"Items":[{"Id":"200","Name":"Probe Episode","Type":"Episode","SeriesName":"Probe Series","ParentIndexNumber":1,"IndexNumber":2,"ImageTags":{"Primary":"primary-tag-200"},"RunTimeTicks":27000000000,"ProductionYear":2025,"DateCreated":"2026-08-20T12:00:00Z","UserData":{"PlaybackPositionTicks":900000000,"Played":false,"LastPlayedDate":"2026-08-22T17:30:00Z"}}]}
                                            """,
             "/emby/Items/200/PlaybackInfo" => """
                                                 {"PlaySessionId":"play-session-1","MediaSources":[{"Id":"source-200","Container":"mkv","SupportsDirectPlay":true,"SupportsDirectStream":true,"SupportsTranscoding":true,"DirectStreamUrl":"/Videos/200/stream.mkv?api_key=upstream-emby-token","RequiredHttpHeaders":{"Referer":"https://emby.local/player"}}]}

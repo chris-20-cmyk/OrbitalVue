@@ -228,10 +228,10 @@ class PlexDiscoverySecurityTest {
 
     private companion object {
         val testDevice = MediaCenterDeviceIdentity(
-            client = "StreamVue",
+            client = "OrbitalVue",
             device = "Android Test",
             deviceId = "android-plex-discovery-test",
-            version = "5.2.0"
+            version = "5.6.0"
         )
     }
 }

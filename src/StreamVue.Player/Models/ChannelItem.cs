@@ -47,10 +47,44 @@ public sealed class ChannelItem : INotifyPropertyChanged
     public long DurationMilliseconds { get; init; }
     public long ResumePositionMilliseconds { get; init; }
     public bool IsPlayed { get; init; }
+    public string? MediaLibraryTitle { get; init; }
+    public string? SeriesTitle { get; init; }
+    public int? SeasonNumber { get; init; }
+    public int? EpisodeNumber { get; init; }
+    public int? ReleaseYear { get; init; }
+    public DateTimeOffset? AddedAtUtc { get; init; }
+    public DateTimeOffset? LastPlayedAtUtc { get; init; }
     public bool HasCatchup => Kind == ChannelKind.Live && !string.IsNullOrWhiteSpace(CatchupSource);
     public bool IsProtectedMedia => MediaCenterSecurity.IsPlaybackLocator(Url);
     public bool CanResume => ResumePositionMilliseconds >= 30_000 &&
                              (DurationMilliseconds <= 0 || ResumePositionMilliseconds < DurationMilliseconds - 30_000);
+    public bool HasWatchProgress => IsProtectedMedia && CanResume && DurationMilliseconds > 0;
+    public double WatchProgressPercent => HasWatchProgress
+        ? Math.Clamp(ResumePositionMilliseconds * 100d / DurationMilliseconds, 0, 100)
+        : 0;
+    public string? WatchProgressLabel
+    {
+        get
+        {
+            if (!HasWatchProgress) return null;
+            var minutesRemaining = Math.Max(1, (DurationMilliseconds - ResumePositionMilliseconds) / 60_000);
+            return $"Continue • {WatchProgressPercent:0}% • {FormatMinutes(minutesRemaining)} left";
+        }
+    }
+
+    public string? LibraryMetadataLine
+    {
+        get
+        {
+            if (!IsProtectedMedia) return null;
+            var parts = new List<string>(3);
+            if (Kind == ChannelKind.Series && !string.IsNullOrWhiteSpace(SeriesTitle)) parts.Add(SeriesTitle);
+            else if (!string.IsNullOrWhiteSpace(MediaLibraryTitle)) parts.Add(MediaLibraryTitle);
+            if (ReleaseYear is > 1800 and < 3000) parts.Add(ReleaseYear.Value.ToString());
+            if (DurationMilliseconds > 0) parts.Add(FormatDuration(DurationMilliseconds));
+            return parts.Count == 0 ? Group : string.Join(" • ", parts);
+        }
+    }
 
     public string? SignalRouteKey
     {
@@ -207,10 +241,22 @@ public sealed class ChannelItem : INotifyPropertyChanged
         _ => "LIVE"
     };
 
-    public string SearchText => $"{Name}\n{Group}\n{TvgName}\n{SourceName}".ToUpperInvariant();
+    public string SearchText =>
+        $"{Name}\n{Group}\n{TvgName}\n{SourceName}\n{MediaLibraryTitle}\n{SeriesTitle}\n{ReleaseYear}".ToUpperInvariant();
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
+    private static string FormatMinutes(long totalMinutes)
+    {
+        if (totalMinutes < 60) return $"{totalMinutes}m";
+        var hours = totalMinutes / 60;
+        var minutes = totalMinutes % 60;
+        return minutes == 0 ? $"{hours}h" : $"{hours}h {minutes}m";
+    }
+
+    private static string FormatDuration(long milliseconds) =>
+        FormatMinutes(Math.Max(1, milliseconds / 60_000));
 }

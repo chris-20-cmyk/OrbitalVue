@@ -53,7 +53,7 @@ public actor MediaCenterRepository {
             cachedSnapshot = saved
             return try loadedCatalog(
                 from: saved,
-                notice: "The media server could not be refreshed. StreamVue opened the last protected library snapshot.",
+                notice: "The media server could not be refreshed. OrbitalVue opened the last protected library snapshot.",
                 usedCachedFallback: true
             )
         }
@@ -172,7 +172,7 @@ public actor MediaCenterRepository {
         } catch {
             return try loadedCatalog(
                 from: saved,
-                notice: "The media server could not be refreshed. StreamVue kept the last protected library snapshot.",
+                notice: "The media server could not be refreshed. OrbitalVue kept the last protected library snapshot.",
                 usedCachedFallback: true
             )
         }

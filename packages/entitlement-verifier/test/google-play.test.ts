@@ -63,7 +63,7 @@ describe("Google Play entitlement verification", () => {
     });
 
     await expect(verifyGooglePlayPurchase(request, {
-      packageName: "com.streamvue.player",
+      packageName: "com.orbitalvue.player",
       productId: "streamvue.premium"
     }, publisher)).rejects.toThrow("does not match");
     expect(publisher.getProductPurchase).not.toHaveBeenCalled();
@@ -82,11 +82,11 @@ describe("Google Play entitlement verification", () => {
     const response = await verifyGooglePlayPurchase({
       schemaVersion: 1,
       platform: "google-play",
-      packageName: "com.streamvue.player",
+      packageName: "com.orbitalvue.player",
       productId: "streamvue.premium",
       purchaseToken: "purchase/token+value"
     }, {
-      packageName: "com.streamvue.player",
+      packageName: "com.orbitalvue.player",
       productId: "streamvue.premium"
     }, client);
 
@@ -100,7 +100,7 @@ describe("Google Play entitlement verification", () => {
   it("keeps malformed and upstream failures generic at the HTTP boundary", async () => {
     const handler = createEntitlementVerifierHandler({
       googlePlay: {
-        config: { packageName: "com.streamvue.player", productId: "streamvue.premium" },
+        config: { packageName: "com.orbitalvue.player", productId: "orbitalvue.premium" },
         publisher: { getProductPurchase: async () => { throw new Error("upstream included purchase-token-secret"); } }
       }
     });
@@ -118,7 +118,7 @@ describe("Google Play entitlement verification", () => {
       body: JSON.stringify({
         schemaVersion: 1,
         platform: "google-play",
-        packageName: "com.streamvue.player",
+        packageName: "com.orbitalvue.player",
         productId: "streamvue.premium",
         purchaseToken: "purchase-token-secret"
       })

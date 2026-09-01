@@ -193,10 +193,10 @@ class MediaCenterSecurityTest {
 
     private companion object {
         val testDevice = MediaCenterDeviceIdentity(
-            client = "StreamVue",
+            client = "OrbitalVue",
             device = "Android Test",
             deviceId = "android-test-device",
-            version = "5.2.0"
+            version = "5.6.0"
         )
     }
 }

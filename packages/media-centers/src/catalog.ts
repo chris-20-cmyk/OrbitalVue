@@ -110,7 +110,7 @@ export function parseMediaCenterPlaybackUri(value: string): MediaCenterPlaybackL
     || url.port !== ""
     || url.search !== ""
     || url.hash !== "") {
-    throw new TypeError("This is not a StreamVue media-center playback address.");
+    throw new TypeError("This is not an OrbitalVue media-center playback address.");
   }
   const provider = url.hostname.toLowerCase();
   if (provider !== "plex" && provider !== "emby") {

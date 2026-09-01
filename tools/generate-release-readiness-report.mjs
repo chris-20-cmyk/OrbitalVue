@@ -173,7 +173,7 @@ const report = {
 };
 
 const lines = [
-  "# StreamVue release readiness",
+  "# OrbitalVue release readiness",
   "",
   `App version: **${pkg.version}**  `,
   `Ready Store lanes: **${readyPlatforms.length}/${platforms.length}**  `,

@@ -14,10 +14,10 @@
     "localizationReviewed": false
   },
   "shared": {
-    "productName": "StreamVue",
+    "productName": "OrbitalVue",
     "tagline": "Your channels. Native player.",
     "shortDescription": "Private IPTV and personal media playback across your screens",
-    "fullDescription": "StreamVue is a polished native player for IPTV and personal media sources you choose. Connect an M3U or M3U8 playlist source and browse channels using the groups supplied by that source. Native platform playback provides full-screen viewing, hardware acceleration where supported, flexible aspect ratios, favorites, search, launch refresh, and last-working-copy recovery.\n\nOn supported platforms, an optional one-time Premium unlock adds personal Plex and Emby connections. Premium availability varies by platform and remains locked until that platform's verified store-purchase route is enabled.\n\nStreamVue does not provide, sell, host, or recommend channels, playlists, or media. You must supply your own source and have permission to access every stream and library you connect. Playback features vary by device, stream format, codec, and hardware.",
+    "fullDescription": "OrbitalVue is a polished native player for IPTV and personal media sources you choose. Connect an M3U or M3U8 playlist source and browse channels using the groups supplied by that source. Native platform playback provides full-screen viewing, hardware acceleration where supported, flexible aspect ratios, favorites, search, launch refresh, and last-working-copy recovery.\n\nOn supported platforms, an optional one-time Premium unlock adds personal Plex and Emby connections. Premium availability varies by platform and remains locked until that platform's verified store-purchase route is enabled.\n\nOrbitalVue does not provide, sell, host, or recommend channels, playlists, or media. You must supply your own source and have permission to access every stream and library you connect. Playback features vary by device, stream format, codec, and hardware.",
     "features": [
       "Connect an M3U or M3U8 file or URL where supported",
       "Keep the exact channel groups supplied by your source",
@@ -26,7 +26,7 @@
       "Refresh URL sources at launch with last-working-copy recovery",
       "Connect personal Plex and Emby libraries with an optional one-time Premium unlock where available"
     ],
-    "contentDisclaimer": "StreamVue does not provide channels or media. Connect only sources you own or are authorized to access.",
+    "contentDisclaimer": "OrbitalVue does not provide channels or media. Connect only sources you own or are authorized to access.",
     "screenshotPlan": [
       {
         "id": "source-library",
@@ -78,10 +78,10 @@
       "ready": false
     },
     "android": {
-      "applicationId": "com.streamvue.player",
+      "applicationId": "com.orbitalvue.player",
       "category": "Video Players & Editors",
       "copy": {
-        "appName": "StreamVue",
+        "appName": "OrbitalVue",
         "shortDescription": "Private IPTV and personal media playback for phones, tablets, and TVs",
         "fullDescriptionSource": "shared.fullDescription",
         "premiumAvailabilityNote": "An optional one-time Premium unlock adds personal Plex and Emby connections."
@@ -128,10 +128,10 @@
       "ready": false
     },
     "apple": {
-      "applicationId": "com.streamvue.player",
+      "applicationId": "com.orbitalvue.player",
       "category": "Entertainment",
       "copy": {
-        "name": "StreamVue",
+        "name": "OrbitalVue",
         "subtitle": "Your channels. Native player.",
         "descriptionSource": "shared.fullDescription",
         "keywords": "IPTV,M3U,M3U8,live TV,TV player,Plex,Emby,media player",
@@ -167,10 +167,10 @@
       "ready": false
     },
     "samsung": {
-      "applicationId": "SvTvPlayer.StreamVue",
+      "applicationId": "OvTvPlayer.OrbitalVue",
       "category": "Entertainment",
       "copy": {
-        "name": "StreamVue",
+        "name": "OrbitalVue",
         "description": "Private, native television playback for personal channel sources.",
         "fullDescriptionSource": "shared.fullDescription",
         "premiumAvailabilityNote": "An optional one-time Premium unlock adds personal Plex and Emby connections."
@@ -205,10 +205,10 @@
       "ready": false
     },
     "lg": {
-      "applicationId": "com.streamvue.player.tv",
+      "applicationId": "com.orbitalvue.player.tv",
       "category": "Entertainment",
       "copy": {
-        "title": "StreamVue",
+        "title": "OrbitalVue",
         "appDescription": "Private television playback for your channel sources",
         "fullDescriptionSource": "shared.fullDescription",
         "premiumAvailabilityNote": "Plex and Emby connections are not available in this LG release."

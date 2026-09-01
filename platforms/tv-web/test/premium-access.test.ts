@@ -138,7 +138,7 @@ describe("television premium store adapters", () => {
 
     expect(payment).toEqual({
       OrderItemID: config.productId,
-      OrderTitle: "StreamVue Personal Media Centers",
+      OrderTitle: "OrbitalVue Personal Media Centers",
       OrderTotal: "9.99",
       OrderCurrencyID: "USD",
       OrderCustomID: "samsung-account-user"
@@ -312,7 +312,7 @@ describe("television premium store adapters", () => {
     if (checkoutAvailable) {
       decision.product = {
         productId: config.productId,
-        title: "StreamVue Personal Media Centers",
+        title: "OrbitalVue Personal Media Centers",
         localizedPrice: "$9.99",
         orderTotal: "9.99",
         currencyId: "USD"

@@ -37,7 +37,7 @@ class PremiumBillingStateTest {
     @Test
     fun `backend verifier sends the token only to transport and requires a matching response`() = runBlocking {
         var captured: PremiumVerificationRequest? = null
-        val verifier = BackendPremiumPurchaseVerifier("com.streamvue.player") { request ->
+        val verifier = BackendPremiumPurchaseVerifier("com.orbitalvue.player") { request ->
             captured = request
             PremiumVerificationResponse(
                 schemaVersion = 1,
@@ -48,10 +48,10 @@ class PremiumBillingStateTest {
 
         assertTrue(verifier.verify("premium.once", "purchase-token"))
         assertEquals("google-play", captured?.platform)
-        assertEquals("com.streamvue.player", captured?.packageName)
+        assertEquals("com.orbitalvue.player", captured?.packageName)
         assertEquals("purchase-token", captured?.purchaseToken)
 
-        val mismatch = BackendPremiumPurchaseVerifier("com.streamvue.player") {
+        val mismatch = BackendPremiumPurchaseVerifier("com.orbitalvue.player") {
             PremiumVerificationResponse(1, true, "different.product")
         }
         assertFalse(mismatch.verify("premium.once", "purchase-token"))
@@ -61,7 +61,7 @@ class PremiumBillingStateTest {
     fun `verification wire contract uses stable field names`() {
         val gson = Gson()
         val request = PremiumVerificationRequest(
-            packageName = "com.streamvue.player",
+            packageName = "com.orbitalvue.player",
             productId = "premium.once",
             purchaseToken = "transient-token"
         )

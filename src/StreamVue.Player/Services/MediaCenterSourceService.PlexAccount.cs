@@ -80,7 +80,7 @@ public sealed partial class MediaCenterSourceService
             var servers = await DiscoverPlexAccountServersAsync(accountToken.Value, cancellationToken);
             RequirePlexAccountAccess();
             if (servers.Count == 0)
-                throw new InvalidDataException("Plex approved StreamVue but returned no usable media servers.");
+                throw new InvalidDataException("Plex approved OrbitalVue but returned no usable media servers.");
 
             var now = DateTimeOffset.UtcNow;
             var expiresAt = now.Add(PlexDiscoveryLifetime);
@@ -382,7 +382,7 @@ public sealed partial class MediaCenterSourceService
         {
             ["Accept"] = "application/json",
             ["X-Plex-Client-Identifier"] = _deviceId,
-            ["X-Plex-Product"] = "StreamVue",
+            ["X-Plex-Product"] = "OrbitalVue",
             ["X-Plex-Version"] = ClientVersion
         };
         if (!string.IsNullOrWhiteSpace(token)) headers["X-Plex-Token"] = ValidatePlexToken(token);
@@ -403,7 +403,7 @@ public sealed partial class MediaCenterSourceService
     private static string BuildPlexAuthorizationUrl(string clientIdentifier, string code) =>
         $"https://app.plex.tv/auth#?clientID={Uri.EscapeDataString(clientIdentifier)}" +
         $"&code={Uri.EscapeDataString(code)}" +
-        $"&context%5Bdevice%5D%5Bproduct%5D={Uri.EscapeDataString("StreamVue")}";
+        $"&context%5Bdevice%5D%5Bproduct%5D={Uri.EscapeDataString("OrbitalVue")}";
 
     private static DateTimeOffset? ReadPlexExpiry(JsonElement root, DateTimeOffset relativeTo)
     {

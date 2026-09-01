@@ -128,8 +128,8 @@ if (appInfo.id !== manifest.appId) fail("appinfo.json id does not exactly match 
 if (!/^(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})$/.test(appInfo.version)) {
   fail("appinfo.json version must be three decimal components of at most nine digits each");
 }
-if (appInfo.vendor !== "StreamVue" || appInfo.type !== "web" || appInfo.main !== "index.html") {
-  fail("appinfo.json must keep the reviewed StreamVue web-app identity and entry point");
+if (appInfo.vendor !== "OrbitalVue" || appInfo.type !== "web" || appInfo.main !== "index.html") {
+  fail("appinfo.json must keep the reviewed OrbitalVue web-app identity and entry point");
 }
 if (typeof appInfo.title !== "string" || appInfo.title.length === 0 || appInfo.title.length > 20) {
   fail("appinfo.json title must contain 1 to 20 characters");

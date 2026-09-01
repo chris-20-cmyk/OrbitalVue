@@ -1,8 +1,8 @@
-# StreamVue Native
+# OrbitalVue Native
 
-StreamVue is a native IPTV player. The Windows 5.5 preview uses .NET, WPF, LibVLCSharp, the VideoLAN playback engine, and Velopack packaging. The Android 5.2 line uses Kotlin, Compose, and AndroidX Media3 for phones, tablets, Android TV, and Google TV. Samsung Tizen and LG webOS share a lightweight remote-first TypeScript surface while retaining each vendor's native television playback path. Apple 5.1 uses SwiftUI with selectable KSPlayer/Metal and AVFoundation/AVKit engines for iPhone, iPad, and Apple TV.
+OrbitalVue is a native IPTV and personal-media player. The Windows 5.6 preview uses .NET, WPF, LibVLCSharp, the VideoLAN playback engine, and Velopack packaging. Android uses Kotlin, Compose, and AndroidX Media3 for phones, tablets, Android TV, and Google TV. Samsung Tizen and LG webOS share a lightweight remote-first TypeScript surface while retaining each vendor's native television playback path. Apple uses SwiftUI with selectable KSPlayer/Metal and AVFoundation/AVKit engines for iPhone, iPad, and Apple TV.
 
-## Android 5.2 foundation
+## Android 5.6 foundation
 
 - M3U/M3U8 file and URL import with a private last-working-copy cache and automatic URL refresh at launch
 - Exact playlist grouping, categorized All Channels browsing, fast search, and remote-friendly 10-foot navigation
@@ -12,7 +12,7 @@ StreamVue is a native IPTV player. The Windows 5.5 preview uses .NET, WPF, LibVL
 - Repeatable cloud builds that produce a personal-test APK, an explicitly locked unsigned foundation AAB, and a readiness-gated upload-key-signed Google Play candidate without requiring a paid certificate
 - Signed Plex PIN login with QR/browser approval, automatic secure/local server discovery, a Keystore-only Ed25519 identity, token-free Compose state, identity-bound credential storage, and cancellation rollback
 
-The Android Studio project lives in `platforms/android`; the shared contract lives in `contracts`. StreamVue does not ship or discover channels. Users connect sources they are authorized to use.
+The Android Studio project lives in `platforms/android`; the shared contract lives in `contracts`. OrbitalVue does not ship or discover channels. Users connect sources they are authorized to use.
 
 See [Android build instructions](platforms/android/README.md), the [cross-platform architecture](docs/platform-architecture.md), and the [distribution and signing choices](docs/distribution-and-signing.md).
 
@@ -27,7 +27,7 @@ See [Android build instructions](platforms/android/README.md), the [cross-platfo
 
 See [TV build and sideload instructions](platforms/tv-web/README.md) and the [television design system](docs/design/tv-shell-design-system.md).
 
-## Apple 5.1 foundation
+## Apple 5.6 foundation
 
 - Native SwiftUI clients for iOS, iPadOS, and tvOS 17 or later, with an adaptive `NavigationSplitView` on touch devices and a focus-aware three-column Apple TV workspace
 - Playlist URL onboarding everywhere plus security-scoped M3U/M3U8 file import on iPhone and iPad
@@ -40,7 +40,7 @@ See [TV build and sideload instructions](platforms/tv-web/README.md) and the [te
 
 The Apple milestone is a source/simulator foundation plus a locked signed-candidate lane, not a published App Store package. Physical-device installation requires Xcode signing. Personal source builds include pinned GPL-3.0 KSPlayer, while the audited Store package graph is AVKit-only and excludes that dependency. Adding KSPlayer to a public binary would still require a GPL-compatible or separately licensed route. App Store and TestFlight distribution also require Apple Developer Program enrollment, privacy answers, and signed archives. The candidate lane uses one bundle ID and StoreKit product across iOS and tvOS, validates protected signing material, and stops before upload. See [Apple build instructions](platforms/apple/README.md) and [KSPlayer licensing gate](docs/ksplayer-licensing.md).
 
-## 5.1 protected personal libraries
+## 5.6 protected personal libraries
 
 - Plex token and Emby account connections alongside M3U and Xtream sources on Windows, Android/Google TV, Samsung/LG TV, and the Apple foundation; Windows, Apple, and Android/Google TV also support signed Plex account discovery
 - A shared `streamvue-media://` catalog contract that stores provider, verified server identity, and item identity—but never a playable token URL
@@ -49,7 +49,7 @@ The Apple milestone is a source/simulator foundation plus a locked signed-candid
 - Just-in-time Plex direct-play and Emby direct-play/direct-stream/transcode resolution, so the active native player is the only component that briefly receives a credentialed URL
 - Windows VOD resume and seek controls using server-provided playback positions, with normal source-manager refresh, offline fallback, and safe credential cleanup
 - Windows 5.4 sends Plex timeline and Emby session check-ins on play, pause, seek, ten-second progress, stop, source changes, entitlement revocation, and shutdown so resume/watched state follows the selected media-center account; reporting is serialized, bounded, cancellable, and never interrupts local video
-- Windows 5.5 renders Plex and Emby posters in the virtualized channel library and Signal desk through token-free artwork locators, same-server identity verification, header-only credentials, four-request concurrency, strict image/size validation, and a 160-item decoded-image memory ceiling
+- Windows 5.6 adds Continue Watching and Recently Added browsing while rendering Plex and Emby posters through token-free artwork locators, same-server identity verification, header-only credentials, bounded concurrency, strict image/size validation, and a 160-item decoded-image memory ceiling
 - A cross-platform premium-access boundary: personal builds include Plex/Emby, while store builds collect no credentials and make no media-server requests until a native one-time purchase is verified
 - Native one-time purchase foundations: StoreKit 2 on iOS/tvOS, Google Play Billing 9.1.0 on Android/Google TV, a Microsoft Store durable-license adapter on Windows, and Samsung Checkout with a protected DPI verifier, including localized pricing, Buy/Restore actions, live entitlement changes, and fail-closed verification. The shared server package verifies Google ProductPurchaseV2 state and Samsung product/history HMACs without returning tokens or account identifiers. Its route-disabled Cloudflare Worker adapter adds required secret bindings, exact-host/origin controls, opaque purchaser-key rate limiting, identifier-free logs, Workers-runtime tests, and a no-deploy dry run. LG is explicitly unavailable until its required third-party billing route is contracted and verified.
 - Reproducible x64 Windows MSIX packaging with exact Partner Center identity injection, Store-owned updates, no Velopack runtime in Store packages, exact tile assets, independent package inspection, and a readiness-gated candidate workflow.
@@ -98,7 +98,7 @@ The intended store product is a one-time lifetime unlock, not a subscription. St
 
 - Background DVR mode that keeps schedules and active recordings running from the Windows notification area after the main window closes
 - Resumable Windows wake timers that can bring the PC out of supported sleep states two minutes before a scheduled recording
-- Single-instance activation so reopening StreamVue restores the background window instead of starting a competing recorder
+- Single-instance activation so reopening OrbitalVue restores the background window instead of starting a competing recorder
 - Automatic interrupted-recording recovery with 2, 5, and 10 second backoff, preserved playable segments, and up to five attempts
 - Safe Windows shutdown handling that finalizes an active transport stream before the app exits
 - Live TV disk timeshift with pause, a configurable 15–120 minute window, live-edge return, and rewind controls on seekable streams
@@ -115,7 +115,7 @@ The intended store product is a one-time lifetime unlock, not a subscription. St
 - Configurable free-space protection checked before and throughout live recording
 - One-click live DVR recording from the player controls or Ctrl+Shift+R, with elapsed-time, file-size, and save status
 - Independent direct-stream capture that records original-quality MPEG-TS without retuning or interrupting the channel being watched
-- TV Guide scheduling with automatic start and stop while StreamVue is open
+- TV Guide scheduling with automatic start and stop while OrbitalVue is open
 - Configurable recordings folder plus a playable built-in recordings library
 - Recording-safe updates and shutdown confirmation so active transport-stream files close cleanly
 - Native CAST control that opens Windows nearby-display discovery for powered-on Miracast TVs, projectors, adapters, and receiving PCs—even when they have not been paired before
@@ -152,7 +152,7 @@ The intended store product is a one-time lifetime unlock, not a subscription. St
 - Single-audio focus so only the chosen Multiview tile is audible at a time
 - Resource-aware Focus and 2-up modes that suspend hidden native streams
 - Window-safe native child video surfaces that stay clipped inside their assigned tiles
-- Uninterrupted picture on multi-monitor setups when StreamVue loses keyboard focus
+- Uninterrupted picture on multi-monitor setups when OrbitalVue loses keyboard focus
 - True borderless fullscreen that occupies every pixel of the selected display, including the taskbar area
 - Video-only Watch fullscreen and an edge-to-edge Multiview signal grid
 - F11, Alt+Enter, Escape, and Watch-video double-click fullscreen controls
@@ -249,7 +249,7 @@ pnpm site:dev
 pnpm site:build
 ```
 
-The static site in `site/` provides the StreamVue overview, plain-language privacy policy, and support guidance needed by every Store lane. It is intentionally marked as a draft. The manual **Build public site candidate** workflow stops at an artifact and remains locked until `store/public-site-readiness.json` contains verified owner approval, a monitored privacy contact, reviewed copy, canonical HTTPS URLs, and a verified live deployment. Every Store candidate also requires this shared site gate.
+The static site in `site/` provides the OrbitalVue overview, plain-language privacy policy, and support guidance needed by every Store lane. It is intentionally marked as a draft. The manual **Build public site candidate** workflow stops at an artifact and remains locked until `store/public-site-readiness.json` contains verified owner approval, a monitored privacy contact, reviewed copy, canonical HTTPS URLs, and a verified live deployment. Every Store candidate also requires this shared site gate.
 
 The visual source concepts and the implementation comparison are recorded in [the public-site fidelity ledger](docs/design/streamvue-support-site-fidelity.md).
 
@@ -261,4 +261,4 @@ The visual source concepts and the implementation comparison are recorded in [th
 
 ## Privacy
 
-StreamVue connects directly to playlist, guide, Plex, and Emby servers and does not upload library contents or credentials. Miracast casting mirrors the rendered picture and compatible system audio rather than sending source addresses to the display. The last-known-good playlist cache, XMLTV cache, saved guide configuration, Xtream credentials, media-center tokens, and StreamVue backup settings payload are protected with Windows per-user encryption. On Apple devices, URL and media-center secrets live in Keychain and cached catalogs use complete file protection and are excluded from device backup. Diagnostic exports omit provider addresses, credentials, channel names, and guide titles.
+OrbitalVue connects directly to playlist, guide, Plex, and Emby servers and does not upload library contents or credentials. Miracast casting mirrors the rendered picture and compatible system audio rather than sending source addresses to the display. The last-known-good playlist cache, XMLTV cache, saved guide configuration, Xtream credentials, media-center tokens, and OrbitalVue backup settings payload are protected with Windows per-user encryption. On Apple devices, URL and media-center secrets live in Keychain and cached catalogs use complete file protection and are excluded from device backup. Diagnostic exports omit provider addresses, credentials, channel names, and guide titles.

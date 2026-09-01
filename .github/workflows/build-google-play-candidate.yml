@@ -10,7 +10,7 @@ on:
       version_name:
         description: User-visible release version
         required: true
-        default: 5.2.0-alpha.1
+        default: 5.6.0-alpha.1
 
 permissions:
   contents: read
@@ -27,7 +27,7 @@ jobs:
       PLAY_VERSION_CODE: ${{ inputs.version_code }}
       PLAY_VERSION_NAME: ${{ inputs.version_name }}
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
 
       - name: Set up Java
@@ -163,7 +163,7 @@ jobs:
 
           output_dir='artifacts/google-play'
           mkdir -p "$output_dir"
-          output_bundle="$output_dir/StreamVue-$PLAY_VERSION_NAME-$PLAY_VERSION_CODE-google-play-upload.aab"
+          output_bundle="$output_dir/OrbitalVue-$PLAY_VERSION_NAME-$PLAY_VERSION_CODE-google-play-upload.aab"
           cp "$bundle" "$output_bundle"
           (cd "$output_dir" && sha256sum "$(basename "$output_bundle")" > SHA256SUMS.txt)
           printf '%s\n' "$actual_fingerprint" > "$output_dir/UPLOAD_CERT_SHA256.txt"

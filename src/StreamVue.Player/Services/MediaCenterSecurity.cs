@@ -145,7 +145,7 @@ public static partial class MediaCenterSecurity
             !Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
             !string.Equals(uri.Scheme, "streamvue-media", StringComparison.OrdinalIgnoreCase) ||
             !string.IsNullOrEmpty(uri.UserInfo) || !uri.IsDefaultPort || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
-            throw new InvalidDataException("This is not a StreamVue media-center playback address.");
+            throw new InvalidDataException("This is not an OrbitalVue media-center playback address.");
         var provider = NormalizeProvider(uri.Host);
         var parts = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.UnescapeDataString).ToArray();
         if (parts.Length != 2) throw new InvalidDataException("The media-center playback address is incomplete.");
@@ -179,7 +179,7 @@ public static partial class MediaCenterSecurity
             !Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
             !string.Equals(uri.Scheme, "streamvue-artwork", StringComparison.OrdinalIgnoreCase) ||
             !string.IsNullOrEmpty(uri.UserInfo) || !uri.IsDefaultPort || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
-            throw new InvalidDataException("This is not a StreamVue media-center artwork address.");
+            throw new InvalidDataException("This is not an OrbitalVue media-center artwork address.");
         var provider = NormalizeProvider(uri.Host);
         var parts = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.UnescapeDataString).ToArray();
         if (parts.Length is not (2 or 3)) throw new InvalidDataException("The media-center artwork address is incomplete.");

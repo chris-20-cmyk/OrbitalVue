@@ -6,7 +6,7 @@ on:
       version:
         description: LG webOS package version (major.minor.patch)
         required: true
-        default: 5.1.0
+        default: 5.6.0
 
 permissions:
   contents: read
@@ -22,9 +22,9 @@ jobs:
     timeout-minutes: 10
     env:
       LG_PACKAGE_VERSION: ${{ inputs.version }}
-      LG_APP_ID: com.streamvue.player.tv
+      LG_APP_ID: com.orbitalvue.player.tv
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
 
       - name: Set up Node.js
@@ -53,10 +53,10 @@ jobs:
     timeout-minutes: 30
     env:
       LG_PACKAGE_VERSION: ${{ inputs.version }}
-      LG_APP_ID: com.streamvue.player.tv
+      LG_APP_ID: com.orbitalvue.player.tv
       WEBOS_CLI_VERSION: 3.2.5
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
 
       - name: Set up pnpm

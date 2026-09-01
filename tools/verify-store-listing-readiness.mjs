@@ -129,14 +129,14 @@ exactKeys(listing.shared, [
   "contentDisclaimer",
   "screenshotPlan"
 ], "shared listing copy");
-if (listing.shared.productName !== "StreamVue") fail("the product name must remain StreamVue");
+if (listing.shared.productName !== "OrbitalVue") fail("the product name must remain OrbitalVue");
 validText(listing.shared.tagline, 2, 30, "shared tagline");
 validText(listing.shared.shortDescription, 10, 80, "shared short description");
 validText(listing.shared.fullDescription, 200, 10_000, "shared full description");
 validText(listing.shared.contentDisclaimer, 40, 500, "content disclaimer");
 if (!/does not provide/i.test(listing.shared.contentDisclaimer)
   || !/authorized to access/i.test(listing.shared.contentDisclaimer)) {
-  fail("content disclaimer must say StreamVue provides no content and requires authorized sources");
+  fail("content disclaimer must say OrbitalVue provides no content and requires authorized sources");
 }
 if (!Array.isArray(listing.shared.features) || listing.shared.features.length !== 6) {
   fail("shared features must contain the six reviewed product capabilities");
@@ -186,7 +186,7 @@ if (listing.platforms.windows.copy.descriptionSource !== "shared.fullDescription
   fail("Windows must use the reviewed shared description and feature list");
 }
 validText(listing.platforms.windows.copy.shortDescription, 10, 1_500, "Windows short description");
-if (listing.platforms.android.copy.appName !== "StreamVue") fail("Google Play app name must remain StreamVue");
+if (listing.platforms.android.copy.appName !== "OrbitalVue") fail("Google Play app name must remain OrbitalVue");
 validText(listing.platforms.android.copy.appName, 2, 30, "Google Play app name");
 validText(listing.platforms.android.copy.shortDescription, 10, 80, "Google Play short description");
 if (/[\r\n]/.test(listing.platforms.android.copy.shortDescription)
@@ -199,7 +199,7 @@ validText(listing.platforms.apple.copy.keywords, 3, 100, "Apple keywords");
 if (listing.platforms.apple.copy.descriptionSource !== "shared.fullDescription") {
   fail("Apple must use the reviewed shared description");
 }
-if (listing.platforms.samsung.copy.name !== "StreamVue") fail("Samsung app name must remain StreamVue");
+if (listing.platforms.samsung.copy.name !== "OrbitalVue") fail("Samsung app name must remain OrbitalVue");
 validText(listing.platforms.samsung.copy.description, 20, 500, "Samsung description");
 if (listing.platforms.samsung.copy.fullDescriptionSource !== "shared.fullDescription") {
   fail("Samsung must use the reviewed shared full description");
@@ -458,13 +458,13 @@ if (!androidStrings.includes(`<string name="app_name">${listing.platforms.androi
   fail("Android packaged app name does not match the Google Play listing");
 }
 const appleProject = await readText("platforms/apple/project.yml");
-if ((appleProject.match(/CFBundleDisplayName: StreamVue/g) ?? []).length !== 2
+if ((appleProject.match(/CFBundleDisplayName: OrbitalVue/g) ?? []).length !== 2
   || (appleProject.match(/LSApplicationCategoryType: public\.app-category\.entertainment/g) ?? []).length !== 2) {
   fail("Apple packaged names/categories do not match the App Store listing");
 }
 const windowsManifest = await readText("packaging/windows-msix/AppxManifest.template.xml");
-if ((windowsManifest.match(/DisplayName="?StreamVue"?/g) ?? []).length < 1
-  && !windowsManifest.includes("<DisplayName>StreamVue</DisplayName>")) {
+if ((windowsManifest.match(/DisplayName="?OrbitalVue"?/g) ?? []).length < 1
+  && !windowsManifest.includes("<DisplayName>OrbitalVue</DisplayName>")) {
   fail("Windows package display name does not match the Partner Center listing");
 }
 if (listing.platforms.lg.assets.sellerIcon400.reviewed !== lgDistribution.sellerIconReviewed

@@ -22,7 +22,7 @@ struct SourceImportView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Connect your content")
                             .font(.largeTitle.bold())
-                        Text("Use a provider URL or import an M3U/M3U8 file you are authorized to access. StreamVue never uploads your playlist.")
+                        Text("Use a provider URL or import an M3U/M3U8 file you are authorized to access. OrbitalVue never uploads your playlist.")
                             .foregroundStyle(theme.muted)
                     }
 
@@ -89,7 +89,7 @@ struct SourceImportView: View {
                                 .background(theme.accent, in: Capsule())
                         }
                         Text(premiumAccess.canUseMediaCenters
-                             ? "Bring your personal movies, shows, recordings, and live-TV libraries into the same StreamVue experience. \(premiumAccess.explanation)"
+                             ? "Bring your personal movies, shows, recordings, and live-TV libraries into the same OrbitalVue experience. \(premiumAccess.explanation)"
                              : premiumPurchases.message)
                             .font(.subheadline)
                             .foregroundStyle(theme.muted)
