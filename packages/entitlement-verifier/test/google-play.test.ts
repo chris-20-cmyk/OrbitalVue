@@ -100,7 +100,7 @@ describe("Google Play entitlement verification", () => {
   it("keeps malformed and upstream failures generic at the HTTP boundary", async () => {
     const handler = createEntitlementVerifierHandler({
       googlePlay: {
-        config: { packageName: "com.orbitalvue.player", productId: "orbitalvue.premium" },
+        config: { packageName: "com.orbitalvue.player", productId: "streamvue.premium" },
         publisher: { getProductPurchase: async () => { throw new Error("upstream included purchase-token-secret"); } }
       }
     });
