@@ -67,7 +67,7 @@ if (!Array.isArray(catalog.channels) || catalog.channels.length === 0) fail("at 
 
 const sourceIds = new Set(catalog.sources.map((source) => source.id));
 const channelIds = new Set();
-const allowedKinds = new Set(["live", "movie", "series", "recording", "replay"]);
+const allowedKinds = new Set(["live", "movie", "series", "recording", "replay", "music"]);
 const allowedSchemes = new Set([
   "http:",
   "https:",

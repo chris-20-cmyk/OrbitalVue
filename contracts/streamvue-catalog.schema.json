@@ -107,7 +107,7 @@
           "maxLength": 512
         },
         "kind": {
-          "enum": ["live", "movie", "series", "recording", "replay"]
+          "enum": ["live", "movie", "series", "recording", "replay", "music"]
         },
         "sourceId": {
           "type": "string",

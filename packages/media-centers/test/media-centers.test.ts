@@ -16,6 +16,8 @@ import {
   type MediaCenterConnection,
   type MediaCenterHttpRequest,
   type MediaCenterHttpTransport,
+  type MediaCenterItem,
+  type MediaCenterItemKind,
   type PlexDeviceSigner
 } from "../src/index.js";
 import { resolveServerPath } from "../src/url.js";
@@ -751,5 +753,50 @@ describe("Emby integration", () => {
     expect(mock.requests.filter((request) =>
       new URL(request.url).pathname === "/emby/System/Info/Public"
     )).toHaveLength(2);
+  });
+});
+
+describe("media-center catalog item kinds", () => {
+  const connection: MediaCenterConnection = {
+    contractVersion: MEDIA_CENTER_CONTRACT_VERSION,
+    provider: "plex",
+    serverId: "plex-server-1",
+    displayName: "Plex",
+    baseUrl: "https://plex.home:32400",
+    displayLocation: "plex.home:32400",
+    credentialId: "vault-plex-1"
+  };
+  const kinds: MediaCenterItemKind[] = ["movie", "episode", "video", "recording", "live-tv", "audio"];
+  const items: MediaCenterItem[] = kinds.map((kind, index) => ({
+    id: `item-${index}`,
+    provider: "plex",
+    serverId: "plex-server-1",
+    libraryId: "library-1",
+    libraryTitle: "Library",
+    kind,
+    title: `Item ${index}`,
+    played: false,
+    mediaSources: []
+  }));
+
+  it("gives every item kind a catalog presentation", () => {
+    const catalog = createMediaCenterCatalog(connection, [], items);
+    // A kind with no presentation is silently discarded, which is how a Plex or Emby music
+    // library used to browse as empty. Nothing may drop out.
+    expect(catalog.channels).toHaveLength(items.length);
+  });
+
+  it("presents audio tracks as music rather than dropping them", () => {
+    const catalog = createMediaCenterCatalog(connection, [], items);
+    const audioIndex = kinds.indexOf("audio");
+    expect(catalog.channels[audioIndex]?.kind).toBe("music");
+  });
+
+  it("numbers channels contiguously", () => {
+    const catalog = createMediaCenterCatalog(connection, [], items);
+    // Channel numbers come from the pre-filter index, so any future kind that maps to
+    // undefined would leave a gap here rather than shifting the numbers down.
+    expect(catalog.channels.map((channel) => channel.number))
+      .toEqual(items.map((_, index) => index + 1));
   });
 });

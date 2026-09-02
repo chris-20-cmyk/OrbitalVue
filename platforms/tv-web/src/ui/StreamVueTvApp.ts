@@ -1151,6 +1151,7 @@ function mediaKindLabel(channel: CatalogChannel): string {
   case "series": return "Series episode";
   case "recording": return "Recording";
   case "replay": return "Replay";
+  case "music": return "Music";
   case "live": return "Live television";
   }
 }

@@ -372,19 +372,6 @@ class MediaCenterRepository internal constructor(
         )
     }
 
-    /**
-     * Maps a media-center item kind onto a catalog channel kind, or null when the item has no
-     * catalog presentation and must be omitted. Audio-only items are excluded here to match the
-     * Apple, Windows, and shared TypeScript catalog builders, which all drop them.
-     */
-    private fun catalogKind(kind: MediaCenterItemKind): ChannelKind? = when (kind) {
-        MediaCenterItemKind.Movie, MediaCenterItemKind.Video -> ChannelKind.Movie
-        MediaCenterItemKind.Episode -> ChannelKind.Series
-        MediaCenterItemKind.Recording -> ChannelKind.Recording
-        MediaCenterItemKind.LiveTv -> ChannelKind.Live
-        MediaCenterItemKind.Audio -> null
-    }
-
     private fun displayTitle(item: MediaCenterItem): String {
         if (item.kind != MediaCenterItemKind.Episode || item.seriesTitle.isNullOrBlank()) return item.title
         val episode = when {
@@ -443,3 +430,21 @@ private data class ActiveMediaPlayback(
     val connection: MediaCenterConnection,
     val plan: MediaCenterPlaybackPlan
 )
+
+/**
+ * Maps a media-center item kind onto the catalog channel kind that presents it, matching the
+ * Apple, Windows, and shared TypeScript catalog builders. Every kind has a presentation: audio
+ * items become [ChannelKind.Music] rather than being dropped, so a Plex or Emby music library
+ * is not silently empty. A null return means the item has no catalog presentation and is
+ * skipped by the caller; nothing returns null today.
+ *
+ * Declared at file scope so it can be exercised without constructing a repository, which needs
+ * a real Context.
+ */
+internal fun catalogKind(kind: MediaCenterItemKind): ChannelKind? = when (kind) {
+    MediaCenterItemKind.Movie, MediaCenterItemKind.Video -> ChannelKind.Movie
+    MediaCenterItemKind.Episode -> ChannelKind.Series
+    MediaCenterItemKind.Recording -> ChannelKind.Recording
+    MediaCenterItemKind.LiveTv -> ChannelKind.Live
+    MediaCenterItemKind.Audio -> ChannelKind.Music
+}

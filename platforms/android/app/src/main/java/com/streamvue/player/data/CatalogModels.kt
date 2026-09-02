@@ -8,7 +8,8 @@ enum class ChannelKind(val wireName: String, val label: String) {
     Movie("movie", "MOVIE"),
     Series("series", "SERIES"),
     Recording("recording", "RECORDING"),
-    Replay("replay", "REPLAY")
+    Replay("replay", "REPLAY"),
+    Music("music", "MUSIC")
 }
 
 data class CatchupMetadata(

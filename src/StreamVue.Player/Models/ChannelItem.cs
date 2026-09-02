@@ -9,13 +9,19 @@ using StreamVue.Player.Services;
 
 namespace StreamVue.Player.Models;
 
+// PlaylistCacheStore serialises this enum by its numeric value: its JsonSerializerOptions sets
+// only PropertyNameCaseInsensitive, so System.Text.Json writes CachedChannel.Kind to the cache
+// as a bare integer. The values below are therefore a persisted format, not an implementation
+// detail. Append new members at the end and never renumber an existing one -- reordering silently
+// reinterprets every channel already sitting in a user's cache, with no error to notice.
 public enum ChannelKind
 {
-    Live,
-    Movie,
-    Series,
-    Recording,
-    Replay
+    Live = 0,
+    Movie = 1,
+    Series = 2,
+    Recording = 3,
+    Replay = 4,
+    Music = 5
 }
 
 public sealed class ChannelItem : INotifyPropertyChanged
@@ -283,6 +289,7 @@ public sealed class ChannelItem : INotifyPropertyChanged
         ChannelKind.Series => "SERIES",
         ChannelKind.Recording => "RECORDING",
         ChannelKind.Replay => "REPLAY",
+        ChannelKind.Music => "MUSIC",
         _ => "LIVE"
     };
 

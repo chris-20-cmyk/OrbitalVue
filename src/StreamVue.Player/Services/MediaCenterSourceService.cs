@@ -570,6 +570,9 @@ public sealed partial class MediaCenterSourceService
         "episode" => ChannelKind.Series,
         "recording" => ChannelKind.Recording,
         "livetvchannel" => ChannelKind.Live,
+        // Plex sends "track", Emby sends "audio"; both are already accepted upstream and
+        // requested through IncludeItemTypes, so dropping them here left music libraries empty.
+        "track" or "audio" => ChannelKind.Music,
         _ => null
     };
 

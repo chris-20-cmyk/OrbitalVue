@@ -8,6 +8,7 @@ public enum ChannelKind: String, Codable, CaseIterable, Sendable {
     case series
     case recording
     case replay
+    case music
 
     public var label: String { rawValue.uppercased() }
 }

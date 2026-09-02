@@ -520,6 +520,45 @@ struct MediaCenterTests {
         #expect(requests.allSatisfy { !$0.url.absoluteString.contains(password) })
         #expect(requests.allSatisfy { !$0.url.absoluteString.contains(token) })
     }
+
+    @Test("Every media-center item kind reaches the catalog, with audio presented as music")
+    func mapsEveryItemKindToACatalogChannel() throws {
+        let connection = try MediaCenterConnection(
+            provider: .plex,
+            serverID: "plex-server-1",
+            displayName: "Plex",
+            baseURL: "https://plex.home:32400",
+            credentialID: "vault-plex-1"
+        )
+        let kinds = MediaCenterItemKind.allCases
+        let items = kinds.enumerated().map { index, kind in
+            MediaCenterItem(
+                id: "item-\(index)",
+                provider: .plex,
+                serverID: "plex-server-1",
+                libraryID: "library-1",
+                libraryTitle: "Library",
+                kind: kind,
+                title: "Item \(index)",
+                played: false,
+                mediaSources: []
+            )
+        }
+        let snapshot = MediaCenterSnapshot(
+            loadedAt: "2026-09-01T12:00:00Z",
+            connection: connection,
+            libraries: [],
+            items: items
+        )
+
+        let catalog = try MediaCenterCatalogFactory.create(from: snapshot)
+
+        // A kind with no presentation is skipped, which is how a Plex or Emby music library
+        // used to browse as empty. Nothing may drop out.
+        #expect(catalog.channels.count == items.count)
+        let audioIndex = try #require(kinds.firstIndex(of: .audio))
+        #expect(catalog.channels[audioIndex].kind == .music)
+    }
 }
 
 private actor StubMediaCenterHTTPClient: MediaCenterHTTPClient {
