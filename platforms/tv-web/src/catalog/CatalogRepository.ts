@@ -466,9 +466,7 @@ export class CatalogRepository {
     try {
       await this.cache.writeMediaCenter(snapshot, catalog);
     } catch (error) {
-      // Roll back the credential we just wrote, but never let a rollback failure replace the
-      // error that caused it: the caller needs the original cause, not a cleanup symptom.
-      await this.credentialVault.remove(credential.binding.credentialId).catch(() => undefined);
+      await this.credentialVault.remove(credential.binding.credentialId);
       throw error;
     }
     await this.removeReplacedCredential(previous, credential.binding.credentialId);
@@ -480,18 +478,13 @@ export class CatalogRepository {
     await this.removeReplacedCredential(previous);
   }
 
-  // Best-effort cleanup of a credential the viewer has already replaced. This runs while saving a
-  // new source -- including a plain playlist -- so a secure-storage failure here must not fail that
-  // save: refusing to load the viewer's new playlist because a superseded token could not be
-  // deleted would be a worse outcome than leaving that token in place. Deletions the viewer asks
-  // for directly still surface their failures through clear().
   private async removeReplacedCredential(
     previous: SavedCatalogRecord | null,
     retainedCredentialId?: string
   ): Promise<void> {
     const previousId = previous?.mediaCenterSnapshot?.connection.credentialId;
     if (previousId && previousId !== retainedCredentialId) {
-      await this.credentialVault.remove(previousId).catch(() => undefined);
+      await this.credentialVault.remove(previousId);
     }
   }
 
