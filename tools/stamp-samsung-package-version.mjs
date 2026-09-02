@@ -33,7 +33,10 @@ const currentVersion = widgetTags[0].match(/\bversion="([^"]+)"/)?.[1];
 if (!currentVersion) fail("config.xml widget version is missing");
 const updatedTag = widgetTags[0].replace(`version="${currentVersion}"`, `version="${version}"`);
 const updated = source.replace(widgetTags[0], updatedTag);
-if ((updated.match(new RegExp(`version="${version.replaceAll(".", "\\.")}"`, "g")) ?? []).length !== 1) {
+// Counted literally rather than through a constructed RegExp: escaping only "." left every other
+// metacharacter live, so the pattern depended on --version staying well-formed to stay a literal.
+const stamped = `version="${version}"`;
+if (updated.split(stamped).length - 1 !== 1) {
   fail("could not stamp the package version exactly once");
 }
 await writeFile(configPath, updated, "utf8");
