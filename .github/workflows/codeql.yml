@@ -1,18 +1,21 @@
 # Advanced CodeQL setup.
 #
 # This replaces the repository's default setup, which cannot analyse the Android
-# sources: default setup runs Autobuild for java-kotlin, and Autobuild fails here
-# because it has no provisioned Android SDK. Advanced setup can request
-# `build-mode: none`, which extracts Kotlin and Java from source without building.
+# sources. Default setup runs Autobuild for java-kotlin, and Autobuild fails here
+# because it provisions no Android SDK.
 #
-# Default setup must be disabled before this workflow can upload results —
-# GitHub rejects advanced-configuration uploads while default setup is enabled.
+# `build-mode: none` does not solve it either: the Kotlin extractor is a compiler
+# plugin, so Kotlin is only extracted when the code is genuinely compiled. A
+# buildless run reports "CodeQL could not process any code written in Java/Kotlin"
+# because every Android source file here is Kotlin. So java-kotlin gets its own job
+# that provisions the toolchain and builds, mirroring android-foundation.yml.
 #
-# Swift is not listed yet: the Apple sources live on feature/5.1-apple-foundation
-# and later, so they are not on the default branch. Add
-#   - language: swift
-#     build-mode: manual   # or none, once supported for Swift in the CodeQL version in use
-# to the matrix after the Apple platform work merges to main.
+# Default setup must be disabled before this workflow can upload results — GitHub
+# rejects advanced-configuration uploads while default setup is enabled.
+#
+# Swift is not covered yet: the Apple sources live on feature/5.1-apple-foundation
+# and later, so they are not on the default branch. Once that work reaches main,
+# add a swift job that builds the Xcode project under build-mode: manual.
 name: CodeQL
 
 on:
@@ -28,41 +31,80 @@ concurrency:
   group: codeql-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     permissions:
       security-events: write
-      packages: read
       actions: read
       contents: read
-
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - language: actions
-            build-mode: none
-          - language: csharp
-            build-mode: none
-          - language: java-kotlin
-            build-mode: none
-          - language: javascript-typescript
-            build-mode: none
-
+        language: [actions, csharp, javascript-typescript]
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Check out StreamVue
+        uses: actions/checkout@v7
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
+          build-mode: none
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ matrix.language }}"
+
+  analyze-android:
+    name: Analyze (java-kotlin)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - name: Check out StreamVue
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android API 37.1
+        run: sdkmanager "platforms;android-37.1" "build-tools;37.0.0" "platform-tools"
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java-kotlin
+          build-mode: manual
+
+      # Only the debug variant is built: it compiles every main Kotlin source, which
+      # is all the extractor needs. Tests, lint and the release bundle stay in
+      # android-foundation.yml so this job does not duplicate that work.
+      - name: Compile Android sources for extraction
+        run: >-
+          bash platforms/android/gradlew -p platforms/android
+          assembleDebug
+          --stacktrace
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:java-kotlin"
