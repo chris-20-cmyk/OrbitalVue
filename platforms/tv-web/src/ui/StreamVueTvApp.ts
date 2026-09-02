@@ -629,7 +629,18 @@ export class StreamVueTvApp {
 
   private async clearSource(): Promise<void> {
     this.mediaLibraryRefreshSerial += 1;
-    await this.repository.clear();
+    this.error = null;
+    try {
+      await this.repository.clear();
+    } catch (error) {
+      // Clearing reports a failure when a stored media-server credential could not be deleted.
+      // Say so rather than dropping the catalog: claiming the source was removed while the token
+      // is still on the television is the outcome this path exists to avoid.
+      this.error = readableError(error, "The saved source could not be removed from this television.");
+      this.render();
+      this.focusAfterRender();
+      return;
+    }
     this.catalog = null;
     this.notice = null;
     this.modal = null;
