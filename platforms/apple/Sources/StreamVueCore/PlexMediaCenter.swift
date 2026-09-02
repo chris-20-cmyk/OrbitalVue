@@ -121,8 +121,18 @@ struct PlexMediaCenterClient: Sendable {
             label: "Plex library",
             excluding: token
         )
+        // "/all" lists a library's own top-level entries: shows for a show library, artists for a
+        // music one. Those are containers rather than playable media, so without a type the
+        // catalog has nothing to present. 4 selects episodes and 10 selects tracks; movie
+        // libraries already list playable items.
+        let itemType: String? = switch library.kind {
+        case .shows: "4"
+        case .music: "10"
+        default: nil
+        }
+        let path = "/library/sections/\(pathComponent(libraryID))/all"
         let payload = try await get(
-            "/library/sections/\(pathComponent(libraryID))/all",
+            itemType.map { "\(path)?type=\($0)" } ?? path,
             additionalHeaders: [
                 "X-Plex-Container-Start": String(page.start),
                 "X-Plex-Container-Size": String(page.size)

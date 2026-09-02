@@ -18,6 +18,7 @@ import {
   type MediaCenterHttpTransport,
   type MediaCenterItem,
   type MediaCenterItemKind,
+  type MediaCenterLibrary,
   type PlexDeviceSigner
 } from "../src/index.js";
 import { resolveServerPath } from "../src/url.js";
@@ -753,6 +754,52 @@ describe("Emby integration", () => {
     expect(mock.requests.filter((request) =>
       new URL(request.url).pathname === "/emby/System/Info/Public"
     )).toHaveLength(2);
+  });
+});
+
+describe("plex library item types", () => {
+  const connection: MediaCenterConnection = {
+    contractVersion: MEDIA_CENTER_CONTRACT_VERSION,
+    provider: "plex",
+    serverId: "plex-server-1",
+    displayName: "Plex",
+    baseUrl: "https://plex.home:32400",
+    displayLocation: "plex.home:32400",
+    credentialId: "vault-plex-1"
+  };
+
+  async function queryFor(kind: MediaCenterLibrary["kind"]): Promise<string> {
+    const mock = createMockTransport((request) => {
+      if (new URL(request.url).pathname === "/identity") {
+        return { MediaContainer: { machineIdentifier: "plex-server-1", friendlyName: "Plex" } };
+      }
+      return { MediaContainer: { offset: 0, totalSize: 0, Metadata: [] } };
+    });
+    const client = new PlexClient(mock.transport, {
+      connection,
+      token: "plex-token",
+      credentialBinding: createMediaCenterCredentialBinding(connection),
+      clientIdentifier: "streamvue-library-type-test"
+    });
+    await client.getItems({ id: "1", title: "Library", kind });
+    const itemsRequest = mock.requests.find((request) =>
+      new URL(request.url).pathname === "/library/sections/1/all");
+    return new URL(itemsRequest!.url).search;
+  }
+
+  // `/all` returns a library's own top-level entries -- shows for a show library, artists for a
+  // music one. Those are containers, not playable media, so without a type the catalog builder
+  // has nothing it can present and the library browses as empty.
+  it("asks a show library for episodes", async () => {
+    expect(await queryFor("shows")).toBe("?type=4");
+  });
+
+  it("asks a music library for tracks", async () => {
+    expect(await queryFor("music")).toBe("?type=10");
+  });
+
+  it("leaves a movie library unfiltered, since it already lists playable items", async () => {
+    expect(await queryFor("movies")).toBe("");
   });
 });
 
