@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <AssemblyName>OrbitalVue</AssemblyName>
+    <AssemblyName>StreamVue</AssemblyName>
     <RootNamespace>OrbitalVue.Player</RootNamespace>
     <Version>5.7.0-alpha.1</Version>
     <FileVersion>5.7.0.1</FileVersion>
@@ -32,7 +32,7 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(QaBuild)' == 'true'">
-    <AssemblyName>OrbitalVueQa</AssemblyName>
+    <AssemblyName>StreamVueQa</AssemblyName>
     <DefineConstants>$(DefineConstants);ORBITALVUE_QA_BUILD</DefineConstants>
   </PropertyGroup>
 

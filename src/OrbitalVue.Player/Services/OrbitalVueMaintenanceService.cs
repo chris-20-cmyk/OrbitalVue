@@ -23,10 +23,10 @@ public sealed record OrbitalVueDiagnosticContext(
 public sealed class OrbitalVueMaintenanceService
 {
     private const string BackupProduct = "OrbitalVue";
-    private const string LegacyBackupProduct = "OrbitalVue";
+    private const string LegacyBackupProduct = "StreamVue";
     private const int BackupFormatVersion = 2;
     private const int MaximumCrashLogBytes = 256 * 1024;
-    private static readonly byte[] BackupEntropy = Encoding.UTF8.GetBytes("OrbitalVue.PortableBackup.v1");
+    private static readonly byte[] BackupEntropy = Encoding.UTF8.GetBytes("StreamVue.PortableBackup.v1");
 
     private static readonly string[] KnownDataFiles =
     [

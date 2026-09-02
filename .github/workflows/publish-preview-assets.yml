@@ -18,7 +18,7 @@ on:
       base_package_name:
         description: Previous full package filename
         required: true
-        default: Chris.OrbitalVue-5.6.0-alpha.1-full.nupkg
+        default: Chris.StreamVue-5.6.0-alpha.1-full.nupkg
 
 permissions:
   contents: write
@@ -76,10 +76,10 @@ jobs:
           New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
           gh release download $env:BASE_RELEASE_TAG --repo $env:GITHUB_REPOSITORY --pattern $env:BASE_PACKAGE_NAME --dir $releaseDirectory
           .\.tools\vpk.exe pack `
-            --packId Chris.OrbitalVue `
+            --packId Chris.StreamVue `
             --packVersion $env:PACKAGE_VERSION `
             --packDir artifacts/orbitalvue-publish `
-            --mainExe OrbitalVue.exe `
+            --mainExe StreamVue.exe `
             --packTitle OrbitalVue `
             --packAuthors Chris `
             --icon src/OrbitalVue.Player/Assets/orbitalvue.ico `
@@ -92,8 +92,8 @@ jobs:
         run: |
           $releaseDirectory = Join-Path $PWD 'artifacts/orbitalvue-releases'
           $basePackage = Join-Path $releaseDirectory $env:BASE_PACKAGE_NAME
-          $deltaPackage = Join-Path $releaseDirectory "Chris.OrbitalVue-$($env:PACKAGE_VERSION)-delta.nupkg"
-          $fullPackage = Join-Path $releaseDirectory "Chris.OrbitalVue-$($env:PACKAGE_VERSION)-full.nupkg"
+          $deltaPackage = Join-Path $releaseDirectory "Chris.StreamVue-$($env:PACKAGE_VERSION)-delta.nupkg"
+          $fullPackage = Join-Path $releaseDirectory "Chris.StreamVue-$($env:PACKAGE_VERSION)-full.nupkg"
           $reconstructed = Join-Path $PWD 'artifacts/reconstructed-full.nupkg'
           .\.tools\vpk.exe delta patch --base $basePackage --patch $deltaPackage --output $reconstructed
           $expected = (Get-FileHash -Algorithm SHA256 -LiteralPath $fullPackage).Hash

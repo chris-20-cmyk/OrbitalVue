@@ -1246,7 +1246,7 @@ try
     {
         var protectedLegacySettings = ProtectedData.Protect(
             legacySettingsBytes,
-            Encoding.UTF8.GetBytes("OrbitalVue.PortableBackup.v1"),
+            Encoding.UTF8.GetBytes("StreamVue.PortableBackup.v1"),
             DataProtectionScope.CurrentUser);
         await using var legacyBackupStream = File.Create(legacyBackupPath);
         using var legacyArchive = new ZipArchive(legacyBackupStream, ZipArchiveMode.Create, leaveOpen: false);
