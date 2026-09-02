@@ -5,6 +5,7 @@ import {
   type MediaCenterCredentialBinding
 } from "./credential.js";
 import { asArray, asBoolean, asNumber, asRecord, asString, clampPage } from "./parse.js";
+import { createSessionId } from "./random.js";
 import type {
   MediaCenterConnection,
   MediaCenterItem,
@@ -426,9 +427,4 @@ function requireSuccessfulReport(status: number, provider: string): void {
   if (status < 200 || status >= 300) {
     throw new TypeError(`${provider} rejected the playback report with HTTP ${status}.`);
   }
-}
-
-function createSessionId(): string {
-  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
-  return `streamvue-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }

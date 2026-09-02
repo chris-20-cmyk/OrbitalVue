@@ -5,6 +5,7 @@ import {
   type MediaCenterCredentialBinding
 } from "./credential.js";
 import { asArray, asBoolean, asNumber, asRecord, asString, clampPage } from "./parse.js";
+import { createSessionId } from "./random.js";
 import type {
   MediaCenterConnection,
   MediaCenterDeviceIdentity,
@@ -562,11 +563,6 @@ function parseEmbyTrack(value: unknown): MediaCenterTrack[] {
 function safeContainer(value: string | undefined): string {
   const candidate = value?.split(",")[0]?.trim().toLowerCase();
   return candidate && /^[a-z0-9]{1,12}$/.test(candidate) ? candidate : "mkv";
-}
-
-function createSessionId(): string {
-  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
-  return `streamvue-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function normalizePlaybackReport(report: MediaCenterPlaybackReport): {
