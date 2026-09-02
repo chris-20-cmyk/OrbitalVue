@@ -138,10 +138,15 @@ class ResilientCredentialVault implements TelevisionCredentialVault {
   }
 
   async remove(credentialId: string): Promise<void> {
-    await Promise.allSettled([
+    // Both stores are cleared even if one throws, so a credential can never be left behind in the
+    // store we skipped. Failures are still surfaced: reporting success while a media-server token
+    // survives on the device would tell the viewer they had disconnected when they had not.
+    const outcomes = await Promise.allSettled([
       this.primary.remove(credentialId),
       this.fallback.remove(credentialId)
     ]);
+    const failure = outcomes.find((outcome) => outcome.status === "rejected");
+    if (failure) throw failure.reason;
   }
 }
 
@@ -296,6 +301,7 @@ class WebOsSealedRecordStore {
       transaction.objectStore("sealed").delete(credentialId);
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error ?? new Error("LG protected storage could not be cleared."));
+      transaction.onabort = () => reject(transaction.error ?? new Error("LG protected storage was interrupted."));
     });
   }
 
