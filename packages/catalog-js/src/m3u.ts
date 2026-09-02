@@ -33,11 +33,7 @@ function clean(value: string | undefined): string | undefined {
 
 function parseAttributes(value: string): Map<string, string> {
   const attributes = new Map<string, string>();
-  // A name run can only be an attribute when "=" follows it, so a run without one never matches at
-  // any offset inside it. The trailing alternative consumes such a run in one step; without it the
-  // scanner retries at every character and a playlist padded with "-" costs quadratic time.
-  // Matches from that branch capture no name and are skipped by the guard below.
-  const pattern = /([A-Za-z0-9_-]+)=(?:"([^"]*)"|'([^']*)'|([^\s,]+))|[A-Za-z0-9_-]+/g;
+  const pattern = /([A-Za-z0-9_-]+)=(?:"([^"]*)"|'([^']*)'|([^\s,]+))/g;
   for (const match of value.matchAll(pattern)) {
     const name = match[1];
     if (!name) continue;
