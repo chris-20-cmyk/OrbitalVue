@@ -75,6 +75,7 @@ export class StreamVueTvApp {
   private playbackReportingStarted = false;
   private playbackReportTimer: number | null = null;
   private playbackReportQueue: Promise<void> = Promise.resolve();
+  private mediaLibraryRefreshSerial = 0;
   private aspectIndex = 0;
   private hideChromeTimer: number | null = null;
   private noticeTimer: number | null = null;
@@ -124,6 +125,7 @@ export class StreamVueTvApp {
   }
 
   destroy(): void {
+    this.mediaLibraryRefreshSerial += 1;
     void this.finishPlaybackReporting();
     this.player?.destroy();
     this.clearNoticeTimer();
@@ -473,6 +475,7 @@ export class StreamVueTvApp {
   };
 
   private applyCatalog(loaded: CatalogLoadResult): void {
+    this.mediaLibraryRefreshSerial += 1;
     this.catalog = loaded.catalog;
     this.notice = loaded.notice;
     this.error = null;
@@ -625,6 +628,7 @@ export class StreamVueTvApp {
   }
 
   private async clearSource(): Promise<void> {
+    this.mediaLibraryRefreshSerial += 1;
     await this.repository.clear();
     this.catalog = null;
     this.notice = null;
@@ -755,6 +759,38 @@ export class StreamVueTvApp {
     if (!this.playbackReportingStarted) return;
     this.playbackReportingStarted = false;
     await this.queuePlaybackReport(this.playbackReport("stopped", "playing"));
+    void this.refreshMediaLibraryAfterPlayback();
+  }
+
+  private async refreshMediaLibraryAfterPlayback(): Promise<void> {
+    const currentCatalog = this.catalog;
+    if (!currentCatalog || !isMediaCenterCatalog(currentCatalog)) return;
+    const catalogId = currentCatalog.catalogId;
+    const serial = ++this.mediaLibraryRefreshSerial;
+    try {
+      const loaded = await this.repository.refreshCurrent();
+      if (serial !== this.mediaLibraryRefreshSerial ||
+          !this.catalog ||
+          this.catalog.catalogId !== catalogId ||
+          !isMediaCenterCatalog(this.catalog)) return;
+
+      const selectedId = this.selectedChannelId;
+      this.catalog = loaded.catalog;
+      const availableGroups = this.groups();
+      if (!availableGroups.includes(this.selectedGroup)) this.selectedGroup = ALL_GROUPS;
+      this.selectedChannelId = selectedId && loaded.catalog.channels.some((item) => item.id === selectedId)
+        ? selectedId
+        : this.channelsForSelectedGroup()[0]?.id ?? null;
+
+      if (this.screen === "browse") {
+        this.render();
+        this.focusAfterRender(this.selectedChannelId
+          ? `[data-channel-id='${cssEscape(this.selectedChannelId)}']`
+          : undefined);
+      }
+    } catch {
+      // Progress reporting and its follow-up refresh are best-effort. Playback stays uninterrupted.
+    }
   }
 
   private playbackReport(

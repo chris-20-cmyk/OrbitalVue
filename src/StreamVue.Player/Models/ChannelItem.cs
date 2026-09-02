@@ -27,6 +27,9 @@ public sealed class ChannelItem : INotifyPropertyChanged
     private string? _signalRouteKey;
     private int _signalFeedCount = 1;
     private ImageSource? _artworkSource;
+    private long _resumePositionMilliseconds;
+    private bool _isPlayed;
+    private DateTimeOffset? _lastPlayedAtUtc;
 
     public required int Number { get; init; }
     public required string Name { get; init; }
@@ -45,15 +48,27 @@ public sealed class ChannelItem : INotifyPropertyChanged
     public int CatchupDays { get; init; }
     public int CatchupCorrectionMinutes { get; init; }
     public long DurationMilliseconds { get; init; }
-    public long ResumePositionMilliseconds { get; init; }
-    public bool IsPlayed { get; init; }
+    public long ResumePositionMilliseconds
+    {
+        get => _resumePositionMilliseconds;
+        init => _resumePositionMilliseconds = value;
+    }
+    public bool IsPlayed
+    {
+        get => _isPlayed;
+        init => _isPlayed = value;
+    }
     public string? MediaLibraryTitle { get; init; }
     public string? SeriesTitle { get; init; }
     public int? SeasonNumber { get; init; }
     public int? EpisodeNumber { get; init; }
     public int? ReleaseYear { get; init; }
     public DateTimeOffset? AddedAtUtc { get; init; }
-    public DateTimeOffset? LastPlayedAtUtc { get; init; }
+    public DateTimeOffset? LastPlayedAtUtc
+    {
+        get => _lastPlayedAtUtc;
+        init => _lastPlayedAtUtc = value;
+    }
     public bool HasCatchup => Kind == ChannelKind.Live && !string.IsNullOrWhiteSpace(CatchupSource);
     public bool IsProtectedMedia => MediaCenterSecurity.IsPlaybackLocator(Url);
     public bool CanResume => ResumePositionMilliseconds >= 30_000 &&
@@ -70,6 +85,36 @@ public sealed class ChannelItem : INotifyPropertyChanged
             var minutesRemaining = Math.Max(1, (DurationMilliseconds - ResumePositionMilliseconds) / 60_000);
             return $"Continue • {WatchProgressPercent:0}% • {FormatMinutes(minutesRemaining)} left";
         }
+    }
+
+    public void UpdateMediaPlaybackProgress(
+        long positionMilliseconds,
+        long durationMilliseconds,
+        DateTimeOffset? reportedAtUtc = null)
+    {
+        if (!IsProtectedMedia || Kind == ChannelKind.Live) return;
+        positionMilliseconds = Math.Max(0, positionMilliseconds);
+        var effectiveDuration = durationMilliseconds > 0 ? durationMilliseconds : DurationMilliseconds;
+        if (effectiveDuration > 0) positionMilliseconds = Math.Min(positionMilliseconds, effectiveDuration);
+        var completed = effectiveDuration > 0 &&
+                        positionMilliseconds >= Math.Max(0, effectiveDuration - 30_000);
+        var resumePosition = completed ? 0 : positionMilliseconds;
+        var playedAt = reportedAtUtc ?? DateTimeOffset.UtcNow;
+        if (_resumePositionMilliseconds == resumePosition &&
+            _isPlayed == completed &&
+            _lastPlayedAtUtc == playedAt) return;
+
+        _resumePositionMilliseconds = resumePosition;
+        _isPlayed = completed;
+        _lastPlayedAtUtc = playedAt;
+        OnPropertyChanged(nameof(ResumePositionMilliseconds));
+        OnPropertyChanged(nameof(IsPlayed));
+        OnPropertyChanged(nameof(LastPlayedAtUtc));
+        OnPropertyChanged(nameof(CanResume));
+        OnPropertyChanged(nameof(HasWatchProgress));
+        OnPropertyChanged(nameof(WatchProgressPercent));
+        OnPropertyChanged(nameof(WatchProgressLabel));
+        OnPropertyChanged(nameof(SignalFeedLabel));
     }
 
     public string? LibraryMetadataLine

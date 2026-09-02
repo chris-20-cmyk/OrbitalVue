@@ -41,6 +41,7 @@ public final class StreamVueStore {
     private let mediaCenterRepository: MediaCenterRepository
     private let defaults: UserDefaults
     private var hasStarted = false
+    private var mediaLibraryProgressRefreshTask: Task<Void, Never>?
 
     public init(
         repository: PlaylistRepository = PlaylistRepository(),
@@ -165,6 +166,8 @@ public final class StreamVueStore {
     }
 
     public func removeSource() async {
+        mediaLibraryProgressRefreshTask?.cancel()
+        mediaLibraryProgressRefreshTask = nil
         isLoading = true
         do {
             switch activeSourceKind {
@@ -299,7 +302,38 @@ public final class StreamVueStore {
         sessionID: String,
         report: MediaCenterPlaybackReport
     ) async {
-        try? await mediaCenterRepository.reportPlayback(sessionID: sessionID, report: report)
+        do {
+            try await mediaCenterRepository.reportPlayback(sessionID: sessionID, report: report)
+            if report.kind == .stopped { scheduleMediaLibraryProgressRefresh() }
+        } catch {
+            // Playback reporting and its follow-up refresh fail open.
+        }
+    }
+
+    private func scheduleMediaLibraryProgressRefresh() {
+        guard isMediaCenterSource else { return }
+        let sourceID = catalog?.sources.first?.id
+        mediaLibraryProgressRefreshTask?.cancel()
+        mediaLibraryProgressRefreshTask = Task { @MainActor [weak self] in
+            guard let self,
+                  let loaded = try? await self.mediaCenterRepository.refreshCurrent(),
+                  !Task.isCancelled,
+                  self.isMediaCenterSource,
+                  self.catalog?.sources.first?.id == sourceID else { return }
+            self.applyMediaLibraryProgressRefresh(loaded)
+        }
+    }
+
+    private func applyMediaLibraryProgressRefresh(_ loaded: LoadedCatalog) {
+        let selectedID = selectedChannel?.id
+        catalog = loaded.catalog
+        groups = loaded.catalog.groups
+        browseSummary = MediaLibraryBrowseSummary(channels: loaded.catalog.channels)
+        if let selectedGroup, !groups.contains(where: { $0.name == selectedGroup }) {
+            self.selectedGroup = nil
+        }
+        selectedChannel = selectedID.flatMap { id in loaded.catalog.channels.first { $0.id == id } }
+        rebuildBrowse()
     }
 
     @discardableResult

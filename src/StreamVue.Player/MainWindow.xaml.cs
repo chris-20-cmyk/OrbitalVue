@@ -3141,6 +3141,19 @@ public partial class MainWindow : Window
                     LiveDot.Fill = IdleBrush;
                     PlayPauseGlyph.Text = "▶";
                     break;
+                case PlaybackState.Stopped when _currentRecordingPath is null:
+                    if (!string.IsNullOrWhiteSpace(_mediaPlaybackReportingSessionId))
+                    {
+                        var stoppedSnapshot = _playback?.GetSnapshot();
+                        var stoppedChannel = _currentChannel;
+                        ObserveMediaPlaybackEndAndRefresh(
+                            EndCurrentMediaPlaybackReporting(stoppedSnapshot),
+                            stoppedChannel,
+                            stoppedSnapshot);
+                    }
+                    LiveDot.Fill = IdleBrush;
+                    PlayPauseGlyph.Text = "▶";
+                    break;
                 case PlaybackState.Error:
                     ObserveMediaPlaybackReport(EndCurrentMediaPlaybackReporting(_playback?.GetSnapshot()));
                     FooterStatusDot.Fill = ErrorBrush;
@@ -3400,6 +3413,33 @@ public partial class MainWindow : Window
         {
             // Plex/Emby progress synchronization fails open so video keeps playing.
         }
+    }
+
+    private async void ObserveMediaPlaybackEndAndRefresh(
+        Task report,
+        ChannelItem? channel,
+        PlaybackSnapshot? snapshot)
+    {
+        try
+        {
+            await report;
+        }
+        catch
+        {
+            return;
+        }
+
+        if (channel?.IsProtectedMedia != true || channel.Kind == ChannelKind.Live || snapshot is null) return;
+        await Dispatcher.InvokeAsync(() =>
+        {
+            if (!_channels.Contains(channel)) return;
+            channel.UpdateMediaPlaybackProgress(snapshot.Time, snapshot.Length);
+            _libraryBrowseSummary = MediaLibraryBrowsePolicy.Summarize(_channels);
+            ContinueWatchingFilter.Content = $"Continue ({_libraryBrowseSummary.ContinueWatchingCount:N0})";
+            RecentlyAddedFilter.Content = $"Recent ({_libraryBrowseSummary.RecentlyAddedCount:N0})";
+            _channelView?.Refresh();
+            RefreshChannelCount();
+        });
     }
 
     private void SaveCurrentRecordingProgress(bool force, PlaybackSnapshot? snapshot = null)
@@ -5210,9 +5250,11 @@ public partial class MainWindow : Window
 
     private void Stop_Click(object sender, RoutedEventArgs e)
     {
-        CaptureSignalTelemetry(_playback?.GetSnapshot(), persist: true);
+        var snapshot = _playback?.GetSnapshot();
+        var channel = _currentChannel;
+        CaptureSignalTelemetry(snapshot, persist: true);
         SaveCurrentRecordingProgress(force: true);
-        ObserveMediaPlaybackReport(EndCurrentMediaPlaybackReporting(_playback?.GetSnapshot()));
+        ObserveMediaPlaybackEndAndRefresh(EndCurrentMediaPlaybackReporting(snapshot), channel, snapshot);
         CancelMediaPlaybackResolution(clearResume: true);
         _playback?.Stop();
         if (_currentRecordingPath is not null) _recordingResumeApplied = false;

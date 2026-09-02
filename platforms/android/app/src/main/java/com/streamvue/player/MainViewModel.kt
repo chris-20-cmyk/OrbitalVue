@@ -10,6 +10,7 @@ import com.streamvue.player.data.Channel
 import com.streamvue.player.data.LoadedCatalog
 import com.streamvue.player.data.MediaCenterRepository
 import com.streamvue.player.data.MediaCenterPlaybackReport
+import com.streamvue.player.data.MediaCenterPlaybackReportKind
 import com.streamvue.player.data.MediaLibraryBrowseMode
 import com.streamvue.player.data.MediaLibraryBrowsePolicy
 import com.streamvue.player.data.MediaLibraryBrowseSummary
@@ -79,6 +80,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
     private var playbackResolutionJob: Job? = null
     private var playbackReportingJob: Job? = null
+    private var mediaLibraryProgressRefreshJob: Job? = null
     private var plexSignInJob: Job? = null
     val state: StateFlow<AppUiState> = mutableState.asStateFlow()
 
@@ -315,7 +317,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val previous = playbackReportingJob
         playbackReportingJob = viewModelScope.launch {
             previous?.join()
-            runCatching { mediaCenterRepository.reportPlayback(sessionId, report) }
+            val reported = runCatching { mediaCenterRepository.reportPlayback(sessionId, report) }
+            if (reported.isSuccess && report.kind == MediaCenterPlaybackReportKind.Stopped) {
+                scheduleMediaLibraryProgressRefresh()
+            }
         }
     }
 
@@ -440,6 +445,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             error = null
         )
         selectedChannel?.takeIf { it.isProtectedMediaLocator }?.let(::selectChannel)
+    }
+
+    private fun scheduleMediaLibraryProgressRefresh() {
+        mediaLibraryProgressRefreshJob?.cancel()
+        mediaLibraryProgressRefreshJob = viewModelScope.launch {
+            val loaded = runCatching { mediaCenterRepository.refreshCurrent() }.getOrNull() ?: return@launch
+            if (!mutableState.value.isMediaCenterSource) return@launch
+            applyMediaLibraryProgressRefresh(loaded)
+        }
+    }
+
+    private fun applyMediaLibraryProgressRefresh(loaded: LoadedCatalog) {
+        val catalog = loaded.catalog
+        val groupCounts = LinkedHashMap<String, Int>()
+        catalog.channels.forEach { channel ->
+            groupCounts[channel.group] = (groupCounts[channel.group] ?: 0) + 1
+        }
+        val current = mutableState.value
+        val selectedGroup = current.selectedGroup?.takeIf(groupCounts::containsKey)
+        val selectedChannel = current.selectedChannel?.id?.let { selectedId ->
+            catalog.channels.firstOrNull { it.id == selectedId }
+        }
+        val browse = buildBrowse(catalog, selectedGroup, current.query, current.browseMode)
+
+        mutableState.value = current.copy(
+            catalog = catalog,
+            groups = groupCounts.map { GroupSummary(it.key, it.value) },
+            selectedGroup = selectedGroup,
+            browseSummary = MediaLibraryBrowsePolicy.summarize(catalog.channels),
+            visibleChannels = browse.channels,
+            sections = browse.sections,
+            selectedChannel = selectedChannel,
+            playbackChannel = current.playbackChannel.takeIf { selectedChannel != null }
+        )
     }
 
     private fun showFailure(error: Throwable) {

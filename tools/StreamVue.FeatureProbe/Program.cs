@@ -1763,6 +1763,22 @@ static async Task RunMediaCenterSelfTestAsync(string testRoot)
         MediaLibraryBrowsePolicy.Matches(plexItem, MediaLibraryBrowseMode.Series, mediaBrowseNow) ||
         !MediaLibraryBrowsePolicy.Matches(embyItem, MediaLibraryBrowseMode.Series, mediaBrowseNow))
         throw new InvalidOperationException("Premium media-center browse sections lost their provider-neutral filter semantics.");
+    var localProgress = new ChannelItem
+    {
+        Number = 3,
+        Name = "Progress Refresh Probe",
+        Group = "Movies",
+        Url = MediaCenterSecurity.BuildPlaybackLocator("plex", "plex-server-1", "progress-probe"),
+        Kind = ChannelKind.Movie,
+        DurationMilliseconds = 7_200_000
+    };
+    localProgress.UpdateMediaPlaybackProgress(600_000, 7_200_000, mediaBrowseNow);
+    if (!localProgress.CanResume || localProgress.ResumePositionMilliseconds != 600_000 ||
+        localProgress.LastPlayedAtUtc != mediaBrowseNow || localProgress.IsPlayed)
+        throw new InvalidOperationException("A stopped personal-media session did not immediately become resumable.");
+    localProgress.UpdateMediaPlaybackProgress(7_180_000, 7_200_000, mediaBrowseNow.AddMinutes(1));
+    if (localProgress.CanResume || localProgress.ResumePositionMilliseconds != 0 || !localProgress.IsPlayed)
+        throw new InvalidOperationException("A completed personal-media session remained in Continue Watching.");
     var embyLocator = MediaCenterSecurity.ParsePlaybackLocator(embyItem.Url);
     if (embyLocator.Provider != "emby" || embyLocator.ServerId != "emby-server-1" || embyLocator.ItemId != "200")
         throw new InvalidOperationException("The Emby catalog locator was not canonical.");
