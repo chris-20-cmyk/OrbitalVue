@@ -181,7 +181,7 @@ if (!lgPremium
 }
 if (!premiumService.includes('platform === "lg-webos"')
   || !premiumService.includes("no longer provides a native TV billing service")
-  || premiumService.includes("VITE_STREAMVUE_LG_PRODUCT_ID")) {
+  || premiumService.includes("VITE_ORBITALVUE_LG_PRODUCT_ID")) {
   fail("the LG Store adapter must remain explicitly locked without placeholder product wiring");
 }
 

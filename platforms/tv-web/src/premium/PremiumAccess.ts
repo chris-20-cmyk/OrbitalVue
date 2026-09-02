@@ -1,10 +1,10 @@
-export type StreamVueDistributionMode = "personal" | "store" | "unknown";
+export type OrbitalVueDistributionMode = "personal" | "store" | "unknown";
 export type PremiumAccessState = "included" | "verified" | "unavailable";
 
 export interface PremiumAccessSnapshot {
   contractVersion: "1.0";
   featureId: "personal-media-centers";
-  distributionMode: StreamVueDistributionMode;
+  distributionMode: OrbitalVueDistributionMode;
   accessState: PremiumAccessState;
   acquisition: "included" | "one-time";
   receiptVerification: "not-required" | "verified" | "unavailable";
@@ -16,7 +16,7 @@ export interface PremiumAccessSnapshot {
 
 export function currentPremiumAccess(): PremiumAccessSnapshot {
   return evaluatePremiumAccess(
-    import.meta.env.VITE_STREAMVUE_DISTRIBUTION_MODE ?? "personal",
+    import.meta.env.VITE_ORBITALVUE_DISTRIBUTION_MODE ?? "personal",
     false
   );
 }
@@ -27,7 +27,7 @@ export function evaluatePremiumAccess(
   productId?: string
 ): PremiumAccessSnapshot {
   const normalizedMode = distributionMode?.trim().toLowerCase();
-  const mode: StreamVueDistributionMode = normalizedMode === "personal"
+  const mode: OrbitalVueDistributionMode = normalizedMode === "personal"
     ? "personal"
     : normalizedMode === "store"
       ? "store"
@@ -48,7 +48,7 @@ export function requireMediaCenterAccess(access: PremiumAccessSnapshot): void {
 }
 
 function decision(
-  distributionMode: StreamVueDistributionMode,
+  distributionMode: OrbitalVueDistributionMode,
   accessState: PremiumAccessState,
   acquisition: "included" | "one-time",
   receiptVerification: "not-required" | "verified" | "unavailable",

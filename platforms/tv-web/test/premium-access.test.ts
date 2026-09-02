@@ -22,7 +22,7 @@ describe("television premium access", () => {
     expect(evaluatePremiumAccess("store", true).canUseMediaCenters).toBe(false);
     expect(evaluatePremiumAccess("typo", true, "valid.product").canUseMediaCenters).toBe(false);
 
-    const verified = evaluatePremiumAccess("store", true, "com.streamvue.personal-media-centers");
+    const verified = evaluatePremiumAccess("store", true, "com.orbitalvue.personal-media-centers");
     expect(verified.canUseMediaCenters).toBe(true);
     expect(verified.accessState).toBe("verified");
     expect(verified.acquisition).toBe("one-time");
@@ -32,8 +32,8 @@ describe("television premium access", () => {
 describe("television premium store adapters", () => {
   const config: SamsungCheckoutConfig = {
     appId: "1234567890",
-    productId: "streamvue-premium",
-    verificationUrl: "https://entitlements.streamvue.test/samsung/status"
+    productId: "orbitalvue-premium",
+    verificationUrl: "https://entitlements.orbitalvue.test/samsung/status"
   };
 
   it("validates Samsung seller identifiers and a clean HTTPS verifier URL", () => {
@@ -48,11 +48,11 @@ describe("television premium store adapters", () => {
     })).toBeNull();
     expect(normalizeSamsungCheckoutConfig({
       ...config,
-      verificationUrl: "https://entitlements.streamvue.test/status?unlock=true"
+      verificationUrl: "https://entitlements.orbitalvue.test/status?unlock=true"
     })).toBeNull();
     expect(normalizeSamsungCheckoutConfig({
       ...config,
-      verificationUrl: "http://entitlements.streamvue.test/status"
+      verificationUrl: "http://entitlements.orbitalvue.test/status"
     })).toBeNull();
   });
 

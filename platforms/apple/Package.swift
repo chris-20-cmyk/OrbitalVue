@@ -3,7 +3,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "StreamVueApple",
+    name: "OrbitalVueApple",
     defaultLocalization: "en",
     platforms: [
         .iOS(.v17),
@@ -11,18 +11,18 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
-        .library(name: "StreamVueCore", targets: ["StreamVueCore"]),
-        .library(name: "StreamVueUI", targets: ["StreamVueUI"])
+        .library(name: "OrbitalVueCore", targets: ["OrbitalVueCore"]),
+        .library(name: "OrbitalVueUI", targets: ["OrbitalVueUI"])
     ],
     dependencies: [
         .package(url: "https://github.com/kingslay/KSPlayer.git", exact: "2.3.4")
     ],
     targets: [
-        .target(name: "StreamVueCore"),
+        .target(name: "OrbitalVueCore"),
         .target(
-            name: "StreamVueUI",
+            name: "OrbitalVueUI",
             dependencies: [
-                "StreamVueCore",
+                "OrbitalVueCore",
                 .product(
                     name: "KSPlayer",
                     package: "KSPlayer",
@@ -31,8 +31,8 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "StreamVueCoreTests",
-            dependencies: ["StreamVueCore"]
+            name: "OrbitalVueCoreTests",
+            dependencies: ["OrbitalVueCore"]
         )
     ]
 )

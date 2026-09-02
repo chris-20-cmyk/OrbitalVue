@@ -1,5 +1,5 @@
 {
-  "name": "@streamvue/tv-web",
+  "name": "@orbitalvue/tv-web",
   "version": "5.7.0-alpha.1",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "build": "vite build && node scripts/package-platforms.mjs"
   },
   "dependencies": {
-    "@streamvue/catalog": "workspace:*",
-    "@streamvue/media-centers": "workspace:*"
+    "@orbitalvue/catalog": "workspace:*",
+    "@orbitalvue/media-centers": "workspace:*"
   }
 }

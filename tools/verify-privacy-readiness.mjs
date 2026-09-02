@@ -220,7 +220,7 @@ const dependencySources = await Promise.all([
   readText("platforms/tv-web/package.json"),
   readText("platforms/android/app/build.gradle.kts"),
   readText("platforms/apple/Package.swift"),
-  readText("src/StreamVue.Player/StreamVue.Player.csproj")
+  readText("src/OrbitalVue.Player/OrbitalVue.Player.csproj")
 ]);
 const forbiddenAutomaticDataSdks = [
   "firebase-analytics",

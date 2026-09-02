@@ -1,7 +1,7 @@
 import { parseM3u } from "./m3u.js";
-import { CATALOG_CONTRACT_VERSION, type CreateCatalogOptions, type StreamVueCatalog } from "./types.js";
+import { CATALOG_CONTRACT_VERSION, type CreateCatalogOptions, type OrbitalVueCatalog } from "./types.js";
 
-export function createCatalogFromM3u(text: string, options: CreateCatalogOptions): StreamVueCatalog {
+export function createCatalogFromM3u(text: string, options: CreateCatalogOptions): OrbitalVueCatalog {
   const parsed = parseM3u(text, options);
   return {
     contractVersion: CATALOG_CONTRACT_VERSION,

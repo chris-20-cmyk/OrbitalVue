@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { StreamVueCatalog } from "@streamvue/catalog";
+import type { OrbitalVueCatalog } from "@orbitalvue/catalog";
 import type {
   MediaCenterHttpRequest,
   MediaCenterHttpTransport,
   MediaCenterSnapshot
-} from "@streamvue/media-centers";
+} from "@orbitalvue/media-centers";
 import {
   createMediaCenterCatalog,
   createMediaCenterConnection
-} from "@streamvue/media-centers";
+} from "@orbitalvue/media-centers";
 import type {
   CatalogStore,
   SavedCatalogRecord
@@ -29,7 +29,7 @@ class MemoryCatalogStore implements CatalogStore {
       : JSON.parse(JSON.stringify(this.record)) as SavedCatalogRecord;
   }
 
-  async write(sourceUrl: string | null, catalog: StreamVueCatalog): Promise<void> {
+  async write(sourceUrl: string | null, catalog: OrbitalVueCatalog): Promise<void> {
     this.record = {
       key: "active",
       sourceUrl,
@@ -41,7 +41,7 @@ class MemoryCatalogStore implements CatalogStore {
 
   async writeMediaCenter(
     snapshot: MediaCenterSnapshot,
-    catalog: StreamVueCatalog
+    catalog: OrbitalVueCatalog
   ): Promise<void> {
     this.record = {
       key: "active",
@@ -330,7 +330,7 @@ describe("television media-center repository", () => {
     );
 
     await expect(repository.loadSaved()).rejects.toThrow("one-time store purchase");
-    access = evaluatePremiumAccess("store", true, "streamvue-premium");
+    access = evaluatePremiumAccess("store", true, "orbitalvue-premium");
     await expect(repository.loadSaved()).resolves.toMatchObject({
       refreshed: false,
       notice: expect.stringContaining("without credentials")

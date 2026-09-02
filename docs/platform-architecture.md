@@ -1,8 +1,8 @@
-# StreamVue cross-platform architecture
+# OrbitalVue cross-platform architecture
 
 ## Product boundary
 
-StreamVue is a player and personal source manager. It does not bundle, sell, discover, or redistribute television streams. Every platform client imports a source supplied by the user and keeps credentials in that platform's private application storage.
+OrbitalVue is a player and personal source manager. It does not bundle, sell, discover, or redistribute television streams. Every platform client imports a source supplied by the user and keeps credentials in that platform's private application storage.
 
 ## Platform map
 
@@ -19,7 +19,7 @@ The UI and playback engine remain native to each device family. Only the catalog
 
 ## Protected personal media centers
 
-Plex and Emby use the versioned `contracts/media-center-contract-v1.schema.json` boundary. A cached catalog contains only a canonical `streamvue-media://{provider}/{serverId}/{itemId}` locator plus non-secret presentation and resume metadata. Provider tokens, passwords, and credentialed playback URLs are forbidden from that contract.
+Plex and Emby use the versioned `contracts/media-center-contract-v1.schema.json` boundary. A cached catalog contains only a canonical `orbitalvue-media://{provider}/{serverId}/{itemId}` locator plus non-secret presentation and resume metadata. Provider tokens, passwords, and credentialed playback URLs are forbidden from that contract.
 
 Each client follows the same security sequence:
 
@@ -31,7 +31,7 @@ Each client follows the same security sequence:
 
 Apple, Android, and Windows additionally support Plex's strong signed-PIN account flow. Each platform keeps a stable device-registration Ed25519 private key locally and sends only its public JWK while creating the PIN. Apple stores the identity in Keychain; Android stores it in a Tink encrypted keyset wrapped by a verified Android Keystore key and fails closed without cleartext fallback; Windows stores only the private seed under current-user DPAPI and imports it into a non-exportable runtime key. The transient account token is used in core/data memory to verify the Plex account and fetch server-scoped resources, then discarded. SwiftUI, Compose, and WPF receive only sanitized server choices and an opaque ten-minute discovery lease. The chosen server token moves directly into the existing origin-bound secure credential record after an unauthenticated identity probe whose server ID must match the selected account resource; token-bearing resource fields are rejected from server IDs, names, and connection URLs. Cancellation and premium-entitlement loss destroy the lease before it can be reused.
 
-Windows protects media-center credentials and its Plex device-signing seed with current-user DPAPI, offers signed browser approval with automatic server discovery plus an advanced manual-token fallback, and plays the resolved URL through LibVLC. Android uses its platform-protected credential store and Media3. Apple stores secrets in Keychain and hands the short-lived plan to KSPlayer or AVKit. Samsung and LG use the shared contract and capability-gate playback when the television API cannot safely express a provider requirement. No platform routes personal-library traffic through a StreamVue proxy.
+Windows protects media-center credentials and its Plex device-signing seed with current-user DPAPI, offers signed browser approval with automatic server discovery plus an advanced manual-token fallback, and plays the resolved URL through LibVLC. Android uses its platform-protected credential store and Media3. Apple stores secrets in Keychain and hands the short-lived plan to KSPlayer or AVKit. Samsung and LG use the shared contract and capability-gate playback when the television API cannot safely express a provider requirement. No platform routes personal-library traffic through a OrbitalVue proxy.
 
 ## Android 5.2 foundation
 
@@ -58,7 +58,7 @@ Before public store submission, each client must pass its native remote/touch ac
 
 Android also has two separate release paths. Personal device testing uses the generated debug APK. Foundation CI compiles Store mode with Plex/Emby fail-closed and deliberately verifies that its AAB is unsigned. It has no product ID or verifier URL and is named as a locked verification artifact.
 
-The manual Google Play candidate workflow is the only path that accepts StreamVue's upload-key environment variables. It refuses personal mode, partial signing configuration, missing product/verifier inputs, a readiness-manifest mismatch, an unregistered upload certificate, or an invalid version input. The operator must still supply a version code that has never previously been uploaded because only Play Console has authoritative version history. The workflow runs unit tests and lint, builds the optimized release AAB, verifies the JAR signature and RSA upload certificate, rejects packaged private-key files, and emits a checksum alongside the AAB. It stops before publication so the signed candidate can be reviewed and uploaded through Play Console. Google Play App Signing remains responsible for the app-signing key used on device-delivered APKs.
+The manual Google Play candidate workflow is the only path that accepts OrbitalVue's upload-key environment variables. It refuses personal mode, partial signing configuration, missing product/verifier inputs, a readiness-manifest mismatch, an unregistered upload certificate, or an invalid version input. The operator must still supply a version code that has never previously been uploaded because only Play Console has authoritative version history. The workflow runs unit tests and lint, builds the optimized release AAB, verifies the JAR signature and RSA upload certificate, rejects packaged private-key files, and emits a checksum alongside the AAB. It stops before publication so the signed candidate can be reviewed and uploaded through Play Console. Google Play App Signing remains responsible for the app-signing key used on device-delivered APKs.
 
 ### Shared entitlement-verifier hosting boundary
 
@@ -72,7 +72,7 @@ Windows has two deliberately separate distribution graphs. Personal/direct-downl
 
 ## Apple 5.1 foundation
 
-`platforms/apple` contains a dependency-free `StreamVueCore` module and a `StreamVueUI` module that integrates the pinned KSPlayer package. XcodeGen creates separate `StreamVue` iPhone/iPad and `StreamVueTV` Apple TV application targets from the committed `project.yml`, keeping generated Xcode project state out of source control.
+`platforms/apple` contains a dependency-free `OrbitalVueCore` module and a `OrbitalVueUI` module that integrates the pinned KSPlayer package. XcodeGen creates separate `OrbitalVue` iPhone/iPad and `OrbitalVueTV` Apple TV application targets from the committed `project.yml`, keeping generated Xcode project state out of source control.
 
 The touch client adapts through `NavigationSplitView`; compact devices move selected playback into a true fullscreen cover. Apple TV uses a remote-first, focus-aware three-column group/channel/player workspace. Both clients consume the same source-ordered catalog, exact `group-title` sections, search, favorites, playback settings, and privacy-safe repository.
 
@@ -80,11 +80,11 @@ The Swift parser enforces the shared 64 MiB input and 250,000-channel ceilings. 
 
 The Apple, Android, and Windows Plex connectors provide QR or external-browser approval, lifecycle-bound automatic PIN polling, account-wide server discovery, preferred secure/local connection selection, and a manual server-token fallback. Account and server tokens never become SwiftUI, Compose, or WPF state; an expiring opaque lease is the only bridge between discovery and server selection.
 
-Playback is engine-neutral above the surface layer. KSPlayer 2.3.4 is the default KSMEPlayer/Metal path for broader demuxing, arbitrary provider headers, hardware decode, adaptive presentation, and embedded tracks; AVURLAsset, AVPlayerItem, AVPlayer, and AVPlayerViewController provide a selectable native path and two-way fallback. Neither path sends credentials through a StreamVue proxy.
+Playback is engine-neutral above the surface layer. KSPlayer 2.3.4 is the default KSMEPlayer/Metal path for broader demuxing, arbitrary provider headers, hardware decode, adaptive presentation, and embedded tracks; AVURLAsset, AVPlayerItem, AVPlayer, and AVPlayerViewController provide a selectable native path and two-way fallback. Neither path sends credentials through a OrbitalVue proxy.
 
 User-entered source domains cannot be enumerated ahead of time, and some providers expose only HTTP endpoints. The Apple targets therefore carry a deliberate global ATS exception: missing schemes default to HTTPS, explicit HTTP sources display a cleartext warning, HTTPS-to-HTTP redirects are refused, and App Store review notes must justify the exception as compatibility with arbitrary user-specified third-party servers.
 
-Foundation CI gates are Swift package contract/privacy tests, the machine-readable KSPlayer decision, exact shared bundle identity, privacy-manifest validation, layered tvOS icon/Top Shelf structure, and Xcode builds plus analysis of both simulator targets. It builds the pinned KSPlayer graph for personal evaluation, then regenerates both Store targets from `Package.store.swift` and verifies an AVKit-only resolution. KSPlayer-enabled binaries remain unpublished unless StreamVue later chooses GPL-compatible distribution or obtains KSPlayer's separately licensed package.
+Foundation CI gates are Swift package contract/privacy tests, the machine-readable KSPlayer decision, exact shared bundle identity, privacy-manifest validation, layered tvOS icon/Top Shelf structure, and Xcode builds plus analysis of both simulator targets. It builds the pinned KSPlayer graph for personal evaluation, then regenerates both Store targets from `Package.store.swift` and verifies an AVKit-only resolution. KSPlayer-enabled binaries remain unpublished unless OrbitalVue later chooses GPL-compatible distribution or obtains KSPlayer's separately licensed package.
 
 The manual Apple Store candidate is a separate graph. Premium and software-license manifests must both be ready before any signing secret is read. Dependencies are resolved first; the workflow then imports a protected Apple Distribution identity and two platform profiles into a temporary keychain, archives iOS and tvOS with the same bundle ID and StoreKit product, validates each signed app, exports IPAs, removes signing material, and emits a checksum/audit artifact without uploading it. Real-device HLS, Picture in Picture, AirPlay, iPad layout, Apple TV remote-focus/display-matching, privacy metadata, and TestFlight review remain human release checks.
 
@@ -104,7 +104,7 @@ Both TV shells use the same remote-first state machine:
 4. Deterministic focus restoration after dialogs, playback, and Back.
 5. Automated parser, navigation, platform-selection, and privacy checks plus browser acceptance at 1920×1080 and 1280×720.
 
-TV file onboarding cannot assume that every model exposes a usable file picker, so URL entry is the guaranteed path. The shared shell also provides file selection where the platform supports it. StreamVue does not upload playlist contents to a hosted conversion service.
+TV file onboarding cannot assume that every model exposes a usable file picker, so URL entry is the guaranteed path. The shared shell also provides file selection where the platform supports it. OrbitalVue does not upload playlist contents to a hosted conversion service.
 
 ### Samsung Tizen adapter
 
@@ -120,7 +120,7 @@ TV file onboarding cannot assume that every model exposes a usable file picker, 
 
 - Package: webOS web-app `.ipk`.
 - Playback: platform HTML5 media path with webOS HLS/HTTP capability checks.
-- Inputs: pointer and complete 5-way focus navigation; Back unwinds StreamVue state before yielding to the platform.
+- Inputs: pointer and complete 5-way focus navigation; Back unwinds OrbitalVue state before yielding to the platform.
 - Source headers: the native media element does not provide a portable arbitrary-request-header contract. Header-dependent streams are capability-gated and never routed through an untrusted proxy.
 - Lifecycle: persist catalog and navigation state before suspension and rebuild media state explicitly after resume.
 - Premium commerce: LG's native billing service is discontinued. Store builds remain visibly unavailable—with no fake purchase action or client-side entitlement—until a reviewed third-party provider, identity/recovery flow, backend verification, and refund handling are implemented.

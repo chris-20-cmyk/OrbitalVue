@@ -14,11 +14,11 @@ const requireFragments = (source, fragments, label) => {
 };
 
 const [models, reporting, resolver, windowCode, probe, privacyInventory, privacyDisclosure] = await Promise.all([
-  read("src/StreamVue.Player/Models/MediaCenterModels.cs"),
-  read("src/StreamVue.Player/Services/MediaCenterSourceService.PlaybackReporting.cs"),
-  read("src/StreamVue.Player/Services/MediaCenterSourceService.cs"),
-  read("src/StreamVue.Player/MainWindow.xaml.cs"),
-  read("tools/StreamVue.FeatureProbe/Program.cs"),
+  read("src/OrbitalVue.Player/Models/MediaCenterModels.cs"),
+  read("src/OrbitalVue.Player/Services/MediaCenterSourceService.PlaybackReporting.cs"),
+  read("src/OrbitalVue.Player/Services/MediaCenterSourceService.cs"),
+  read("src/OrbitalVue.Player/MainWindow.xaml.cs"),
+  read("tools/OrbitalVue.FeatureProbe/Program.cs"),
   read("store/privacy-data-inventory.json"),
   read("docs/privacy-and-store-disclosures.md")
 ]);

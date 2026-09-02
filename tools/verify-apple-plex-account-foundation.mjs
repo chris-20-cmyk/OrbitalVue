@@ -24,14 +24,14 @@ const [
   premiumTests,
   privacyText
 ] = await Promise.all([
-  read("platforms/apple/Sources/StreamVueCore/PlexAccount.swift"),
-  read("platforms/apple/Sources/StreamVueCore/MediaCenterService.swift"),
-  read("platforms/apple/Sources/StreamVueCore/MediaCenterRepository.swift"),
-  read("platforms/apple/Sources/StreamVueUI/StreamVueStore.swift"),
-  read("platforms/apple/Sources/StreamVueUI/PlexAccountConnectModel.swift"),
-  read("platforms/apple/Sources/StreamVueUI/Views/PlexAccountConnectSection.swift"),
-  read("platforms/apple/Tests/StreamVueCoreTests/MediaCenterTests.swift"),
-  read("platforms/apple/Tests/StreamVueCoreTests/PremiumAccessTests.swift"),
+  read("platforms/apple/Sources/OrbitalVueCore/PlexAccount.swift"),
+  read("platforms/apple/Sources/OrbitalVueCore/MediaCenterService.swift"),
+  read("platforms/apple/Sources/OrbitalVueCore/MediaCenterRepository.swift"),
+  read("platforms/apple/Sources/OrbitalVueUI/OrbitalVueStore.swift"),
+  read("platforms/apple/Sources/OrbitalVueUI/PlexAccountConnectModel.swift"),
+  read("platforms/apple/Sources/OrbitalVueUI/Views/PlexAccountConnectSection.swift"),
+  read("platforms/apple/Tests/OrbitalVueCoreTests/MediaCenterTests.swift"),
+  read("platforms/apple/Tests/OrbitalVueCoreTests/PremiumAccessTests.swift"),
   read("store/privacy-data-inventory.json")
 ]);
 

@@ -13,7 +13,7 @@ describe("Samsung DPI entitlement verification", () => {
     platform: "samsung",
     action: "status",
     appId: "1234567890",
-    productId: "streamvue-premium",
+    productId: "orbitalvue-premium",
     customId: "samsung-account-user",
     countryCode: "US"
   });

@@ -1,11 +1,11 @@
-# StreamVue entitlement verifier
+# OrbitalVue entitlement verifier
 
-This private workspace package is the fail-closed server core for the one-time Plex and Emby unlock. It implements the two backend routes already used by StreamVue clients:
+This private workspace package is the fail-closed server core for the one-time Plex and Emby unlock. It implements the two backend routes already used by OrbitalVue clients:
 
 - `POST /google-play/verify` checks a transient purchase token with Google Play Developer API `purchases.productsv2.getproductpurchasev2`.
 - `POST /samsung/status` checks the exact DPI product offer, HMAC-verifies every DPI product and purchase-history response, pages purchase history, rejects canceled purchases, and verifies the matching invoice.
 
-The package is deliberately hosting-neutral. The route-disabled [`@streamvue/entitlement-verifier-worker`](../entitlement-verifier-worker/README.md) adapter passes a standards-based `Request` to `createEntitlementVerifierHandler()` and adds exact-host/origin policy, opaque purchaser-key rate limiting, request-size enforcement, hardened responses, identifier-free logs, and required secret bindings. Do not enable wildcard browser origins for these routes.
+The package is deliberately hosting-neutral. The route-disabled [`@orbitalvue/entitlement-verifier-worker`](../entitlement-verifier-worker/README.md) adapter passes a standards-based `Request` to `createEntitlementVerifierHandler()` and adds exact-host/origin policy, opaque purchaser-key rate limiting, request-size enforcement, hardened responses, identifier-free logs, and required secret bindings. Do not enable wildcard browser origins for these routes.
 
 ## Runtime secrets
 

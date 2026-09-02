@@ -3,8 +3,8 @@ import {
   sha256Hex,
   type CatalogChannel,
   type ChannelKind,
-  type StreamVueCatalog
-} from "@streamvue/catalog";
+  type OrbitalVueCatalog
+} from "@orbitalvue/catalog";
 import type {
   MediaCenterConnection,
   MediaCenterItem,
@@ -63,7 +63,7 @@ export function createMediaCenterCatalog(
   libraries: readonly MediaCenterLibrary[],
   items: readonly MediaCenterItem[],
   loadedAt = new Date().toISOString()
-): StreamVueCatalog {
+): OrbitalVueCatalog {
   if (connection.contractVersion !== MEDIA_CENTER_CONTRACT_VERSION) {
     throw new TypeError("The media-center connection contract is not supported.");
   }
@@ -92,11 +92,11 @@ export function createMediaCenterCatalog(
 }
 
 export function mediaCenterPlaybackUri(locator: MediaCenterPlaybackLocator): string {
-  return mediaCenterLocatorUri("streamvue-media", locator);
+  return mediaCenterLocatorUri("orbitalvue-media", locator);
 }
 
 export function mediaCenterArtworkUri(locator: MediaCenterPlaybackLocator): string {
-  return mediaCenterLocatorUri("streamvue-artwork", locator);
+  return mediaCenterLocatorUri("orbitalvue-artwork", locator);
 }
 
 export function parseMediaCenterPlaybackUri(value: string): MediaCenterPlaybackLocator {
@@ -104,7 +104,7 @@ export function parseMediaCenterPlaybackUri(value: string): MediaCenterPlaybackL
     throw new TypeError("The media-center playback address is not canonical.");
   }
   const url = new URL(value);
-  if (url.protocol !== "streamvue-media:"
+  if (url.protocol !== "orbitalvue-media:"
     || url.username !== ""
     || url.password !== ""
     || url.port !== ""
@@ -132,7 +132,7 @@ export function parseMediaCenterPlaybackUri(value: string): MediaCenterPlaybackL
 }
 
 function mediaCenterLocatorUri(
-  scheme: "streamvue-media" | "streamvue-artwork",
+  scheme: "orbitalvue-media" | "orbitalvue-artwork",
   locator: MediaCenterPlaybackLocator
 ): string {
   if (locator.provider !== "plex" && locator.provider !== "emby") {

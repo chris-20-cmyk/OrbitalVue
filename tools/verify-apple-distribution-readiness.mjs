@@ -16,8 +16,8 @@ const storePackageManifest = await readFile(
   "utf8"
 );
 const appleSourceFiles = [
-  join(repositoryRoot, "platforms", "apple", "Sources", "StreamVueUI", "Playback", "KSPlayerSurface.swift"),
-  join(repositoryRoot, "platforms", "apple", "Sources", "StreamVueUI", "Playback", "StreamPlayerController.swift")
+  join(repositoryRoot, "platforms", "apple", "Sources", "OrbitalVueUI", "Playback", "KSPlayerSurface.swift"),
+  join(repositoryRoot, "platforms", "apple", "Sources", "OrbitalVueUI", "Playback", "StreamPlayerController.swift")
 ];
 
 const fail = (message) => {

@@ -6,7 +6,7 @@ import PackageDescription
 // build lane. Personal source builds keep the pinned public KSPlayer dependency;
 // Store builds compile the same UI through its AVKit-only canImport boundary.
 let package = Package(
-    name: "StreamVueApple",
+    name: "OrbitalVueApple",
     defaultLocalization: "en",
     platforms: [
         .iOS(.v17),
@@ -14,18 +14,18 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
-        .library(name: "StreamVueCore", targets: ["StreamVueCore"]),
-        .library(name: "StreamVueUI", targets: ["StreamVueUI"])
+        .library(name: "OrbitalVueCore", targets: ["OrbitalVueCore"]),
+        .library(name: "OrbitalVueUI", targets: ["OrbitalVueUI"])
     ],
     targets: [
-        .target(name: "StreamVueCore"),
+        .target(name: "OrbitalVueCore"),
         .target(
-            name: "StreamVueUI",
-            dependencies: ["StreamVueCore"]
+            name: "OrbitalVueUI",
+            dependencies: ["OrbitalVueCore"]
         ),
         .testTarget(
-            name: "StreamVueCoreTests",
-            dependencies: ["StreamVueCore"]
+            name: "OrbitalVueCoreTests",
+            dependencies: ["OrbitalVueCore"]
         )
     ]
 )

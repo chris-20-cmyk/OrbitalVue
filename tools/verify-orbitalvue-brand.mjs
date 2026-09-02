@@ -32,9 +32,9 @@ const [
   privacyPage,
   supportPage
 ] = await Promise.all([
-  read("src/StreamVue.Player/StreamVue.Player.csproj"),
-  read("src/StreamVue.Player/App.xaml.cs"),
-  read("src/StreamVue.Player/Services/StreamVueMaintenanceService.cs"),
+  read("src/OrbitalVue.Player/OrbitalVue.Player.csproj"),
+  read("src/OrbitalVue.Player/App.xaml.cs"),
+  read("src/OrbitalVue.Player/Services/OrbitalVueMaintenanceService.cs"),
   read("packaging/windows-msix/AppxManifest.template.xml"),
   read(".github/workflows/publish-preview-assets.yml"),
   read("platforms/android/app/build.gradle.kts"),
@@ -75,6 +75,8 @@ for (const [source, label] of [
   [privacy, "privacy inventory"],
   [releaseContract, "cross-platform release contract"]
 ]) {
+  // These reject the PREVIOUS brand, so they must keep naming it. A search-and-replace
+  // across the tree will happily rewrite them into the current brand and invert the check.
   rejectText(source, "com.streamvue.player", label);
   rejectText(source, "SvTvPlayer.StreamVue", label);
 }

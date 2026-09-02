@@ -38,7 +38,7 @@ jobs:
       - name: Upload the manual Pages candidate
         uses: actions/upload-artifact@v7
         with:
-          name: streamvue-public-site-candidate
+          name: orbitalvue-public-site-candidate
           if-no-files-found: error
           retention-days: 30
           path: |

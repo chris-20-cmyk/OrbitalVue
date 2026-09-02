@@ -21,4 +21,4 @@ node_modules/
 **/.env*
 !**/.dev.vars.example
 platforms/apple/Generated/
-platforms/apple/StreamVueApple.xcodeproj/
+platforms/apple/OrbitalVueApple.xcodeproj/

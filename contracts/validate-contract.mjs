@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const schema = JSON.parse(await readFile(join(here, "streamvue-catalog.schema.json"), "utf8"));
+const schema = JSON.parse(await readFile(join(here, "orbitalvue-catalog.schema.json"), "utf8"));
 const catalog = JSON.parse(await readFile(join(here, "fixtures", "catalog.expected.json"), "utf8"));
 const playlist = await readFile(join(here, "fixtures", "iptv-features.m3u"), "utf8");
 const mediaCenterSchema = JSON.parse(
@@ -75,7 +75,7 @@ const allowedSchemes = new Set([
   "rtmp:",
   "udp:",
   "file:",
-  "streamvue-media:"
+  "orbitalvue-media:"
 ]);
 
 for (const source of catalog.sources) {

@@ -26,15 +26,15 @@ const [
   manifest,
   privacyText
 ] = await Promise.all([
-  read("platforms/android/app/src/main/java/com/streamvue/player/data/PlexAccount.kt"),
-  read("platforms/android/app/src/main/java/com/streamvue/player/data/AndroidPlexDeviceSigner.kt"),
-  read("platforms/android/app/src/main/java/com/streamvue/player/data/MediaCenterService.kt"),
-  read("platforms/android/app/src/main/java/com/streamvue/player/data/MediaCenterRepository.kt"),
-  read("platforms/android/app/src/main/java/com/streamvue/player/MainViewModel.kt"),
-  read("platforms/android/app/src/main/java/com/streamvue/player/ui/PlexAccountConnectPanel.kt"),
-  read("platforms/android/app/src/main/java/com/streamvue/player/ui/StreamVueApp.kt"),
-  read("platforms/android/app/src/test/java/com/streamvue/player/data/PlexAccountClientTest.kt"),
-  read("platforms/android/app/src/test/java/com/streamvue/player/data/PlexDiscoverySecurityTest.kt"),
+  read("platforms/android/app/src/main/java/com/orbitalvue/player/data/PlexAccount.kt"),
+  read("platforms/android/app/src/main/java/com/orbitalvue/player/data/AndroidPlexDeviceSigner.kt"),
+  read("platforms/android/app/src/main/java/com/orbitalvue/player/data/MediaCenterService.kt"),
+  read("platforms/android/app/src/main/java/com/orbitalvue/player/data/MediaCenterRepository.kt"),
+  read("platforms/android/app/src/main/java/com/orbitalvue/player/MainViewModel.kt"),
+  read("platforms/android/app/src/main/java/com/orbitalvue/player/ui/PlexAccountConnectPanel.kt"),
+  read("platforms/android/app/src/main/java/com/orbitalvue/player/ui/OrbitalVueApp.kt"),
+  read("platforms/android/app/src/test/java/com/orbitalvue/player/data/PlexAccountClientTest.kt"),
+  read("platforms/android/app/src/test/java/com/orbitalvue/player/data/PlexDiscoverySecurityTest.kt"),
   read("platforms/android/app/src/main/AndroidManifest.xml"),
   read("store/privacy-data-inventory.json")
 ]);

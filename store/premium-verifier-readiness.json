@@ -1,14 +1,14 @@
 {
   "contractVersion": "1.0",
   "implementation": {
-    "packageName": "@streamvue/entitlement-verifier",
+    "packageName": "@orbitalvue/entitlement-verifier",
     "sourceRoot": "packages/entitlement-verifier",
     "googlePlayRoute": "/google-play/verify",
     "googlePlayApiMethod": "purchases.productsv2.getproductpurchasev2",
     "samsungRoute": "/samsung/status",
     "samsungDpiOrigin": "https://checkoutapi.samsungcheckout.com",
     "hosting": {
-      "packageName": "@streamvue/entitlement-verifier-worker",
+      "packageName": "@orbitalvue/entitlement-verifier-worker",
       "sourceRoot": "packages/entitlement-verifier-worker",
       "runtime": "cloudflare-workers",
       "configurationPath": "packages/entitlement-verifier-worker/wrangler.jsonc",

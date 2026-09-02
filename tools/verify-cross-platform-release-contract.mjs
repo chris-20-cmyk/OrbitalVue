@@ -55,7 +55,7 @@ const expectedPlatforms = {
       "store/accessibility-readiness.json",
       "--require-ready windows",
       "--expect-verification-provider windows microsoft-store-license",
-      "-p:StreamVueDistributionMode=Store",
+      "-p:OrbitalVueDistributionMode=Store",
       "tools/build-windows-msix.ps1"
     ]
   },
@@ -78,8 +78,8 @@ const expectedPlatforms = {
       "--expect-verification-provider android google-play-developer-api",
       "node tools/verify-premium-verifier-readiness.mjs",
       "--expect-url android \"$ANDROID_PREMIUM_VERIFICATION_URL\"",
-      "-PstreamVueDistributionMode=store",
-      "-PstreamVueRequireStoreSigning=true"
+      "-PorbitalVueDistributionMode=store",
+      "-PorbitalVueRequireStoreSigning=true"
     ]
   },
   apple: {
@@ -125,7 +125,7 @@ const expectedPlatforms = {
       "node tools/verify-premium-verifier-readiness.mjs",
       "--expect-url samsung \"$SAMSUNG_VERIFICATION_URL\"",
       "tools/verify-samsung-distribution-readiness.mjs",
-      "VITE_STREAMVUE_DISTRIBUTION_MODE: store"
+      "VITE_ORBITALVUE_DISTRIBUTION_MODE: store"
     ]
   },
   lg: {
@@ -145,7 +145,7 @@ const expectedPlatforms = {
       "store/accessibility-readiness.json",
       "tools/verify-lg-distribution-readiness.mjs",
       "--expect-app-id \"$LG_APP_ID\"",
-      "VITE_STREAMVUE_DISTRIBUTION_MODE: store",
+      "VITE_ORBITALVUE_DISTRIBUTION_MODE: store",
       "manual-lg-seller-lounge-upload"
     ]
   }
@@ -258,20 +258,20 @@ const androidApplicationPattern = new RegExp(
 if (!androidApplicationPattern.test(androidBuild)) {
   fail("Android applicationId does not match the release contract");
 }
-if (!/\bnamespace\s*=\s*"com\.streamvue\.player"/.test(androidBuild)) {
+if (!/\bnamespace\s*=\s*"com\.orbitalvue\.player"/.test(androidBuild)) {
   fail("Android must retain its internal Kotlin namespace during the OrbitalVue identity bridge");
 }
 const appleProject = await readText("platforms/apple/project.yml");
 const appleIdentities = appleProject.match(/PRODUCT_BUNDLE_IDENTIFIER:\s*com\.orbitalvue\.player/g) ?? [];
 if (appleIdentities.length !== 2) fail("iOS and tvOS must keep the same reviewed Apple bundle ID");
 const windowsWorkflow = await readText(expectedPlatforms.windows.candidateWorkflow);
-if (!windowsWorkflow.includes("vars.STREAMVUE_WINDOWS_IDENTITY_NAME")
+if (!windowsWorkflow.includes("vars.ORBITALVUE_WINDOWS_IDENTITY_NAME")
   || !windowsWorkflow.includes("-IdentityName $env:WINDOWS_IDENTITY_NAME")) {
   fail("Windows candidate must receive its exact reserved identity from Partner Center");
 }
 const lgWorkflow = await readText(expectedPlatforms.lg.candidateWorkflow);
 if (/verify-premium-store-readiness\.mjs[\s\\]*--require-ready lg/.test(lgWorkflow)
-  || lgWorkflow.includes("VITE_STREAMVUE_LG_PRODUCT_ID")) {
+  || lgWorkflow.includes("VITE_ORBITALVUE_LG_PRODUCT_ID")) {
   fail("LG free candidate must not claim an unimplemented premium product");
 }
 

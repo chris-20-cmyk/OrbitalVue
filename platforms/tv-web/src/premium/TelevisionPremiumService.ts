@@ -84,7 +84,7 @@ export function createTelevisionPremiumService(
   options: TelevisionPremiumServiceOptions = {}
 ): TelevisionPremiumService {
   const distributionMode = options.distributionMode
-    ?? import.meta.env.VITE_STREAMVUE_DISTRIBUTION_MODE
+    ?? import.meta.env.VITE_ORBITALVUE_DISTRIBUTION_MODE
     ?? "personal";
   const normalizedMode = distributionMode.trim().toLowerCase();
   if (normalizedMode === "personal") return new StaticPremiumService(personalSnapshot());
@@ -110,9 +110,9 @@ export function createTelevisionPremiumService(
   }
 
   const config = normalizeSamsungCheckoutConfig(options.samsungConfig ?? {
-    appId: import.meta.env.VITE_STREAMVUE_SAMSUNG_APP_ID,
-    productId: import.meta.env.VITE_STREAMVUE_SAMSUNG_PRODUCT_ID,
-    verificationUrl: import.meta.env.VITE_STREAMVUE_SAMSUNG_VERIFICATION_URL
+    appId: import.meta.env.VITE_ORBITALVUE_SAMSUNG_APP_ID,
+    productId: import.meta.env.VITE_ORBITALVUE_SAMSUNG_PRODUCT_ID,
+    verificationUrl: import.meta.env.VITE_ORBITALVUE_SAMSUNG_VERIFICATION_URL
   });
   const fetcher = options.fetcher ?? (typeof globalThis.fetch === "function"
     ? globalThis.fetch.bind(globalThis)

@@ -49,9 +49,9 @@ on:
       - "contracts/fixtures/google-play.verify.*.json"
       - "contracts/fixtures/samsung-checkout.status.*.json"
       - "pnpm-lock.yaml"
-      - "src/StreamVue.Player/App.xaml.cs"
-      - "src/StreamVue.Player/Services/**"
-      - "src/StreamVue.Player/StreamVue.Player.csproj"
+      - "src/OrbitalVue.Player/App.xaml.cs"
+      - "src/OrbitalVue.Player/Services/**"
+      - "src/OrbitalVue.Player/OrbitalVue.Player.csproj"
       - "package.json"
   pull_request:
     paths:
@@ -97,9 +97,9 @@ on:
       - "contracts/fixtures/google-play.verify.*.json"
       - "contracts/fixtures/samsung-checkout.status.*.json"
       - "pnpm-lock.yaml"
-      - "src/StreamVue.Player/App.xaml.cs"
-      - "src/StreamVue.Player/Services/**"
-      - "src/StreamVue.Player/StreamVue.Player.csproj"
+      - "src/OrbitalVue.Player/App.xaml.cs"
+      - "src/OrbitalVue.Player/Services/**"
+      - "src/OrbitalVue.Player/OrbitalVue.Player.csproj"
       - "package.json"
 
 permissions:

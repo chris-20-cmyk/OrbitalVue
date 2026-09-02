@@ -15,13 +15,13 @@ const requireFragments = (source, fragments, label) => {
 
 const [project, account, models, identity, windowXaml, windowCode, probe, privacyText] =
   await Promise.all([
-    read("src/StreamVue.Player/StreamVue.Player.csproj"),
-    read("src/StreamVue.Player/Services/MediaCenterSourceService.PlexAccount.cs"),
-    read("src/StreamVue.Player/Models/PlexAccountModels.cs"),
-    read("src/StreamVue.Player/Services/PlexDeviceIdentityStore.cs"),
-    read("src/StreamVue.Player/MainWindow.xaml"),
-    read("src/StreamVue.Player/MainWindow.xaml.cs"),
-    read("tools/StreamVue.FeatureProbe/Program.cs"),
+    read("src/OrbitalVue.Player/OrbitalVue.Player.csproj"),
+    read("src/OrbitalVue.Player/Services/MediaCenterSourceService.PlexAccount.cs"),
+    read("src/OrbitalVue.Player/Models/PlexAccountModels.cs"),
+    read("src/OrbitalVue.Player/Services/PlexDeviceIdentityStore.cs"),
+    read("src/OrbitalVue.Player/MainWindow.xaml"),
+    read("src/OrbitalVue.Player/MainWindow.xaml.cs"),
+    read("tools/OrbitalVue.FeatureProbe/Program.cs"),
     read("store/privacy-data-inventory.json")
   ]);
 
