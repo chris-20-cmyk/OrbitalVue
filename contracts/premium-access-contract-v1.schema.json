@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://streamvue.app/contracts/premium-access/v1/schema.json",
+  "$id": "https://orbitalvue.app/contracts/premium-access/v1/schema.json",
   "title": "OrbitalVue Premium Access Decision",
   "description": "A secret-free decision describing whether one premium feature may run in a personal or store build.",
   "type": "object",

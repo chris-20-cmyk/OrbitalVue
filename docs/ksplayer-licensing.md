@@ -1,17 +1,17 @@
 # KSPlayer licensing gate
 
-StreamVue's Apple source pins `kingslay/KSPlayer` 2.3.4 and uses KSMEPlayer as its default Metal/FFmpeg playback engine. The upstream public package is GPL-3.0. The upstream project also advertises separately licensed LGPL and commercial options; terms and pricing must be confirmed directly with its maintainer before relying on them.
+OrbitalVue's Apple source pins `kingslay/KSPlayer` 2.3.4 and uses KSMEPlayer as its default Metal/FFmpeg playback engine. The upstream public package is GPL-3.0. The upstream project also advertises separately licensed LGPL and commercial options; terms and pricing must be confirmed directly with its maintainer before relying on them.
 
 This repository intentionally has no root software `LICENSE`, so merely publishing the source on GitHub does not satisfy GPL redistribution requirements. Until the owner makes an explicit license choice or obtains a separate KSPlayer license:
 
 - local source builds for personal evaluation may include KSPlayer;
 - GitHub CI may compile and analyze the integration but must not upload the combined app binary;
-- StreamVue releases, TestFlight, and App Store submissions must not include the public KSPlayer package;
+- OrbitalVue releases, TestFlight, and App Store submissions must not include the public KSPlayer package;
 - AVKit remains implemented as the selectable native engine and fallback, but removing KSPlayer from a release requires a deliberate build profile rather than deleting the integration.
 
 There are three legitimate release paths:
 
-1. License the complete distributable StreamVue Apple work under GPL-3.0-compatible terms, publish the corresponding source and required notices, and separately confirm that the chosen store channel's terms are compatible.
+1. License the complete distributable OrbitalVue Apple work under GPL-3.0-compatible terms, publish the corresponding source and required notices, and separately confirm that the chosen store channel's terms are compatible.
 2. Obtain KSPlayer's LGPL/commercial package and comply with its written terms. The project README directs commercial users to `kingslay@icloud.com` and its licensing discussion.
 3. Ship an AVKit-only Apple build that does not link or embed KSPlayer.
 

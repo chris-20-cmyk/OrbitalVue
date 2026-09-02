@@ -1,4 +1,4 @@
-name: StreamVueApple
+name: OrbitalVueApple
 
 options:
   bundleIdPrefix: com.orbitalvue
@@ -13,7 +13,7 @@ configs:
   Store: release
 
 packages:
-  StreamVueModules:
+  OrbitalVueModules:
     path: .
 
 settings:
@@ -26,14 +26,14 @@ settings:
     ENABLE_MODULE_VERIFIER: YES
     DEAD_CODE_STRIPPING: YES
     CODE_SIGN_STYLE: Automatic
-    STREAMVUE_DISTRIBUTION_MODE: personal
-    STREAMVUE_PREMIUM_PRODUCT_ID: ""
+    ORBITALVUE_DISTRIBUTION_MODE: personal
+    ORBITALVUE_PREMIUM_PRODUCT_ID: ""
   configs:
     Store:
-      STREAMVUE_DISTRIBUTION_MODE: store
+      ORBITALVUE_DISTRIBUTION_MODE: store
 
 targets:
-  StreamVue:
+  OrbitalVue:
     type: application
     platform: iOS
     sources:
@@ -41,26 +41,26 @@ targets:
       - path: Resources
         buildPhase: resources
     dependencies:
-      - package: StreamVueModules
-        product: StreamVueUI
+      - package: OrbitalVueModules
+        product: OrbitalVueUI
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.orbitalvue.player
         PRODUCT_NAME: OrbitalVue
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO
-        CODE_SIGN_ENTITLEMENTS: Apps/iOS/StreamVue.entitlements
+        CODE_SIGN_ENTITLEMENTS: Apps/iOS/OrbitalVue.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
-      path: Generated/StreamVue-Info.plist
+      path: Generated/OrbitalVue-Info.plist
       properties:
         CFBundleDisplayName: OrbitalVue
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.entertainment
         ITSAppUsesNonExemptEncryption: false
-        StreamVueDistributionMode: $(STREAMVUE_DISTRIBUTION_MODE)
-        StreamVuePremiumProductID: $(STREAMVUE_PREMIUM_PRODUCT_ID)
+        OrbitalVueDistributionMode: $(ORBITALVUE_DISTRIBUTION_MODE)
+        OrbitalVuePremiumProductID: $(ORBITALVUE_PREMIUM_PRODUCT_ID)
         NSLocalNetworkUsageDescription: OrbitalVue connects to IPTV, Plex, and Emby servers that you choose on your local network.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
@@ -80,7 +80,7 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
 
-  StreamVueTV:
+  OrbitalVueTV:
     type: application
     platform: tvOS
     sources:
@@ -88,24 +88,24 @@ targets:
       - path: Resources
         buildPhase: resources
     dependencies:
-      - package: StreamVueModules
-        product: StreamVueUI
+      - package: OrbitalVueModules
+        product: OrbitalVueUI
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.orbitalvue.player
         PRODUCT_NAME: OrbitalVueTV
-        CODE_SIGN_ENTITLEMENTS: Apps/tvOS/StreamVueTV.entitlements
+        CODE_SIGN_ENTITLEMENTS: Apps/tvOS/OrbitalVueTV.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: App Icon
     info:
-      path: Generated/StreamVueTV-Info.plist
+      path: Generated/OrbitalVueTV-Info.plist
       properties:
         CFBundleDisplayName: OrbitalVue
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.entertainment
         ITSAppUsesNonExemptEncryption: false
-        StreamVueDistributionMode: $(STREAMVUE_DISTRIBUTION_MODE)
-        StreamVuePremiumProductID: $(STREAMVUE_PREMIUM_PRODUCT_ID)
+        OrbitalVueDistributionMode: $(ORBITALVUE_DISTRIBUTION_MODE)
+        OrbitalVuePremiumProductID: $(ORBITALVUE_PREMIUM_PRODUCT_ID)
         NSLocalNetworkUsageDescription: OrbitalVue connects to IPTV, Plex, and Emby servers that you choose on your local network.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
@@ -114,11 +114,11 @@ targets:
         UIUserInterfaceStyle: Dark
 
 schemes:
-  StreamVue:
+  OrbitalVue:
     build:
       targets:
-        StreamVue: all
-  StreamVueTV:
+        OrbitalVue: all
+  OrbitalVueTV:
     build:
       targets:
-        StreamVueTV: all
+        OrbitalVueTV: all

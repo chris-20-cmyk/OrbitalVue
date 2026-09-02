@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: streamvue-lg-seller-lounge-candidate
+  group: orbitalvue-lg-seller-lounge-candidate
   cancel-in-progress: false
 
 jobs:
@@ -90,7 +90,7 @@ jobs:
       - name: Test and assemble the free Store candidate
         shell: bash
         env:
-          VITE_STREAMVUE_DISTRIBUTION_MODE: store
+          VITE_ORBITALVUE_DISTRIBUTION_MODE: store
         run: |
           node contracts/validate-contract.mjs
           pnpm media-centers:test
@@ -206,7 +206,7 @@ jobs:
       - name: Upload manual LG Seller Lounge candidate
         uses: actions/upload-artifact@v7
         with:
-          name: streamvue-lg-webos-${{ inputs.version }}
+          name: orbitalvue-lg-webos-${{ inputs.version }}
           if-no-files-found: error
           retention-days: 30
           path: |

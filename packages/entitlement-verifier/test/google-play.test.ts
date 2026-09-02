@@ -14,7 +14,7 @@ describe("Google Play entitlement verification", () => {
     purchaseStateContext: { purchaseState: "PURCHASED" },
     purchaseCompletionTime: "2026-08-29T12:00:00Z",
     productLineItem: [{
-      productId: "streamvue.premium",
+      productId: "orbitalvue.premium",
       productOfferDetails: {
         quantity: 1,
         refundableQuantity: 1,
@@ -24,32 +24,32 @@ describe("Google Play entitlement verification", () => {
   };
 
   it("accepts only a completed, matching, unconsumed purchase", () => {
-    expect(isPurchasedProduct(purchased, "streamvue.premium")).toBe(true);
-    expect(isPurchasedProduct({ ...purchased, purchaseStateContext: { purchaseState: "PENDING" } }, "streamvue.premium")).toBe(false);
-    expect(isPurchasedProduct({ ...purchased, testPurchaseContext: { fopType: "TEST" } }, "streamvue.premium")).toBe(false);
-    expect(isPurchasedProduct({ ...purchased, testPurchaseContext: { fopType: "TEST" } }, "streamvue.premium", true)).toBe(true);
-    expect(isPurchasedProduct({ ...purchased, testPurchaseContext: {} }, "streamvue.premium", true)).toBe(false);
+    expect(isPurchasedProduct(purchased, "orbitalvue.premium")).toBe(true);
+    expect(isPurchasedProduct({ ...purchased, purchaseStateContext: { purchaseState: "PENDING" } }, "orbitalvue.premium")).toBe(false);
+    expect(isPurchasedProduct({ ...purchased, testPurchaseContext: { fopType: "TEST" } }, "orbitalvue.premium")).toBe(false);
+    expect(isPurchasedProduct({ ...purchased, testPurchaseContext: { fopType: "TEST" } }, "orbitalvue.premium", true)).toBe(true);
+    expect(isPurchasedProduct({ ...purchased, testPurchaseContext: {} }, "orbitalvue.premium", true)).toBe(false);
     expect(isPurchasedProduct({
       ...purchased,
       productLineItem: [{
-        productId: "streamvue.premium",
+        productId: "orbitalvue.premium",
         productOfferDetails: { refundableQuantity: 1, consumptionState: "YET_TO_BE_CONSUMED" }
       }]
-    }, "streamvue.premium")).toBe(false);
+    }, "orbitalvue.premium")).toBe(false);
     expect(isPurchasedProduct({
       ...purchased,
       productLineItem: [{
-        productId: "streamvue.premium",
+        productId: "orbitalvue.premium",
         productOfferDetails: { refundableQuantity: 0 }
       }]
-    }, "streamvue.premium")).toBe(false);
+    }, "orbitalvue.premium")).toBe(false);
     expect(isPurchasedProduct({
       ...purchased,
       productLineItem: [{
-        productId: "streamvue.premium",
+        productId: "orbitalvue.premium",
         productOfferDetails: { refundableQuantity: 1, consumptionState: "CONSUMED" }
       }]
-    }, "streamvue.premium")).toBe(false);
+    }, "orbitalvue.premium")).toBe(false);
   });
 
   it("rejects an identity mismatch before sending the purchase token upstream", async () => {
@@ -58,13 +58,13 @@ describe("Google Play entitlement verification", () => {
       schemaVersion: 1,
       platform: "google-play",
       packageName: "com.attacker.player",
-      productId: "streamvue.premium",
+      productId: "orbitalvue.premium",
       purchaseToken: "transient-secret"
     });
 
     await expect(verifyGooglePlayPurchase(request, {
       packageName: "com.orbitalvue.player",
-      productId: "streamvue.premium"
+      productId: "orbitalvue.premium"
     }, publisher)).rejects.toThrow("does not match");
     expect(publisher.getProductPurchase).not.toHaveBeenCalled();
   });
@@ -83,16 +83,16 @@ describe("Google Play entitlement verification", () => {
       schemaVersion: 1,
       platform: "google-play",
       packageName: "com.orbitalvue.player",
-      productId: "streamvue.premium",
+      productId: "orbitalvue.premium",
       purchaseToken: "purchase/token+value"
     }, {
       packageName: "com.orbitalvue.player",
-      productId: "streamvue.premium"
+      productId: "orbitalvue.premium"
     }, client);
 
     expect(requests[0]?.url).toContain("/purchases/productsv2/tokens/purchase%2Ftoken%2Bvalue");
     expect(requests[0]?.headers.get("authorization")).toBe("Bearer oauth-secret");
-    expect(response).toEqual({ schemaVersion: 1, verified: true, productId: "streamvue.premium" });
+    expect(response).toEqual({ schemaVersion: 1, verified: true, productId: "orbitalvue.premium" });
     expect(JSON.stringify(response)).not.toContain("oauth-secret");
     expect(JSON.stringify(response)).not.toContain("purchase/token");
   });
@@ -100,7 +100,7 @@ describe("Google Play entitlement verification", () => {
   it("keeps malformed and upstream failures generic at the HTTP boundary", async () => {
     const handler = createEntitlementVerifierHandler({
       googlePlay: {
-        config: { packageName: "com.orbitalvue.player", productId: "streamvue.premium" },
+        config: { packageName: "com.orbitalvue.player", productId: "orbitalvue.premium" },
         publisher: { getProductPurchase: async () => { throw new Error("upstream included purchase-token-secret"); } }
       }
     });
@@ -119,7 +119,7 @@ describe("Google Play entitlement verification", () => {
         schemaVersion: 1,
         platform: "google-play",
         packageName: "com.orbitalvue.player",
-        productId: "streamvue.premium",
+        productId: "orbitalvue.premium",
         purchaseToken: "purchase-token-secret"
       })
     }));
@@ -143,7 +143,7 @@ describe("Google Play entitlement verification", () => {
       return Response.json({ access_token: "short-lived-oauth-token", token_type: "Bearer", expires_in: 3600 });
     };
     const getAccessToken = createGoogleServiceAccountTokenProvider({
-      clientEmail: "billing@streamvue-test.iam.gserviceaccount.com",
+      clientEmail: "billing@orbitalvue-test.iam.gserviceaccount.com",
       privateKey
     }, { fetcher, now: () => 1_787_999_000_000 });
 

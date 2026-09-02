@@ -27,7 +27,7 @@ importers:
 
   packages/entitlement-verifier-worker:
     dependencies:
-      '@streamvue/entitlement-verifier':
+      '@orbitalvue/entitlement-verifier':
         specifier: workspace:*
         version: link:../entitlement-verifier
     devDependencies:
@@ -43,16 +43,16 @@ importers:
 
   packages/media-centers:
     dependencies:
-      '@streamvue/catalog':
+      '@orbitalvue/catalog':
         specifier: workspace:*
         version: link:../catalog-js
 
   platforms/tv-web:
     dependencies:
-      '@streamvue/catalog':
+      '@orbitalvue/catalog':
         specifier: workspace:*
         version: link:../../packages/catalog-js
-      '@streamvue/media-centers':
+      '@orbitalvue/media-centers':
         specifier: workspace:*
         version: link:../../packages/media-centers
 

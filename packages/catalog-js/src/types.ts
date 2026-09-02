@@ -57,7 +57,7 @@ export interface CatalogChannel {
   tags?: string[];
 }
 
-export interface StreamVueCatalog {
+export interface OrbitalVueCatalog {
   contractVersion: typeof CATALOG_CONTRACT_VERSION;
   catalogId: string;
   displayName: string;

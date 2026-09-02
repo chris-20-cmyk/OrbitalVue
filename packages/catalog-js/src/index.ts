@@ -26,5 +26,5 @@ export type {
   ParseM3uOptions,
   SourceType,
   StreamDescriptor,
-  StreamVueCatalog
+  OrbitalVueCatalog
 } from "./types.js";

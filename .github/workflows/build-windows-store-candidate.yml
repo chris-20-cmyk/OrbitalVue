@@ -17,10 +17,10 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 45
     env:
-      WINDOWS_IDENTITY_NAME: ${{ vars.STREAMVUE_WINDOWS_IDENTITY_NAME }}
-      WINDOWS_PUBLISHER: ${{ vars.STREAMVUE_WINDOWS_PUBLISHER }}
-      WINDOWS_PUBLISHER_DISPLAY_NAME: ${{ vars.STREAMVUE_WINDOWS_PUBLISHER_DISPLAY_NAME }}
-      WINDOWS_PREMIUM_PRODUCT_ID: ${{ vars.STREAMVUE_WINDOWS_PREMIUM_PRODUCT_ID }}
+      WINDOWS_IDENTITY_NAME: ${{ vars.ORBITALVUE_WINDOWS_IDENTITY_NAME }}
+      WINDOWS_PUBLISHER: ${{ vars.ORBITALVUE_WINDOWS_PUBLISHER }}
+      WINDOWS_PUBLISHER_DISPLAY_NAME: ${{ vars.ORBITALVUE_WINDOWS_PUBLISHER_DISPLAY_NAME }}
+      WINDOWS_PREMIUM_PRODUCT_ID: ${{ vars.ORBITALVUE_WINDOWS_PREMIUM_PRODUCT_ID }}
       PACKAGE_VERSION: ${{ inputs.package_version }}
     steps:
       - name: Check out OrbitalVue
@@ -35,10 +35,10 @@ jobs:
         shell: pwsh
         run: |
           $required = @{
-            STREAMVUE_WINDOWS_IDENTITY_NAME = $env:WINDOWS_IDENTITY_NAME
-            STREAMVUE_WINDOWS_PUBLISHER = $env:WINDOWS_PUBLISHER
-            STREAMVUE_WINDOWS_PUBLISHER_DISPLAY_NAME = $env:WINDOWS_PUBLISHER_DISPLAY_NAME
-            STREAMVUE_WINDOWS_PREMIUM_PRODUCT_ID = $env:WINDOWS_PREMIUM_PRODUCT_ID
+            ORBITALVUE_WINDOWS_IDENTITY_NAME = $env:WINDOWS_IDENTITY_NAME
+            ORBITALVUE_WINDOWS_PUBLISHER = $env:WINDOWS_PUBLISHER
+            ORBITALVUE_WINDOWS_PUBLISHER_DISPLAY_NAME = $env:WINDOWS_PUBLISHER_DISPLAY_NAME
+            ORBITALVUE_WINDOWS_PREMIUM_PRODUCT_ID = $env:WINDOWS_PREMIUM_PRODUCT_ID
           }
           $missing = @($required.GetEnumerator() | Where-Object { [string]::IsNullOrWhiteSpace($_.Value) } | ForEach-Object Key)
           if ($missing.Count -gt 0) {
@@ -60,9 +60,9 @@ jobs:
       - name: Restore the Store dependency graph
         shell: pwsh
         run: |
-          dotnet restore src/StreamVue.Player/StreamVue.Player.csproj `
-            -p:StreamVueDistributionMode=Store `
-            "-p:StreamVuePremiumProductId=$env:WINDOWS_PREMIUM_PRODUCT_ID"
+          dotnet restore src/OrbitalVue.Player/OrbitalVue.Player.csproj `
+            -p:OrbitalVueDistributionMode=Store `
+            "-p:OrbitalVuePremiumProductId=$env:WINDOWS_PREMIUM_PRODUCT_ID"
 
       - name: Build and inspect the unsigned Store package
         shell: pwsh
@@ -81,7 +81,7 @@ jobs:
       - name: Upload the Partner Center candidate
         uses: actions/upload-artifact@v7
         with:
-          name: streamvue-windows-store-${{ inputs.package_version }}
+          name: orbitalvue-windows-store-${{ inputs.package_version }}
           if-no-files-found: error
           retention-days: 30
           path: |

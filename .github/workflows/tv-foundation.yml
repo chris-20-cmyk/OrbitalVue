@@ -78,7 +78,7 @@ jobs:
           pnpm tv:check
           pnpm tv:test
           pnpm tv:build
-          VITE_STREAMVUE_DISTRIBUTION_MODE=store pnpm tv:build
+          VITE_ORBITALVUE_DISTRIBUTION_MODE=store pnpm tv:build
       - name: Verify platform package contents
         run: |
           test -f platforms/tv-web/dist/samsung/config.xml

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://streamvue.app/contracts/samsung-checkout-verifier/v1/schema.json",
+  "$id": "https://orbitalvue.app/contracts/samsung-checkout-verifier/v1/schema.json",
   "title": "OrbitalVue Samsung Checkout Verifier Exchange",
   "description": "The versioned, transient request and secret-free entitlement response exchanged between a Samsung television and the OrbitalVue server-side DPI verifier.",
   "oneOf": [

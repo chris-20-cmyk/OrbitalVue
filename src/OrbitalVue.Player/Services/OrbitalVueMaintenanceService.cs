@@ -1,0 +1,427 @@
+using System.IO;
+using System.IO.Compression;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using OrbitalVue.Player.Models;
+using OrbitalVue.Player.Playback;
+
+namespace OrbitalVue.Player.Services;
+
+public sealed record OrbitalVueDiagnosticContext(
+    int ChannelCount,
+    int GroupCount,
+    string? SourceType,
+    bool UsedCachedFallback,
+    int GuideSourceCount,
+    string? CurrentChannelKey,
+    PlaybackSnapshot? Playback);
+
+public sealed class OrbitalVueMaintenanceService
+{
+    private const string BackupProduct = "OrbitalVue";
+    private const string LegacyBackupProduct = "OrbitalVue";
+    private const int BackupFormatVersion = 2;
+    private const int MaximumCrashLogBytes = 256 * 1024;
+    private static readonly byte[] BackupEntropy = Encoding.UTF8.GetBytes("OrbitalVue.PortableBackup.v1");
+
+    private static readonly string[] KnownDataFiles =
+    [
+        "settings.json",
+        "playlist-cache.v1.bin",
+        "epg-cache.v1.bin",
+        "guide-source.v1.bin",
+        "epg-mappings.v1.bin",
+        "xtream-credentials.v1.bin",
+        "media-center-credentials.v1.bin"
+    ];
+
+    private static readonly string[] KnownDataDirectories =
+    [
+        "playlist-caches.v2"
+    ];
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true
+    };
+
+    private readonly string _dataRoot;
+
+    public OrbitalVueMaintenanceService(string? dataRoot = null)
+    {
+        _dataRoot = dataRoot ?? Path.GetDirectoryName(OrbitalVueDataPaths.Resolve("settings.json"))!;
+    }
+
+    public async Task ExportDiagnosticsAsync(
+        string destinationPath,
+        AppSettings settings,
+        OrbitalVueDiagnosticContext context,
+        CancellationToken cancellationToken = default)
+    {
+        var fullDestination = Path.GetFullPath(destinationPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullDestination)!);
+        var temporaryPath = fullDestination + ".tmp";
+        File.Delete(temporaryPath);
+
+        try
+        {
+            await using (var file = File.Create(temporaryPath))
+            using (var archive = new ZipArchive(file, ZipArchiveMode.Create, leaveOpen: false))
+            {
+                var report = new
+                {
+                Format = "OrbitalVue diagnostics v1",
+                CreatedUtc = DateTimeOffset.UtcNow,
+                App = new
+                {
+                    Version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "unknown",
+                    Runtime = RuntimeInformation.FrameworkDescription,
+                    Architecture = RuntimeInformation.ProcessArchitecture.ToString()
+                },
+                System = new
+                {
+                    OperatingSystem = RuntimeInformation.OSDescription,
+                    LogicalProcessors = Environment.ProcessorCount,
+                    Is64BitProcess = Environment.Is64BitProcess
+                },
+                Library = new
+                {
+                    context.ChannelCount,
+                    context.GroupCount,
+                    SourceType = context.SourceType ?? "none",
+                    context.UsedCachedFallback,
+                    context.GuideSourceCount,
+                    CurrentChannel = Fingerprint(context.CurrentChannelKey)
+                },
+                Playback = context.Playback,
+                Preferences = settings.Playback,
+                SavedData = new
+                {
+                    FavoriteCount = settings.FavoriteChannelKeys?.Count ?? 0,
+                    RecentChannelCount = settings.RecentChannelKeys?.Count ?? 0,
+                    ChannelProfileCount = settings.ChannelProfiles?.Count ?? 0,
+                    SignalFeedHistoryCount = settings.SignalRouting?.FeedHealth?.Count ?? 0,
+                    AutomaticSignalFailover = settings.SignalRouting?.AutomaticFailover ?? true,
+                    ReminderCount = settings.ProgramReminders?.Count ?? 0,
+                    ScheduledRecordingCount = settings.ScheduledRecordings?.Count ?? 0,
+                    SeriesRecordingRuleCount = settings.SeriesRecordingRules?.Count ?? 0,
+                    SmartDvr = new
+                    {
+                        settings.SmartDvr?.StartPaddingMinutes,
+                        settings.SmartDvr?.EndPaddingMinutes,
+                        settings.SmartDvr?.StorageReserveGigabytes,
+                        DefaultPriority = settings.SmartDvr?.DefaultPriority.ToString()
+                    },
+                    SavedMultiviewLayoutCount = settings.Multiview?.SavedLayouts?.Count ?? 0,
+                    PlaylistHealth = new
+                    {
+                        settings.PlaylistHealth?.LastAttemptUtc,
+                        settings.PlaylistHealth?.LastSuccessUtc,
+                        settings.PlaylistHealth?.ChannelCount,
+                        settings.PlaylistHealth?.AddedChannels,
+                        settings.PlaylistHealth?.RemovedChannels,
+                        settings.PlaylistHealth?.UsedCachedFallback,
+                        HasRecordedError = !string.IsNullOrWhiteSpace(settings.PlaylistHealth?.LastError)
+                    }
+                },
+                Privacy = "Playlist addresses, credentials, channel names, guide titles, and account details are excluded."
+                };
+
+                await WriteJsonEntryAsync(archive, "diagnostics.json", report, cancellationToken);
+
+                var crashLogPath = Path.Combine(_dataRoot, "crash.log");
+                if (File.Exists(crashLogPath))
+                {
+                    var crashText = await ReadTailAsync(crashLogPath, MaximumCrashLogBytes, cancellationToken);
+                    crashText = RedactDiagnosticText(crashText);
+                    var crashEntry = archive.CreateEntry("crash-log-redacted.txt", CompressionLevel.Optimal);
+                    await using var crashStream = crashEntry.Open();
+                    await using var writer = new StreamWriter(crashStream, new UTF8Encoding(false));
+                    await writer.WriteAsync(crashText.AsMemory(), cancellationToken);
+                }
+            }
+
+            File.Move(temporaryPath, fullDestination, overwrite: true);
+        }
+        catch
+        {
+            File.Delete(temporaryPath);
+            throw;
+        }
+    }
+
+    public async Task<int> CreateBackupAsync(string destinationPath, CancellationToken cancellationToken = default)
+    {
+        var fullDestination = Path.GetFullPath(destinationPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullDestination)!);
+        var temporaryPath = fullDestination + ".tmp";
+        File.Delete(temporaryPath);
+
+        var files = EnumerateSavedDataFiles();
+        if (files.Length == 0) throw new InvalidOperationException("OrbitalVue does not have any saved data to back up yet.");
+
+        try
+        {
+            await using (var file = File.Create(temporaryPath))
+            using (var archive = new ZipArchive(file, ZipArchiveMode.Create, leaveOpen: false))
+            {
+                await WriteJsonEntryAsync(archive, "manifest.json", new BackupManifest(
+                    BackupProduct,
+                    BackupFormatVersion,
+                    DateTimeOffset.UtcNow,
+                    "Windows current-user encryption; restore with the same Windows account.",
+                    files), cancellationToken);
+
+                foreach (var name in files)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var entryName = GetArchiveEntryName(name);
+                    var entry = archive.CreateEntry(entryName, CompressionLevel.Optimal);
+                    await using var target = entry.Open();
+                    if (name == "settings.json")
+                    {
+                        var clearBytes = await File.ReadAllBytesAsync(ResolveDataPath(name), cancellationToken);
+                        try
+                        {
+                            var protectedBytes = ProtectedData.Protect(clearBytes, BackupEntropy, DataProtectionScope.CurrentUser);
+                            await target.WriteAsync(protectedBytes, cancellationToken);
+                        }
+                        finally
+                        {
+                            CryptographicOperations.ZeroMemory(clearBytes);
+                        }
+                    }
+                    else
+                    {
+                        await using var source = File.OpenRead(ResolveDataPath(name));
+                        await source.CopyToAsync(target, cancellationToken);
+                    }
+                }
+            }
+
+            File.Move(temporaryPath, fullDestination, overwrite: true);
+            return files.Length;
+        }
+        catch
+        {
+            File.Delete(temporaryPath);
+            throw;
+        }
+    }
+
+    public async Task<int> RestoreBackupAsync(string sourcePath, CancellationToken cancellationToken = default)
+    {
+        var fullSource = Path.GetFullPath(sourcePath);
+        if (!File.Exists(fullSource)) throw new FileNotFoundException("The OrbitalVue backup could not be found.", fullSource);
+
+        Directory.CreateDirectory(_dataRoot);
+        var stagingRoot = Path.Combine(_dataRoot, $".restore-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(stagingRoot);
+
+        try
+        {
+            using var archive = ZipFile.OpenRead(fullSource);
+            var manifestEntry = archive.GetEntry("manifest.json") ?? throw new InvalidDataException("This is not an OrbitalVue backup.");
+            BackupManifest? manifest;
+            await using (var manifestStream = manifestEntry.Open())
+                manifest = await JsonSerializer.DeserializeAsync<BackupManifest>(manifestStream, JsonOptions, cancellationToken);
+
+            if (manifest is null ||
+                manifest.Product is not (BackupProduct or LegacyBackupProduct) ||
+                manifest.FormatVersion is < 1 or > BackupFormatVersion)
+                throw new InvalidDataException("This backup format is not supported by this version of OrbitalVue.");
+            if (manifest.Files is null || manifest.Files.Any(string.IsNullOrWhiteSpace))
+                throw new InvalidDataException("The backup contains an unexpected data-file list.");
+            var restoredFiles = manifest.Files.Select(NormalizeRelativePath).ToArray();
+            if (restoredFiles.Length == 0 ||
+                restoredFiles.Distinct(StringComparer.OrdinalIgnoreCase).Count() != restoredFiles.Length ||
+                restoredFiles.Any(name => !IsAllowedDataFile(name, manifest.FormatVersion)))
+                throw new InvalidDataException("The backup contains an unexpected data-file list.");
+
+            foreach (var name in restoredFiles)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var entryName = GetArchiveEntryName(name);
+                var entry = archive.GetEntry(entryName) ?? throw new InvalidDataException($"The backup is missing {name}.");
+                var stagedPath = ResolveContainedPath(stagingRoot, name);
+                Directory.CreateDirectory(Path.GetDirectoryName(stagedPath)!);
+                await using var source = entry.Open();
+                if (name == "settings.json")
+                {
+                    await using var protectedBuffer = new MemoryStream();
+                    await source.CopyToAsync(protectedBuffer, cancellationToken);
+                    var clearBytes = ProtectedData.Unprotect(protectedBuffer.ToArray(), BackupEntropy, DataProtectionScope.CurrentUser);
+                    try
+                    {
+                        await File.WriteAllBytesAsync(stagedPath, clearBytes, cancellationToken);
+                    }
+                    finally
+                    {
+                        CryptographicOperations.ZeroMemory(clearBytes);
+                    }
+                }
+                else
+                {
+                    await using var target = File.Create(stagedPath);
+                    await source.CopyToAsync(target, cancellationToken);
+                }
+            }
+
+            var rollbackPath = Path.Combine(_dataRoot, "before-last-restore.orbitalvue-backup");
+            if (string.Equals(Path.GetFullPath(rollbackPath), fullSource, StringComparison.OrdinalIgnoreCase))
+                rollbackPath = Path.Combine(_dataRoot, "before-last-restore-previous.orbitalvue-backup");
+            if (EnumerateSavedDataFiles().Length > 0)
+                await CreateBackupAsync(rollbackPath, cancellationToken);
+
+            foreach (var name in KnownDataFiles)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var destination = Path.Combine(_dataRoot, name);
+                var staged = ResolveContainedPath(stagingRoot, name);
+                if (!File.Exists(staged))
+                {
+                    File.Delete(destination);
+                    continue;
+                }
+
+                var replacement = destination + ".restore-tmp";
+                File.Copy(staged, replacement, overwrite: true);
+                File.Move(replacement, destination, overwrite: true);
+            }
+
+            foreach (var directoryName in KnownDataDirectories)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                RestoreDataDirectory(stagingRoot, directoryName);
+            }
+
+            return restoredFiles.Length;
+        }
+        finally
+        {
+            if (Directory.Exists(stagingRoot)) Directory.Delete(stagingRoot, recursive: true);
+        }
+    }
+
+    private string[] EnumerateSavedDataFiles()
+    {
+        var files = KnownDataFiles
+            .Where(name => File.Exists(Path.Combine(_dataRoot, name)))
+            .ToList();
+        foreach (var directoryName in KnownDataDirectories)
+        {
+            var directoryPath = Path.Combine(_dataRoot, directoryName);
+            if (!Directory.Exists(directoryPath)) continue;
+            foreach (var path in Directory.EnumerateFiles(directoryPath, "*.bin", SearchOption.TopDirectoryOnly))
+            {
+                if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) continue;
+                var relativePath = $"{directoryName}/{Path.GetFileName(path)}";
+                if (IsAllowedDataFile(relativePath, BackupFormatVersion)) files.Add(relativePath);
+            }
+        }
+        return files.OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static bool IsAllowedDataFile(string name, int formatVersion)
+    {
+        var normalized = NormalizeRelativePath(name);
+        if (KnownDataFiles.Contains(normalized, StringComparer.Ordinal)) return true;
+        if (formatVersion < 2) return false;
+
+        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 2 &&
+               KnownDataDirectories.Contains(parts[0], StringComparer.Ordinal) &&
+               Regex.IsMatch(parts[1], "^[A-Fa-f0-9]{64}\\.bin$", RegexOptions.CultureInvariant);
+    }
+
+    private static string GetArchiveEntryName(string name)
+    {
+        var normalized = NormalizeRelativePath(name);
+        return normalized == "settings.json" ? "data/settings.json.protected" : $"data/{normalized}";
+    }
+
+    private string ResolveDataPath(string name) => ResolveContainedPath(_dataRoot, name);
+
+    private static string ResolveContainedPath(string root, string relativePath)
+    {
+        var normalized = NormalizeRelativePath(relativePath).Replace('/', Path.DirectorySeparatorChar);
+        var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var fullPath = Path.GetFullPath(Path.Combine(fullRoot, normalized));
+        if (!fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("The backup contains an unsafe data path.");
+        return fullPath;
+    }
+
+    private static string NormalizeRelativePath(string path) => path.Replace('\\', '/').Trim('/');
+
+    private void RestoreDataDirectory(string stagingRoot, string directoryName)
+    {
+        var stagedDirectory = ResolveContainedPath(stagingRoot, directoryName);
+        var destination = ResolveContainedPath(_dataRoot, directoryName);
+        var replacement = destination + ".restore-tmp";
+        if (Directory.Exists(replacement)) Directory.Delete(replacement, recursive: true);
+
+        if (!Directory.Exists(stagedDirectory))
+        {
+            if (Directory.Exists(destination)) Directory.Delete(destination, recursive: true);
+            return;
+        }
+
+        Directory.CreateDirectory(replacement);
+        foreach (var source in Directory.EnumerateFiles(stagedDirectory, "*.bin", SearchOption.TopDirectoryOnly))
+            File.Copy(source, Path.Combine(replacement, Path.GetFileName(source)), overwrite: true);
+        if (Directory.Exists(destination)) Directory.Delete(destination, recursive: true);
+        Directory.Move(replacement, destination);
+    }
+
+    private static async Task WriteJsonEntryAsync<T>(
+        ZipArchive archive,
+        string name,
+        T value,
+        CancellationToken cancellationToken)
+    {
+        var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
+        await using var stream = entry.Open();
+        await JsonSerializer.SerializeAsync(stream, value, JsonOptions, cancellationToken);
+    }
+
+    private static string? Fingerprint(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var bytes = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return Convert.ToHexString(bytes)[..12];
+    }
+
+    private static async Task<string> ReadTailAsync(string path, int maximumBytes, CancellationToken cancellationToken)
+    {
+        await using var stream = File.OpenRead(path);
+        var length = (int)Math.Min(stream.Length, maximumBytes);
+        stream.Seek(-length, SeekOrigin.End);
+        var buffer = new byte[length];
+        await stream.ReadExactlyAsync(buffer, cancellationToken);
+        return Encoding.UTF8.GetString(buffer);
+    }
+
+    internal static string RedactDiagnosticText(string text)
+    {
+        var redacted = Regex.Replace(text, @"https?://[^\s""'<>]+", "<url>", RegexOptions.IgnoreCase);
+        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrWhiteSpace(profile))
+            redacted = redacted.Replace(profile, "<user-profile>", StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(Environment.UserName))
+            redacted = redacted.Replace(Environment.UserName, "<user>", StringComparison.OrdinalIgnoreCase);
+        return redacted;
+    }
+
+    private sealed record BackupManifest(
+        string Product,
+        int FormatVersion,
+        DateTimeOffset CreatedUtc,
+        string EncryptionScope,
+        string[] Files);
+}

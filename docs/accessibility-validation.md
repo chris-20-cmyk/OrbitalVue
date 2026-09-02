@@ -1,6 +1,6 @@
 # Accessibility validation
 
-StreamVue uses WCAG 2.2 Level AA as an engineering baseline where it applies, together with each platform's native accessibility behavior. This is a target and test plan, not a public conformance claim. `store/accessibility-readiness.json` stays fail-closed until the owner approves the scope and a named tester records real assistive-technology evidence for the exact release candidate.
+OrbitalVue uses WCAG 2.2 Level AA as an engineering baseline where it applies, together with each platform's native accessibility behavior. This is a target and test plan, not a public conformance claim. `store/accessibility-readiness.json` stays fail-closed until the owner approves the scope and a named tester records real assistive-technology evidence for the exact release candidate.
 
 Run the source and evidence contract from the repository root:
 
@@ -24,7 +24,7 @@ Record the tested app version, date, tester, and durable evidence references. Ev
 
 ## Media boundary
 
-StreamVue supplies a player and interface, not the user's media. The app must expose its own controls, states, and errors accessibly. Captions, alternate audio, descriptive audio, loudness, flashing content, and source metadata depend on the authorized media source and must be described as provider-supplied capabilities rather than guaranteed StreamVue features.
+OrbitalVue supplies a player and interface, not the user's media. The app must expose its own controls, states, and errors accessibly. Captions, alternate audio, descriptive audio, loudness, flashing content, and source metadata depend on the authorized media source and must be described as provider-supplied capabilities rather than guaranteed OrbitalVue features.
 
 ## Primary guidance
 

@@ -1,5 +1,5 @@
 {
-  "name": "@streamvue/entitlement-verifier-worker",
+  "name": "@orbitalvue/entitlement-verifier-worker",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
     "check": "pnpm types:check && pnpm typecheck && pnpm test && pnpm dry-run"
   },
   "dependencies": {
-    "@streamvue/entitlement-verifier": "workspace:*"
+    "@orbitalvue/entitlement-verifier": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.1.2",

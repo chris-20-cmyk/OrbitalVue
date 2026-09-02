@@ -1,4 +1,4 @@
-import { createCatalogFromM3u, type StreamVueCatalog } from "@streamvue/catalog";
+import { createCatalogFromM3u, type OrbitalVueCatalog } from "@orbitalvue/catalog";
 
 const DEMO_PLAYLIST = `#EXTM3U
 #EXTINF:-1 tvg-id="northstar.news" group-title="News",Northstar News
@@ -12,11 +12,11 @@ https://demo.invalid/live/world-report.m3u8
 #EXTINF:-1 tvg-id="kids.space" group-title="Kids",Kids Space
 https://demo.invalid/live/kids-space.m3u8`;
 
-export function createDemoCatalog(): StreamVueCatalog {
+export function createDemoCatalog(): OrbitalVueCatalog {
   return createCatalogFromM3u(DEMO_PLAYLIST, {
-    catalogId: "streamvue-demo",
+    catalogId: "orbitalvue-demo",
     displayName: "OrbitalVue demonstration",
-    sourceId: "streamvue-demo-source",
+    sourceId: "orbitalvue-demo-source",
     sourceName: "OrbitalVue demonstration",
     sourceType: "generated",
     displayLocation: "Built-in demonstration",

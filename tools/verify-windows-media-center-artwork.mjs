@@ -14,19 +14,19 @@ const requireFragments = (source, fragments, label) => {
 };
 
 const [security, catalog, artwork, channel, windowArtwork, xaml, probe, privacyInventory, privacyDisclosure] = await Promise.all([
-  read("src/StreamVue.Player/Services/MediaCenterSecurity.cs"),
-  read("src/StreamVue.Player/Services/MediaCenterSourceService.cs"),
-  read("src/StreamVue.Player/Services/MediaCenterSourceService.Artwork.cs"),
-  read("src/StreamVue.Player/Models/ChannelItem.cs"),
-  read("src/StreamVue.Player/MainWindow.Artwork.cs"),
-  read("src/StreamVue.Player/MainWindow.xaml"),
-  read("tools/StreamVue.FeatureProbe/Program.cs"),
+  read("src/OrbitalVue.Player/Services/MediaCenterSecurity.cs"),
+  read("src/OrbitalVue.Player/Services/MediaCenterSourceService.cs"),
+  read("src/OrbitalVue.Player/Services/MediaCenterSourceService.Artwork.cs"),
+  read("src/OrbitalVue.Player/Models/ChannelItem.cs"),
+  read("src/OrbitalVue.Player/MainWindow.Artwork.cs"),
+  read("src/OrbitalVue.Player/MainWindow.xaml"),
+  read("tools/OrbitalVue.FeatureProbe/Program.cs"),
   read("store/privacy-data-inventory.json"),
   read("docs/privacy-and-store-disclosures.md")
 ]);
 
 requireFragments(security, [
-  '"streamvue-artwork://',
+  '"orbitalvue-artwork://',
   "BuildArtworkLocator",
   "ParseArtworkLocator",
   "IsArtworkLocator",

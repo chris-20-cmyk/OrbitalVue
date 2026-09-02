@@ -23,5 +23,5 @@ function randomHex(byteLength: number): string {
 export function createSessionId(): string {
   const source = globalThis.crypto;
   if (typeof source?.randomUUID === "function") return source.randomUUID();
-  return `streamvue-${randomHex(16)}`;
+  return `orbitalvue-${randomHex(16)}`;
 }

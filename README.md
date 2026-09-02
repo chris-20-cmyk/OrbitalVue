@@ -43,7 +43,7 @@ The Apple milestone is a source/simulator foundation plus a locked signed-candid
 ## 5.6 protected personal libraries
 
 - Plex token and Emby account connections alongside M3U and Xtream sources on Windows, Android/Google TV, Samsung/LG TV, and the Apple foundation; Windows, Apple, and Android/Google TV also support signed Plex account discovery
-- A shared `streamvue-media://` catalog contract that stores provider, verified server identity, and item identity—but never a playable token URL
+- A shared `orbitalvue-media://` catalog contract that stores provider, verified server identity, and item identity—but never a playable token URL
 - Public server-identity verification before credentials are sent, explicit consent for cleartext local HTTP, same-origin playback-path enforcement, and bounded provider responses
 - Platform-protected credential storage with a separate encrypted last-working catalog; passwords are exchanged for provider tokens and are not retained
 - Just-in-time Plex direct-play and Emby direct-play/direct-stream/transcode resolution, so the active native player is the only component that briefly receives a credentialed URL
@@ -200,8 +200,8 @@ The intended store product is a one-time lifetime unlock, not a subscription. St
 ### Windows
 
 ```powershell
-dotnet restore StreamVue.Native.slnx --configfile NuGet.Config
-dotnet build StreamVue.Native.slnx -c Release --no-restore
+dotnet restore OrbitalVue.Native.slnx --configfile NuGet.Config
+dotnet build OrbitalVue.Native.slnx -c Release --no-restore
 ```
 
 The application targets Windows x64 and the current .NET 10 LTS release.
@@ -235,8 +235,8 @@ On a Mac with Xcode 26.6 and XcodeGen 2.46.0:
 cd platforms/apple
 xcodegen generate --spec project.yml
 swift test
-xcodebuild -project StreamVueApple.xcodeproj -scheme StreamVue -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
-xcodebuild -project StreamVueApple.xcodeproj -scheme StreamVueTV -destination 'generic/platform=tvOS Simulator' CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project OrbitalVueApple.xcodeproj -scheme OrbitalVue -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project OrbitalVueApple.xcodeproj -scheme OrbitalVueTV -destination 'generic/platform=tvOS Simulator' CODE_SIGNING_ALLOWED=NO build
 ```
 
 CI compiles and analyzes unsigned KSPlayer-enabled personal simulator products, then regenerates and verifies separate AVKit-only Store simulator products with no KSPlayer package resolution. These simulator products are not IPA files and cannot be installed on physical devices. A separate manual candidate workflow can create AVKit-only signed iOS/tvOS IPAs only after the premium, owner-review, bundle, profile, and certificate gates all pass; it deliberately does not upload them.
@@ -251,13 +251,13 @@ pnpm site:build
 
 The static site in `site/` provides the OrbitalVue overview, plain-language privacy policy, and support guidance needed by every Store lane. It is intentionally marked as a draft. The manual **Build public site candidate** workflow stops at an artifact and remains locked until `store/public-site-readiness.json` contains verified owner approval, a monitored privacy contact, reviewed copy, canonical HTTPS URLs, and a verified live deployment. Every Store candidate also requires this shared site gate.
 
-The visual source concepts and the implementation comparison are recorded in [the public-site fidelity ledger](docs/design/streamvue-support-site-fidelity.md).
+The visual source concepts and the implementation comparison are recorded in [the public-site fidelity ledger](docs/design/orbitalvue-support-site-fidelity.md).
 
 ## Verification tools
 
-- `StreamVue.PlaylistProbe` validates large-list parsing and favorite-key uniqueness.
-- `StreamVue.FeatureProbe` checks update preferences, manual routes, catch-up URL expansion, channel health, interrupted sessions, background wake timers, episode-aware series rules, duplicate prevention, recovery timing, retention, timeshift policy, storage guards, transport-stream capture and playback, protected Plex/Emby contracts, signed Plex account discovery and revocation, encrypted backup/restore, diagnostics, casting, and Multiview policies.
-- `StreamVue.PlaybackProbe` checks native live playback and bounded reconnect behavior.
+- `OrbitalVue.PlaylistProbe` validates large-list parsing and favorite-key uniqueness.
+- `OrbitalVue.FeatureProbe` checks update preferences, manual routes, catch-up URL expansion, channel health, interrupted sessions, background wake timers, episode-aware series rules, duplicate prevention, recovery timing, retention, timeshift policy, storage guards, transport-stream capture and playback, protected Plex/Emby contracts, signed Plex account discovery and revocation, encrypted backup/restore, diagnostics, casting, and Multiview policies.
+- `OrbitalVue.PlaybackProbe` checks native live playback and bounded reconnect behavior.
 
 ## Privacy
 

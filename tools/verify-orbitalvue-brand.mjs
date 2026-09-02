@@ -32,9 +32,9 @@ const [
   privacyPage,
   supportPage
 ] = await Promise.all([
-  read("src/StreamVue.Player/StreamVue.Player.csproj"),
-  read("src/StreamVue.Player/App.xaml.cs"),
-  read("src/StreamVue.Player/Services/StreamVueMaintenanceService.cs"),
+  read("src/OrbitalVue.Player/OrbitalVue.Player.csproj"),
+  read("src/OrbitalVue.Player/App.xaml.cs"),
+  read("src/OrbitalVue.Player/Services/OrbitalVueMaintenanceService.cs"),
   read("packaging/windows-msix/AppxManifest.template.xml"),
   read(".github/workflows/publish-preview-assets.yml"),
   read("platforms/android/app/build.gradle.kts"),
@@ -75,19 +75,19 @@ for (const [source, label] of [
   [privacy, "privacy inventory"],
   [releaseContract, "cross-platform release contract"]
 ]) {
-  rejectText(source, "com.streamvue.player", label);
-  rejectText(source, "SvTvPlayer.StreamVue", label);
+  rejectText(source, "com.orbitalvue.player", label);
+  rejectText(source, "SvTvPlayer.OrbitalVue", label);
 }
 
 // The first OrbitalVue Windows release must retain these private identifiers so
-// installed StreamVue builds update in place and can still read protected data.
-requireText(windowsProject, "<AssemblyName>StreamVue</AssemblyName>", "Windows bridge assembly");
+// installed OrbitalVue builds update in place and can still read protected data.
+requireText(windowsProject, "<AssemblyName>OrbitalVue</AssemblyName>", "Windows bridge assembly");
 requireText(windowsProject, "<AssemblyTitle>OrbitalVue</AssemblyTitle>", "Windows file description");
-requireText(windowsApp, 'LocalApplicationData), "StreamVue"', "Windows data directory");
-requireText(maintenance, 'LegacyBackupProduct = "StreamVue"', "legacy backup reader");
-requireText(maintenance, '"StreamVue.PortableBackup.v1"', "backup encryption compatibility");
-requireText(previewWorkflow, "--packId Chris.StreamVue", "Velopack update identity");
-requireText(previewWorkflow, "--mainExe StreamVue.exe", "Windows update executable");
+requireText(windowsApp, 'LocalApplicationData), "OrbitalVue"', "Windows data directory");
+requireText(maintenance, 'LegacyBackupProduct = "OrbitalVue"', "legacy backup reader");
+requireText(maintenance, '"OrbitalVue.PortableBackup.v1"', "backup encryption compatibility");
+requireText(previewWorkflow, "--packId Chris.OrbitalVue", "Velopack update identity");
+requireText(previewWorkflow, "--mainExe OrbitalVue.exe", "Windows update executable");
 requireText(previewWorkflow, "--packTitle OrbitalVue", "Windows installer title");
 
 console.log("OrbitalVue public identity and Windows in-place update compatibility: PASS");

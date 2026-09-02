@@ -1,5 +1,5 @@
 {
-  "name": "@streamvue/media-centers",
+  "name": "@orbitalvue/media-centers",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -17,6 +17,6 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@streamvue/catalog": "workspace:*"
+    "@orbitalvue/catalog": "workspace:*"
   }
 }

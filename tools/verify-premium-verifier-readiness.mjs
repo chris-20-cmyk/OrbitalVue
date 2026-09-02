@@ -36,7 +36,7 @@ exactKeys(manifest.implementation, [
   "hosting"
 ], "implementation");
 const expectedImplementation = {
-  packageName: "@streamvue/entitlement-verifier",
+  packageName: "@orbitalvue/entitlement-verifier",
   sourceRoot: "packages/entitlement-verifier",
   googlePlayRoute: "/google-play/verify",
   googlePlayApiMethod: "purchases.productsv2.getproductpurchasev2",
@@ -59,7 +59,7 @@ exactKeys(hosting, [
   "rateLimiterBindings"
 ], "implementation.hosting");
 const expectedHosting = {
-  packageName: "@streamvue/entitlement-verifier-worker",
+  packageName: "@orbitalvue/entitlement-verifier-worker",
   sourceRoot: "packages/entitlement-verifier-worker",
   runtime: "cloudflare-workers",
   configurationPath: "packages/entitlement-verifier-worker/wrangler.jsonc",
@@ -223,7 +223,7 @@ if (!workerPackage.scripts["types:check"].includes("wrangler types")
   fail("Worker scripts must prove generated bindings and bundle without deploying");
 }
 if (workerConfig.$schema !== "./node_modules/wrangler/config-schema.json"
-  || workerConfig.name !== "streamvue-entitlement-verifier"
+  || workerConfig.name !== "orbitalvue-entitlement-verifier"
   || workerConfig.main !== "src/index.ts"
   || workerConfig.workers_dev !== hosting.workersDevEnabled
   || workerConfig.preview_urls !== hosting.previewUrlsEnabled

@@ -88,7 +88,7 @@ jobs:
         shell: bash
         run: |
           node tools/verify-apple-brand-assets.mjs
-          ICON="platforms/apple/Apps/iOS/Assets.xcassets/AppIcon.appiconset/StreamVue-AppIcon-1024.png"
+          ICON="platforms/apple/Apps/iOS/Assets.xcassets/AppIcon.appiconset/OrbitalVue-AppIcon-1024.png"
           test "$(sips -g pixelWidth "$ICON" | awk '/pixelWidth/ {print $2}')" = "1024"
           test "$(sips -g pixelHeight "$ICON" | awk '/pixelHeight/ {print $2}')" = "1024"
           test "$(sips -g hasAlpha "$ICON" | awk '/hasAlpha/ {print $2}')" = "no"
@@ -99,8 +99,8 @@ jobs:
           xcodebuild \
             -quiet \
             -jobs 2 \
-            -project platforms/apple/StreamVueApple.xcodeproj \
-            -scheme StreamVue \
+            -project platforms/apple/OrbitalVueApple.xcodeproj \
+            -scheme OrbitalVue \
             -destination "generic/platform=iOS Simulator" \
             -derivedDataPath artifacts/apple-derived-data/ios \
             CODE_SIGNING_ALLOWED=NO \
@@ -116,8 +116,8 @@ jobs:
           set -o pipefail
           xcodebuild \
             -jobs 2 \
-            -project platforms/apple/StreamVueApple.xcodeproj \
-            -scheme StreamVue \
+            -project platforms/apple/OrbitalVueApple.xcodeproj \
+            -scheme OrbitalVue \
             -destination "generic/platform=iOS Simulator" \
             -derivedDataPath artifacts/apple-derived-data/ios \
             CODE_SIGNING_ALLOWED=NO \
@@ -133,8 +133,8 @@ jobs:
           xcodebuild \
             -quiet \
             -jobs 2 \
-            -project platforms/apple/StreamVueApple.xcodeproj \
-            -scheme StreamVueTV \
+            -project platforms/apple/OrbitalVueApple.xcodeproj \
+            -scheme OrbitalVueTV \
             -destination "generic/platform=tvOS Simulator" \
             -derivedDataPath artifacts/apple-derived-data/tvos \
             CODE_SIGNING_ALLOWED=NO \
@@ -150,8 +150,8 @@ jobs:
           set -o pipefail
           xcodebuild \
             -jobs 2 \
-            -project platforms/apple/StreamVueApple.xcodeproj \
-            -scheme StreamVueTV \
+            -project platforms/apple/OrbitalVueApple.xcodeproj \
+            -scheme OrbitalVueTV \
             -destination "generic/platform=tvOS Simulator" \
             -derivedDataPath artifacts/apple-derived-data/tvos \
             CODE_SIGNING_ALLOWED=NO \
@@ -169,14 +169,14 @@ jobs:
             echo 'The Apple Store package graph still contains the public GPL KSPlayer dependency.' >&2
             exit 1
           fi
-          rm -rf platforms/apple/StreamVueApple.xcodeproj
+          rm -rf platforms/apple/OrbitalVueApple.xcodeproj
           (cd platforms/apple && xcodegen generate --spec project.yml)
           swift test --package-path platforms/apple --parallel
           xcodebuild \
             -quiet \
             -jobs 2 \
-            -project platforms/apple/StreamVueApple.xcodeproj \
-            -scheme StreamVue \
+            -project platforms/apple/OrbitalVueApple.xcodeproj \
+            -scheme OrbitalVue \
             -configuration Store \
             -destination "generic/platform=iOS Simulator" \
             -derivedDataPath artifacts/apple-derived-data/store-ios \
@@ -189,8 +189,8 @@ jobs:
           xcodebuild \
             -quiet \
             -jobs 2 \
-            -project platforms/apple/StreamVueApple.xcodeproj \
-            -scheme StreamVueTV \
+            -project platforms/apple/OrbitalVueApple.xcodeproj \
+            -scheme OrbitalVueTV \
             -configuration Store \
             -destination "generic/platform=tvOS Simulator" \
             -derivedDataPath artifacts/apple-derived-data/store-tvos \
@@ -200,11 +200,11 @@ jobs:
             ONLY_ACTIVE_ARCH=YES \
             SWIFT_ENABLE_BATCH_MODE=NO \
             build
-          test "$(plutil -extract StreamVueDistributionMode raw -o - artifacts/apple-derived-data/store-ios/Build/Products/Store-iphonesimulator/OrbitalVue.app/Info.plist)" = "store"
-          test "$(plutil -extract StreamVueDistributionMode raw -o - artifacts/apple-derived-data/store-tvos/Build/Products/Store-appletvsimulator/OrbitalVueTV.app/Info.plist)" = "store"
+          test "$(plutil -extract OrbitalVueDistributionMode raw -o - artifacts/apple-derived-data/store-ios/Build/Products/Store-iphonesimulator/OrbitalVue.app/Info.plist)" = "store"
+          test "$(plutil -extract OrbitalVueDistributionMode raw -o - artifacts/apple-derived-data/store-tvos/Build/Products/Store-appletvsimulator/OrbitalVueTV.app/Info.plist)" = "store"
           test "$(plutil -extract CFBundleIdentifier raw -o - artifacts/apple-derived-data/store-ios/Build/Products/Store-iphonesimulator/OrbitalVue.app/Info.plist)" = "com.orbitalvue.player"
           test "$(plutil -extract CFBundleIdentifier raw -o - artifacts/apple-derived-data/store-tvos/Build/Products/Store-appletvsimulator/OrbitalVueTV.app/Info.plist)" = "com.orbitalvue.player"
-          resolved='platforms/apple/StreamVueApple.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved'
+          resolved='platforms/apple/OrbitalVueApple.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved'
           if [[ -f "$resolved" ]] && grep -Eiq 'ksplayer|kingslay' "$resolved"; then
             echo 'The AVKit-only Store graph unexpectedly resolved KSPlayer.' >&2
             exit 1

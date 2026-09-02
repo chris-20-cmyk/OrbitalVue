@@ -1,4 +1,4 @@
-import type { MediaCenterCredentialBinding } from "@streamvue/media-centers";
+import type { MediaCenterCredentialBinding } from "@orbitalvue/media-centers";
 
 export interface ProtectedMediaCredential {
   schemaVersion: 1;
@@ -16,8 +16,8 @@ export interface TelevisionCredentialVault {
   remove(credentialId: string): Promise<void>;
 }
 
-const TIZEN_PREFIX = "StreamVueMedia_";
-const WEBOS_KEY_NAME = "StreamVueMediaVaultAes256";
+const TIZEN_PREFIX = "OrbitalVueMedia_";
+const WEBOS_KEY_NAME = "OrbitalVueMediaVaultAes256";
 const WEBOS_SERVICE_URI = "luna://com.webos.service.keymanager3";
 
 export function createTelevisionCredentialVault(): TelevisionCredentialVault {
@@ -306,7 +306,7 @@ class WebOsSealedRecordStore {
         reject(new Error("LG protected storage is unavailable on this television."));
         return;
       }
-      const request = indexedDB.open("streamvue-tv-vault-v1", 1);
+      const request = indexedDB.open("orbitalvue-tv-vault-v1", 1);
       request.onupgradeneeded = () => {
         if (!request.result.objectStoreNames.contains("sealed")) {
           request.result.createObjectStore("sealed", { keyPath: "credentialId" });

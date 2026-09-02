@@ -3,8 +3,8 @@ import {
   sha256Hex,
   type CatalogChannel,
   type SourceType,
-  type StreamVueCatalog
-} from "@streamvue/catalog";
+  type OrbitalVueCatalog
+} from "@orbitalvue/catalog";
 import {
   EmbyClient,
   PlexClient,
@@ -24,7 +24,7 @@ import {
   type MediaCenterPlaybackReport,
   type MediaCenterSnapshot,
   type MediaCenterProvider
-} from "@streamvue/media-centers";
+} from "@orbitalvue/media-centers";
 import {
   CatalogCache,
   type CatalogStore,
@@ -49,7 +49,7 @@ const MAX_MEDIA_CENTER_ITEMS = 20_000;
 const MEDIA_CENTER_VERSION = "5.7.0";
 
 export interface CatalogLoadResult {
-  catalog: StreamVueCatalog;
+  catalog: OrbitalVueCatalog;
   notice: string | null;
   refreshed: boolean;
 }
@@ -271,7 +271,7 @@ export class CatalogRepository {
   }
 
   async resolvePlayback(channel: CatalogChannel): Promise<ResolvedTelevisionPlayback> {
-    if (!channel.stream.uri.startsWith("streamvue-media://")) {
+    if (!channel.stream.uri.startsWith("orbitalvue-media://")) {
       return { channel, startPositionMs: 0, method: "source" };
     }
     this.requireMediaCenterAccess();
@@ -458,7 +458,7 @@ export class CatalogRepository {
 
   private async persistMediaCenter(
     snapshot: MediaCenterSnapshot,
-    catalog: StreamVueCatalog,
+    catalog: OrbitalVueCatalog,
     credential: ProtectedMediaCredential
   ): Promise<void> {
     const previous = await this.cache.read();
@@ -472,7 +472,7 @@ export class CatalogRepository {
     await this.removeReplacedCredential(previous, credential.binding.credentialId);
   }
 
-  private async persistPlaylist(sourceUrl: string | null, catalog: StreamVueCatalog): Promise<void> {
+  private async persistPlaylist(sourceUrl: string | null, catalog: OrbitalVueCatalog): Promise<void> {
     const previous = await this.cache.read();
     await this.cache.write(sourceUrl, catalog);
     await this.removeReplacedCredential(previous);
@@ -498,7 +498,7 @@ export class CatalogRepository {
       displayLocation: string;
       refreshOnLaunch: boolean;
     }
-  ): StreamVueCatalog {
+  ): OrbitalVueCatalog {
     return createCatalogFromM3u(playlist, {
       catalogId: source.catalogId,
       displayName: source.sourceName,
@@ -537,7 +537,7 @@ export class CatalogRepository {
   }
 }
 
-export function isMediaCenterCatalog(catalog: StreamVueCatalog): boolean {
+export function isMediaCenterCatalog(catalog: OrbitalVueCatalog): boolean {
   const sourceType = catalog.sources[0]?.type;
   return sourceType === "plex" || sourceType === "emby";
 }
@@ -665,18 +665,18 @@ function televisionDeviceIdentity(): {
 }
 
 function televisionDeviceId(): string {
-  const storageKey = "streamvue-tv-device-id-v1";
+  const storageKey = "orbitalvue-tv-device-id-v1";
   try {
     const saved = localStorage.getItem(storageKey);
     if (saved && /^[A-Za-z0-9._:-]{1,256}$/.test(saved)) return saved;
     const random = new Uint8Array(24);
     crypto.getRandomValues(random);
-    const generated = `streamvue-tv-${[...random].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+    const generated = `orbitalvue-tv-${[...random].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
     localStorage.setItem(storageKey, generated);
     return generated;
   } catch {
     const userAgent = typeof navigator === "undefined" ? "OrbitalVue television" : navigator.userAgent;
-    return `streamvue-tv-${sha256Hex(userAgent).slice(0, 40).toLowerCase()}`;
+    return `orbitalvue-tv-${sha256Hex(userAgent).slice(0, 40).toLowerCase()}`;
   }
 }
 

@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "streamvue-entitlement-verifier",
+  "name": "orbitalvue-entitlement-verifier",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-29",
   "compatibility_flags": ["nodejs_compat"],
@@ -43,7 +43,7 @@
   },
   "env": {
     "staging": {
-      "name": "streamvue-entitlement-verifier-staging",
+      "name": "orbitalvue-entitlement-verifier-staging",
       "workers_dev": false,
       "preview_urls": false,
       "secrets": {
@@ -78,7 +78,7 @@
       ]
     },
     "production": {
-      "name": "streamvue-entitlement-verifier-production",
+      "name": "orbitalvue-entitlement-verifier-production",
       "workers_dev": false,
       "preview_urls": false,
       "secrets": {

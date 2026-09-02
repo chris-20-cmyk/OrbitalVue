@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: streamvue-samsung-store-candidate
+  group: orbitalvue-samsung-store-candidate
   cancel-in-progress: false
 
 jobs:
@@ -22,10 +22,10 @@ jobs:
     timeout-minutes: 10
     env:
       SAMSUNG_PACKAGE_VERSION: ${{ inputs.version }}
-      SAMSUNG_CHECKOUT_APP_ID: ${{ vars.STREAMVUE_SAMSUNG_APP_ID }}
-      SAMSUNG_PREMIUM_PRODUCT_ID: ${{ vars.STREAMVUE_SAMSUNG_PREMIUM_PRODUCT_ID }}
-      SAMSUNG_VERIFICATION_URL: ${{ vars.STREAMVUE_SAMSUNG_VERIFICATION_URL }}
-      SAMSUNG_AUTHOR_CERT_SHA256: ${{ vars.STREAMVUE_SAMSUNG_AUTHOR_CERT_SHA256 }}
+      SAMSUNG_CHECKOUT_APP_ID: ${{ vars.ORBITALVUE_SAMSUNG_APP_ID }}
+      SAMSUNG_PREMIUM_PRODUCT_ID: ${{ vars.ORBITALVUE_SAMSUNG_PREMIUM_PRODUCT_ID }}
+      SAMSUNG_VERIFICATION_URL: ${{ vars.ORBITALVUE_SAMSUNG_VERIFICATION_URL }}
+      SAMSUNG_AUTHOR_CERT_SHA256: ${{ vars.ORBITALVUE_SAMSUNG_AUTHOR_CERT_SHA256 }}
     steps:
       - name: Check out OrbitalVue
         uses: actions/checkout@v7
@@ -81,10 +81,10 @@ jobs:
     environment: samsung-store-signing
     env:
       SAMSUNG_PACKAGE_VERSION: ${{ inputs.version }}
-      SAMSUNG_CHECKOUT_APP_ID: ${{ vars.STREAMVUE_SAMSUNG_APP_ID }}
-      SAMSUNG_PREMIUM_PRODUCT_ID: ${{ vars.STREAMVUE_SAMSUNG_PREMIUM_PRODUCT_ID }}
-      SAMSUNG_VERIFICATION_URL: ${{ vars.STREAMVUE_SAMSUNG_VERIFICATION_URL }}
-      SAMSUNG_AUTHOR_CERT_SHA256: ${{ vars.STREAMVUE_SAMSUNG_AUTHOR_CERT_SHA256 }}
+      SAMSUNG_CHECKOUT_APP_ID: ${{ vars.ORBITALVUE_SAMSUNG_APP_ID }}
+      SAMSUNG_PREMIUM_PRODUCT_ID: ${{ vars.ORBITALVUE_SAMSUNG_PREMIUM_PRODUCT_ID }}
+      SAMSUNG_VERIFICATION_URL: ${{ vars.ORBITALVUE_SAMSUNG_VERIFICATION_URL }}
+      SAMSUNG_AUTHOR_CERT_SHA256: ${{ vars.ORBITALVUE_SAMSUNG_AUTHOR_CERT_SHA256 }}
       TIZEN_WEB_CLI_URL: https://download.tizen.org/sdk/Installer/tizen-studio_6.1/web-cli_Tizen_Studio_6.1_ubuntu-64.bin
       TIZEN_WEB_CLI_SHA256: 7F33FE09EDA4EB5D50463CF997E8F676D455060720470070AE1932994413AAF4
     steps:
@@ -142,10 +142,10 @@ jobs:
       - name: Test and assemble the locked Store project
         shell: bash
         env:
-          VITE_STREAMVUE_DISTRIBUTION_MODE: store
-          VITE_STREAMVUE_SAMSUNG_APP_ID: ${{ env.SAMSUNG_CHECKOUT_APP_ID }}
-          VITE_STREAMVUE_SAMSUNG_PRODUCT_ID: ${{ env.SAMSUNG_PREMIUM_PRODUCT_ID }}
-          VITE_STREAMVUE_SAMSUNG_VERIFICATION_URL: ${{ env.SAMSUNG_VERIFICATION_URL }}
+          VITE_ORBITALVUE_DISTRIBUTION_MODE: store
+          VITE_ORBITALVUE_SAMSUNG_APP_ID: ${{ env.SAMSUNG_CHECKOUT_APP_ID }}
+          VITE_ORBITALVUE_SAMSUNG_PRODUCT_ID: ${{ env.SAMSUNG_PREMIUM_PRODUCT_ID }}
+          VITE_ORBITALVUE_SAMSUNG_VERIFICATION_URL: ${{ env.SAMSUNG_VERIFICATION_URL }}
         run: |
           node contracts/validate-contract.mjs
           pnpm entitlements:build
@@ -188,15 +188,15 @@ jobs:
           test -x "$tizen_root/tools/ide/bin/tizen"
           echo "$tizen_root/tools/ide/bin" >> "$GITHUB_PATH"
           echo "$tizen_root/tools" >> "$GITHUB_PATH"
-          echo "STREAMVUE_TIZEN_ROOT=$tizen_root" >> "$GITHUB_ENV"
+          echo "ORBITALVUE_TIZEN_ROOT=$tizen_root" >> "$GITHUB_ENV"
 
       - name: Restore and verify protected Tizen certificates
         shell: bash
         env:
-          SAMSUNG_AUTHOR_CERTIFICATE_BASE64: ${{ secrets.STREAMVUE_SAMSUNG_AUTHOR_CERTIFICATE_BASE64 }}
-          SAMSUNG_AUTHOR_CERTIFICATE_PASSWORD: ${{ secrets.STREAMVUE_SAMSUNG_AUTHOR_CERTIFICATE_PASSWORD }}
-          SAMSUNG_DISTRIBUTOR_CERTIFICATE_BASE64: ${{ secrets.STREAMVUE_SAMSUNG_DISTRIBUTOR_CERTIFICATE_BASE64 }}
-          SAMSUNG_DISTRIBUTOR_CERTIFICATE_PASSWORD: ${{ secrets.STREAMVUE_SAMSUNG_DISTRIBUTOR_CERTIFICATE_PASSWORD }}
+          SAMSUNG_AUTHOR_CERTIFICATE_BASE64: ${{ secrets.ORBITALVUE_SAMSUNG_AUTHOR_CERTIFICATE_BASE64 }}
+          SAMSUNG_AUTHOR_CERTIFICATE_PASSWORD: ${{ secrets.ORBITALVUE_SAMSUNG_AUTHOR_CERTIFICATE_PASSWORD }}
+          SAMSUNG_DISTRIBUTOR_CERTIFICATE_BASE64: ${{ secrets.ORBITALVUE_SAMSUNG_DISTRIBUTOR_CERTIFICATE_BASE64 }}
+          SAMSUNG_DISTRIBUTOR_CERTIFICATE_PASSWORD: ${{ secrets.ORBITALVUE_SAMSUNG_DISTRIBUTOR_CERTIFICATE_PASSWORD }}
         run: |
           required=(
             SAMSUNG_AUTHOR_CERTIFICATE_BASE64
@@ -214,7 +214,7 @@ jobs:
           fi
 
           umask 077
-          signing_root="$RUNNER_TEMP/streamvue-samsung-signing"
+          signing_root="$RUNNER_TEMP/orbitalvue-samsung-signing"
           mkdir -p "$signing_root/profiles"
           author="$signing_root/author.p12"
           distributor="$signing_root/distributor.p12"
@@ -230,21 +230,21 @@ jobs:
             upper_role="$(tr '[:lower:]' '[:upper:]' <<< "$role")"
             password_var="SAMSUNG_${upper_role}_CERTIFICATE_PASSWORD"
             password="${!password_var}"
-            export STREAMVUE_P12_PASSWORD="$password"
-            info="$(openssl pkcs12 -in "$p12" -passin env:STREAMVUE_P12_PASSWORD -info -noout 2>&1)"
+            export ORBITALVUE_P12_PASSWORD="$password"
+            info="$(openssl pkcs12 -in "$p12" -passin env:ORBITALVUE_P12_PASSWORD -info -noout 2>&1)"
             grep -Fq 'Shrouded Keybag' <<< "$info" || {
               echo "The Samsung $role PKCS#12 file does not contain a protected private key." >&2
               exit 1
             }
             pem="$signing_root/$role.pem"
-            openssl pkcs12 -in "$p12" -passin env:STREAMVUE_P12_PASSWORD -clcerts -nokeys -out "$pem"
+            openssl pkcs12 -in "$p12" -passin env:ORBITALVUE_P12_PASSWORD -clcerts -nokeys -out "$pem"
             openssl x509 -in "$pem" -checkend 0 -noout
             key_bits="$(openssl x509 -in "$pem" -pubkey -noout | openssl pkey -pubin -text -noout | sed -nE 's/.*Public-Key: \(([0-9]+) bit\).*/\1/p' | head -n 1)"
             if [[ -z "$key_bits" || "$key_bits" -lt 2048 ]]; then
               echo "The Samsung $role certificate must use RSA 2048 bits or stronger." >&2
               exit 1
             fi
-            unset STREAMVUE_P12_PASSWORD
+            unset ORBITALVUE_P12_PASSWORD
           done
 
           actual_author_fingerprint="$(openssl x509 -in "$author_pem" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
@@ -264,8 +264,8 @@ jobs:
           profile_file="$signing_root/profiles/profiles.xml"
           test -s "$profile_file"
           tizen cli-config -g default.profiles.path="$profile_file"
-          echo "STREAMVUE_SAMSUNG_SIGNING_ROOT=$signing_root" >> "$GITHUB_ENV"
-          echo "STREAMVUE_SAMSUNG_AUTHOR_FINGERPRINT=$actual_author_fingerprint" >> "$GITHUB_ENV"
+          echo "ORBITALVUE_SAMSUNG_SIGNING_ROOT=$signing_root" >> "$GITHUB_ENV"
+          echo "ORBITALVUE_SAMSUNG_AUTHOR_FINGERPRINT=$actual_author_fingerprint" >> "$GITHUB_ENV"
 
       - name: Build and sign the Seller Office candidate
         shell: bash
@@ -291,8 +291,8 @@ jobs:
             exit 1
           fi
 
-          signature_xml="$RUNNER_TEMP/streamvue-author-signature.xml"
-          signature_certificates="$RUNNER_TEMP/streamvue-author-signature-certificates"
+          signature_xml="$RUNNER_TEMP/orbitalvue-author-signature.xml"
+          signature_certificates="$RUNNER_TEMP/orbitalvue-author-signature-certificates"
           mkdir -p "$signature_certificates"
           unzip -p "$package" author-signature.xml > "$signature_xml"
           SIGNATURE_XML="$signature_xml" CERTIFICATE_DIRECTORY="$signature_certificates" node - <<'NODE'
@@ -309,7 +309,7 @@ jobs:
           author_match=false
           while IFS= read -r certificate; do
             embedded_fingerprint="$(openssl x509 -inform DER -in "$certificate" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
-            if [[ "$embedded_fingerprint" == "$STREAMVUE_SAMSUNG_AUTHOR_FINGERPRINT" ]]; then
+            if [[ "$embedded_fingerprint" == "$ORBITALVUE_SAMSUNG_AUTHOR_FINGERPRINT" ]]; then
               author_match=true
             fi
           done < <(find "$signature_certificates" -maxdepth 1 -type f -name '*.der' -print)
@@ -328,7 +328,7 @@ jobs:
           mkdir -p "$output_dir"
           output_package="$output_dir/OrbitalVue-$SAMSUNG_PACKAGE_VERSION-Samsung-TV-Store-Candidate.wgt"
           cp "$package" "$output_package"
-          printf '%s\n' "$STREAMVUE_SAMSUNG_AUTHOR_FINGERPRINT" > "$output_dir/AUTHOR-CERT-SHA256.txt"
+          printf '%s\n' "$ORBITALVUE_SAMSUNG_AUTHOR_FINGERPRINT" > "$output_dir/AUTHOR-CERT-SHA256.txt"
           PACKAGE_PATH="$output_package" node - <<'NODE'
           const fs = require('node:fs');
           const distribution = JSON.parse(fs.readFileSync('store/samsung-distribution.json', 'utf8'));
@@ -343,7 +343,7 @@ jobs:
             distributionMode: 'store',
             premiumProductId: premium.platforms.samsung.productId,
             verificationProvider: premium.platforms.samsung.verificationProvider,
-            authorCertificateSha256: process.env.STREAMVUE_SAMSUNG_AUTHOR_FINGERPRINT,
+            authorCertificateSha256: process.env.ORBITALVUE_SAMSUNG_AUTHOR_FINGERPRINT,
             artifact: process.env.PACKAGE_PATH.split('/').at(-1),
             destination: 'manual-samsung-seller-office-upload'
           };
@@ -355,21 +355,21 @@ jobs:
         if: always()
         shell: bash
         run: |
-          if [[ -n "${STREAMVUE_SAMSUNG_SIGNING_ROOT:-}" && "$STREAMVUE_SAMSUNG_SIGNING_ROOT" == "$RUNNER_TEMP/"* ]]; then
-            rm -rf -- "$STREAMVUE_SAMSUNG_SIGNING_ROOT"
+          if [[ -n "${ORBITALVUE_SAMSUNG_SIGNING_ROOT:-}" && "$ORBITALVUE_SAMSUNG_SIGNING_ROOT" == "$RUNNER_TEMP/"* ]]; then
+            rm -rf -- "$ORBITALVUE_SAMSUNG_SIGNING_ROOT"
           fi
-          rm -rf -- "$RUNNER_TEMP/streamvue-samsung-signing"
-          if [[ -n "${STREAMVUE_TIZEN_ROOT:-}" && "$STREAMVUE_TIZEN_ROOT" == "$RUNNER_TEMP/"* ]]; then
-            rm -rf -- "$STREAMVUE_TIZEN_ROOT"
+          rm -rf -- "$RUNNER_TEMP/orbitalvue-samsung-signing"
+          if [[ -n "${ORBITALVUE_TIZEN_ROOT:-}" && "$ORBITALVUE_TIZEN_ROOT" == "$RUNNER_TEMP/"* ]]; then
+            rm -rf -- "$ORBITALVUE_TIZEN_ROOT"
           fi
           rm -f -- "$RUNNER_TEMP/tizen-web-cli.bin"
-          rm -f -- "$RUNNER_TEMP/streamvue-author-signature.xml"
-          rm -rf -- "$RUNNER_TEMP/streamvue-author-signature-certificates"
+          rm -f -- "$RUNNER_TEMP/orbitalvue-author-signature.xml"
+          rm -rf -- "$RUNNER_TEMP/orbitalvue-author-signature-certificates"
 
       - name: Upload manual Samsung Seller Office candidate
         uses: actions/upload-artifact@v7
         with:
-          name: streamvue-samsung-tv-${{ inputs.version }}
+          name: orbitalvue-samsung-tv-${{ inputs.version }}
           if-no-files-found: error
           retention-days: 30
           path: |

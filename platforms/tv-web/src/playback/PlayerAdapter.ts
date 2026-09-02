@@ -1,4 +1,4 @@
-import type { CatalogChannel } from "@streamvue/catalog";
+import type { CatalogChannel } from "@orbitalvue/catalog";
 import type { TvPlatform } from "../platform/platform.js";
 
 export const ASPECT_MODES = ["Auto", "Fit", "Fill", "Zoom", "16:9", "4:3", "21:9"] as const;

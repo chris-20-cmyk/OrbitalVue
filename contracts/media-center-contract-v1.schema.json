@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://streamvue.app/contracts/media-center/v1/schema.json",
+  "$id": "https://orbitalvue.app/contracts/media-center/v1/schema.json",
   "title": "OrbitalVue Portable Media Center Snapshot",
   "description": "Cache-safe Plex or Emby browse metadata. Secrets and resolved playback requests are intentionally excluded.",
   "type": "object",

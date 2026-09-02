@@ -8,7 +8,7 @@ import {
   createGoogleServiceAccountTokenProvider,
   parseGooglePlayRequest,
   parseSamsungStatusRequest
-} from "@streamvue/entitlement-verifier";
+} from "@orbitalvue/entitlement-verifier";
 
 const HEALTH_ROUTE = "/healthz";
 const MAX_REQUEST_BYTES = 32 * 1024;
@@ -48,7 +48,7 @@ export async function handleEntitlementVerifierWorkerRequest(
       }
       return secure(jsonResponse(200, {
         schemaVersion: 1,
-        service: "streamvue-entitlement-verifier",
+        service: "orbitalvue-entitlement-verifier",
         status: "available"
       }), allowedOrigin);
     }

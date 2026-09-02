@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "StreamVueAndroid"
+rootProject.name = "OrbitalVueAndroid"
 include(":app")

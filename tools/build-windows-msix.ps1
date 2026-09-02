@@ -89,9 +89,9 @@ $artifactRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot 'artifacts\win
 $publishDirectory = Join-Path $artifactRoot 'publish'
 $stageDirectory = Join-Path $artifactRoot 'stage'
 $assetDirectory = Join-Path $stageDirectory 'Assets'
-$projectPath = Join-Path $repositoryRoot 'src\StreamVue.Player\StreamVue.Player.csproj'
+$projectPath = Join-Path $repositoryRoot 'src\OrbitalVue.Player\OrbitalVue.Player.csproj'
 $templatePath = Join-Path $repositoryRoot 'packaging\windows-msix\AppxManifest.template.xml'
-$sourceIcon = Join-Path $repositoryRoot 'src\StreamVue.Player\Assets\streamvue-256.png'
+$sourceIcon = Join-Path $repositoryRoot 'src\OrbitalVue.Player\Assets\orbitalvue-256.png'
 
 foreach ($path in @($publishDirectory, $stageDirectory)) {
     $fullPath = [IO.Path]::GetFullPath($path)
@@ -118,8 +118,8 @@ $publishArguments = @(
     '--self-contained', 'true',
     '-o', $publishDirectory,
     '-p:PublishSingleFile=false',
-    '-p:StreamVueDistributionMode=Store',
-    "-p:StreamVuePremiumProductId=$PremiumProductId",
+    '-p:OrbitalVueDistributionMode=Store',
+    "-p:OrbitalVuePremiumProductId=$PremiumProductId",
     "-p:Version=$Version",
     "-p:FileVersion=$Version",
     "-p:AssemblyVersion=$Version"
@@ -163,7 +163,7 @@ $buildAudit = [ordered]@{
     updater = 'microsoft-store'
 }
 [IO.File]::WriteAllText(
-    (Join-Path $stageDirectory 'StreamVue.StoreBuild.json'),
+    (Join-Path $stageDirectory 'OrbitalVue.StoreBuild.json'),
     ($buildAudit | ConvertTo-Json -Depth 3),
     [Text.UTF8Encoding]::new($false))
 
