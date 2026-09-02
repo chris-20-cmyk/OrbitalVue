@@ -28,7 +28,7 @@
   <Applications>
     <Application
       Id="OrbitalVue"
-      Executable="OrbitalVue.exe"
+      Executable="StreamVue.exe"
       uap10:RuntimeBehavior="packagedClassicApp"
       uap10:TrustLevel="mediumIL">
       <uap:VisualElements
