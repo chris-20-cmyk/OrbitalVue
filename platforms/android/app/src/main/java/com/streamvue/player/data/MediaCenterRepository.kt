@@ -315,7 +315,10 @@ class MediaCenterRepository internal constructor(
     ): LoadedCatalog {
         val connection = snapshot.connection
         val sourceId = "MC-${MediaCenterUrlPolicy.hash("${connection.provider}|${connection.serverId}").take(48)}"
-        val channels = snapshot.items.mapIndexed { index, item ->
+        val visibleItems = snapshot.items.mapNotNull { item ->
+            catalogKind(item.kind)?.let { kind -> item to kind }
+        }
+        val channels = visibleItems.mapIndexed { index, (item, itemKind) ->
             Channel(
                 id = MediaCenterUrlPolicy.hash(
                     "media-center|${item.provider}|${item.serverId}|${item.id}"
@@ -327,13 +330,7 @@ class MediaCenterRepository internal constructor(
                 logoUri = item.artworkPath?.let {
                     MediaCenterLocator.artworkUri(item.provider, item.serverId, item.id)
                 },
-                kind = when (item.kind) {
-                    MediaCenterItemKind.Movie, MediaCenterItemKind.Video -> ChannelKind.Movie
-                    MediaCenterItemKind.Episode -> ChannelKind.Series
-                    MediaCenterItemKind.Recording -> ChannelKind.Recording
-                    MediaCenterItemKind.LiveTv -> ChannelKind.Live
-                    MediaCenterItemKind.Audio -> ChannelKind.Replay
-                },
+                kind = itemKind,
                 sourceId = sourceId,
                 sourceName = connection.displayName,
                 isMediaCenterItem = true,
@@ -373,6 +370,19 @@ class MediaCenterRepository internal constructor(
             ),
             truncationNotice
         )
+    }
+
+    /**
+     * Maps a media-center item kind onto a catalog channel kind, or null when the item has no
+     * catalog presentation and must be omitted. Audio-only items are excluded here to match the
+     * Apple, Windows, and shared TypeScript catalog builders, which all drop them.
+     */
+    private fun catalogKind(kind: MediaCenterItemKind): ChannelKind? = when (kind) {
+        MediaCenterItemKind.Movie, MediaCenterItemKind.Video -> ChannelKind.Movie
+        MediaCenterItemKind.Episode -> ChannelKind.Series
+        MediaCenterItemKind.Recording -> ChannelKind.Recording
+        MediaCenterItemKind.LiveTv -> ChannelKind.Live
+        MediaCenterItemKind.Audio -> null
     }
 
     private fun displayTitle(item: MediaCenterItem): String {
