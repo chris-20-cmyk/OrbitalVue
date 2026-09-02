@@ -148,7 +148,9 @@ export class PlexClient {
   ): Promise<MediaCenterPage<MediaCenterItem>> {
     const page = clampPage(start, size);
     const libraryId = requireIdentifier(library.id, "Plex library identifier");
-    const payload = await this.get(`/library/sections/${encodeURIComponent(libraryId)}/all`, {
+    const itemType = plexLibraryItemType(library.kind);
+    const path = `/library/sections/${encodeURIComponent(libraryId)}/all`;
+    const payload = await this.get(itemType === undefined ? path : `${path}?type=${itemType}`, {
       "X-Plex-Container-Start": String(page.start),
       "X-Plex-Container-Size": String(page.size)
     });
@@ -329,6 +331,22 @@ function plexClientHeaders(configuration: {
 function safeHeaderValue(value: string | undefined, fallback: string): string {
   const sanitized = value?.replace(/[\r\n]/g, "").trim().slice(0, 256);
   return sanitized || fallback;
+}
+
+/**
+ * Plex metadata type for the items a library should contribute to the catalog.
+ *
+ * `/library/sections/{id}/all` returns a library's own top-level entries: shows for a show
+ * library, artists for a music one. Those are containers, not playable media, so without a
+ * type the catalog sees nothing it can present. 4 selects episodes and 10 selects tracks.
+ * Movie libraries already list playable items, so they need no type.
+ */
+function plexLibraryItemType(kind: MediaCenterLibraryKind): number | undefined {
+  switch (kind) {
+  case "shows": return 4;
+  case "music": return 10;
+  default: return undefined;
+  }
 }
 
 function plexLibraryKind(value: string | undefined): MediaCenterLibraryKind {

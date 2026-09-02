@@ -142,7 +142,7 @@ public enum MediaCenterCatalogFactory {
         case .episode: .series
         case .recording: .recording
         case .liveTV: .live
-        case .audio: nil
+        case .audio: .music
         }
     }
 

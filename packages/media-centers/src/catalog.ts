@@ -208,7 +208,7 @@ function catalogKind(kind: MediaCenterItem["kind"]): ChannelKind | undefined {
   case "episode": return "series";
   case "recording": return "recording";
   case "live-tv": return "live";
-  case "audio": return undefined;
+  case "audio": return "music";
   }
 }
 

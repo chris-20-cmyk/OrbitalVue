@@ -195,7 +195,10 @@ public sealed partial class MediaCenterSourceService
             {
                 var path = $"/library/sections/{Uri.EscapeDataString(library.Id)}/all";
                 var requestUrl = MediaCenterSecurity.ResolveServerPath(credential.Binding.BaseUrl, path);
+                // "/all" lists a library's own top-level entries, which for shows and music are
+                // containers rather than playable media. 4 selects episodes, 10 selects tracks.
                 if (library.Kind == "show") requestUrl = AddQuery(requestUrl, ("type", "4"));
+                else if (library.Kind == "artist") requestUrl = AddQuery(requestUrl, ("type", "10"));
                 var headers = PlexHeaders(credential.AccessToken);
                 headers["X-Plex-Container-Start"] = start.ToString();
                 headers["X-Plex-Container-Size"] = PageSize.ToString();
@@ -570,6 +573,9 @@ public sealed partial class MediaCenterSourceService
         "episode" => ChannelKind.Series,
         "recording" => ChannelKind.Recording,
         "livetvchannel" => ChannelKind.Live,
+        // Plex sends "track", Emby sends "audio"; both are already accepted upstream and
+        // requested through IncludeItemTypes, so dropping them here left music libraries empty.
+        "track" or "audio" => ChannelKind.Music,
         _ => null
     };
 

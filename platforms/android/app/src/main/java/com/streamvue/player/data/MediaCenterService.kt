@@ -429,10 +429,20 @@ internal class MediaCenterService(
         start: Int,
         size: Int
     ): MediaCenterPage {
+        // "/all" lists a library's own top-level entries: shows for a show library, artists for a
+        // music one. Those are containers rather than playable media, so without a type the
+        // catalog has nothing to present. 4 selects episodes and 10 selects tracks; movie
+        // libraries already list playable items.
+        val itemType = when (library.kind) {
+            MediaCenterLibraryKind.Shows -> "4"
+            MediaCenterLibraryKind.Music -> "10"
+            else -> null
+        }
+        val path = "/library/sections/${pathComponent(library.id)}/all"
         val payload = plexGet(
             connection,
             token,
-            "/library/sections/${pathComponent(library.id)}/all",
+            if (itemType == null) path else "$path?type=$itemType",
             mapOf(
                 "X-Plex-Container-Start" to start.toString(),
                 "X-Plex-Container-Size" to size.toString()
