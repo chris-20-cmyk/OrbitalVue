@@ -51,6 +51,16 @@ describe("portable M3U parser", () => {
     )).toThrow("safety limit");
   });
 
+  it("clamps catch-up metadata to the portable contract bounds", () => {
+    const parsed = parseM3u(
+      '#EXTM3U\n#EXTINF:-1 catchup="append" catchup-source="?utc={utc}" catchup-days="999" catchup-correction="-99",One\nhttps://one.invalid/live',
+      { sourceId: "source", sourceName: "Catch-up" }
+    );
+
+    expect(parsed.channels[0]?.catchup?.days).toBe(365);
+    expect(parsed.channels[0]?.catchup?.correctionMinutes).toBe(-1_440);
+  });
+
   it("implements the standard SHA-256 vectors without a runtime dependency", () => {
     expect(sha256Hex("")).toBe("E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855");
     expect(sha256Hex("abc")).toBe("BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD");

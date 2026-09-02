@@ -46,9 +46,9 @@ public static class PlaybackIntelligencePolicy
         {
             "Software safe mode" => "This channel is using software decoding because its saved profile or recovery history requires it.",
             "Stable recovery" => "A larger channel-specific buffer is active because this stream has shown instability.",
-            "Learned fast tune" => "This channel has started reliably, so StreamVue is using its fastest safe startup path.",
-            "Fast tune" => "StreamVue is using a low-latency startup buffer and will expand it automatically if needed.",
-            _ => "StreamVue is balancing startup speed and network resilience for this channel."
+            "Learned fast tune" => "This channel has started reliably, so OrbitalVue is using its fastest safe startup path.",
+            "Fast tune" => "OrbitalVue is using a low-latency startup buffer and will expand it automatically if needed.",
+            _ => "OrbitalVue is balancing startup speed and network resilience for this channel."
         };
 
         return new PlaybackTunePlan(cacheMilliseconds, useHardware, strategy, explanation);

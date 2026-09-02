@@ -1,37 +1,35 @@
-# StreamVue 5.0.0 Cross-platform Foundation
+# OrbitalVue 5.7.0 Personal Media Progress Sync
 
-StreamVue 5.0 begins the move from a Windows-only player to one shared product family. This preview adds native Android/Google TV foundations plus dedicated Samsung Tizen and LG webOS television clients while preserving the proven Windows 4.0 application.
+OrbitalVue 5.7 completes provider-synced Plex and Emby playback progress across Windows, Android and Google TV, iPhone, iPad, Apple TV, Samsung Tizen, and LG webOS. It also brings the dedicated Continue Watching and Recently Added library lanes to every supported platform foundation.
 
-## Android and Google TV
+## Cross-platform Plex and Emby browsing
 
-- Native Kotlin and Jetpack Compose application for touch, D-pad, and ten-foot television use
-- Media3 playback with hardware decode when the device and stream support it
-- M3U URL and file import, exact source groups, search, favorites, and auto-refresh at launch
-- Last-known-good catalog recovery if a provider refresh fails
-- Safe handling for playlist headers and credentials without displaying private source URLs
-- Personal-test APK plus an unsigned Play-ready AAB; no paid certificate is required for development
+- Adds dedicated **Continue Watching** and **Recently Added** groups across Apple, Android/Google TV, Samsung, and LG alongside the existing Windows experience
+- Preserves provider-supplied resume position, watched state, recency, episode metadata, and artwork-safe internal locators
+- Starts Apple playback at the saved Plex or Emby position with either AVKit or KSPlayer
+- Keeps Live, Movies, Series, and provider library groups available beside the editorial lanes
 
-## Samsung and LG televisions
+## Provider-synced playback progress
 
-- Remote-first shared television shell with native Samsung AVPlay and LG/browser video adapters
-- Exact playlist groups, categorized All Channels sections, search, favorites, and five-row Full HD/four-row HD browsing
-- Auto-refresh for URL sources, IndexedDB last-good recovery, and clear first-run URL/file setup
-- Full-screen playback with real buffering state and Auto, Fit, Fill, Zoom, 16:9, 4:3, and 21:9 aspect modes
-- Samsung and LG package directories, store metadata, icons, splash artwork, and repeatable build scripts
-- Unsigned platform project archives ready for vendor SDK signing when certificates are available
+- Sends Plex timeline and Emby session lifecycle reports from every native player foundation
+- Reports start, pause, resume, buffering, ten-second progress, completion, stop, and source changes where the platform exposes those events
+- Uses real AVKit, KSPlayer, Media3, HTML5, and Samsung AVPlay position and duration data rather than estimated time
+- Preserves a reporting session during safe decoder retries so fallback does not falsely mark a title stopped
+- Clamps invalid position, duration, volume, and tick values before they reach a provider
 
-## Shared catalog contract
+## Credential and playback isolation
 
-- Matching M3U behavior across native Android and JavaScript television clients
-- Stable channel identities, source-order grouping, stream kind detection, guide metadata, catch-up attributes, and request headers
-- Limits for oversized or malformed playlists and private, host-only source labels
-- Portable fixture validation to keep later iOS and tvOS implementations compatible
+- Keeps provider tokens in platform-secure storage and sends them only in protected headers
+- Keeps cached catalogs, UI state, and public playback locators free of Plex and Emby credentials
+- Binds progress reports to short-lived server, item, media-source, and playback-session records held behind each platform repository
+- Serializes report delivery and treats provider check-in failures as non-fatal so local playback continues
+- Retains the Store-mode premium boundary: locked builds make no Plex or Emby credential, refresh, artwork, playback, or reporting requests
 
 ## Verification
 
-- Android unit tests, lint, debug APK, release AAB, Leanback metadata, and 16 KB package-alignment checks
-- Shared catalog and television unit tests, TypeScript checks, production builds, and dependency audit
-- Full HD and HD browser QA for D-pad navigation, first-run setup, search, favorites, playback errors, and every aspect mode
-- No real playlist, provider credential, token, or private source address is included in the repository or packages
+- Adds Plex playing/stopped timeline tests with session headers and token-free URLs
+- Adds Emby start/progress/pause/stopped payload tests, including tick conversion and value clamping
+- Exercises Android unit tests, lint, APK/AAB packaging, Google Play fail-closed mode, Apple Swift tests, iPhone/iPad and Apple TV builds, television tests, and the cross-platform Store contract
+- Preserves the existing Windows updater identity so current personal installations can update in place without uninstalling
 
-This is a prerelease foundation. The Android APK can be installed for personal testing. Samsung and LG archives still need their free vendor development certificates before sideloading to physical televisions. The existing Windows 4.0 release remains the current Windows installer and continues updating in place.
+This is a prerelease intended for personal testing. Store submission remains locked until the real product, privacy, listing, accessibility, public-site, commerce, licensing, and platform-owner review gates are complete.

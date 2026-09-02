@@ -12,15 +12,24 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import com.streamvue.player.premium.GooglePlayPremiumBilling
 import com.streamvue.player.ui.StreamVueApp
 import com.streamvue.player.ui.theme.StreamVueTheme
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
+    private lateinit var premiumBilling: GooglePlayPremiumBilling
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        premiumBilling = GooglePlayPremiumBilling(applicationContext)
+        lifecycleScope.launch {
+            premiumBilling.state.collectLatest(viewModel::updatePremiumBilling)
+        }
 
         val isTelevision = resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK ==
             Configuration.UI_MODE_TYPE_TELEVISION
@@ -49,16 +58,40 @@ class MainActivity : ComponentActivity() {
                         )
                     },
                     onImportUrl = viewModel::importUrl,
+                    onConnectPlex = viewModel::connectPlex,
+                    onStartPlexAccountSignIn = viewModel::startPlexAccountSignIn,
+                    onCancelPlexAccountSignIn = viewModel::cancelPlexAccountSignIn,
+                    onConnectDiscoveredPlexServer = viewModel::connectDiscoveredPlexServer,
+                    onConnectEmby = viewModel::connectEmby,
+                    onPurchasePremium = { premiumBilling.launchPurchase(this@MainActivity) },
+                    onRestorePremium = premiumBilling::restorePurchases,
                     onRefresh = viewModel::refresh,
                     onSelectGroup = viewModel::selectGroup,
+                    onSelectBrowseMode = viewModel::selectBrowseMode,
                     onQueryChanged = viewModel::updateQuery,
                     onSelectChannel = viewModel::selectChannel,
+                    onPlaybackReport = viewModel::reportPlayback,
                     onDismissNotice = viewModel::dismissNotice,
                     onDismissError = viewModel::dismissError,
                     onFullscreenChanged = ::setFullscreen
                 )
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        premiumBilling.start()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        premiumBilling.refresh()
+    }
+
+    override fun onDestroy() {
+        premiumBilling.close()
+        super.onDestroy()
     }
 
     private fun setFullscreen(enabled: Boolean) {

@@ -1,7 +1,7 @@
 export const CATALOG_CONTRACT_VERSION = "1.0" as const;
 
-export type ChannelKind = "live" | "movie" | "series" | "recording" | "replay";
-export type SourceType = "m3u-file" | "m3u-url" | "xtream" | "generated";
+export type ChannelKind = "live" | "movie" | "series" | "recording" | "replay" | "music";
+export type SourceType = "m3u-file" | "m3u-url" | "xtream" | "plex" | "emby" | "generated";
 
 export interface CatalogSource {
   id: string;
@@ -29,6 +29,20 @@ export interface CatchupMetadata {
   correctionMinutes: number;
 }
 
+export interface CatalogMediaMetadata {
+  libraryId?: string;
+  libraryTitle?: string;
+  seriesTitle?: string;
+  seasonNumber?: number;
+  episodeNumber?: number;
+  year?: number;
+  durationMs?: number;
+  resumePositionMs?: number;
+  played?: boolean;
+  addedAt?: string;
+  lastPlayedAt?: string;
+}
+
 export interface CatalogChannel {
   id: string;
   number: number;
@@ -39,6 +53,7 @@ export interface CatalogChannel {
   stream: StreamDescriptor;
   guide?: GuideMetadata;
   catchup?: CatchupMetadata;
+  media?: CatalogMediaMetadata;
   tags?: string[];
 }
 

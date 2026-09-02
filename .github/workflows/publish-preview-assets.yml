@@ -6,19 +6,19 @@ on:
       release_tag:
         description: Existing draft release tag
         required: true
-        default: v4.0.0-alpha.1
+        default: v5.7.0-alpha.1
       package_version:
         description: Velopack package version
         required: true
-        default: 4.0.0-alpha.1
+        default: 5.7.0-alpha.1
       base_release_tag:
         description: Previous release containing the base full package
         required: true
-        default: v3.9.0-alpha.1
+        default: v5.6.0-alpha.1
       base_package_name:
         description: Previous full package filename
         required: true
-        default: Chris.StreamVue-3.9.0-alpha.1-full.nupkg
+        default: Chris.StreamVue-5.6.0-alpha.1-full.nupkg
 
 permissions:
   contents: write
@@ -51,7 +51,15 @@ jobs:
       - name: Verify the release
         shell: pwsh
         run: |
+          node tools/verify-premium-store-readiness.mjs
+          node tools/verify-windows-plex-account-foundation.mjs
+          node tools/verify-windows-media-center-progress.mjs
+          node tools/verify-windows-media-center-artwork.mjs
           dotnet build StreamVue.Native.slnx -c Release --no-restore
+          dotnet restore src/StreamVue.Player/StreamVue.Player.csproj -p:StreamVueDistributionMode=Store
+          dotnet build src/StreamVue.Player/StreamVue.Player.csproj -c Release --no-restore -p:StreamVueDistributionMode=Store
+          dotnet restore src/StreamVue.Player/StreamVue.Player.csproj -p:StreamVueDistributionMode=Personal
+          dotnet build src/StreamVue.Player/StreamVue.Player.csproj -c Release --no-restore -p:StreamVueDistributionMode=Personal
           dotnet run --project tools/StreamVue.FeatureProbe/StreamVue.FeatureProbe.csproj -c Release --no-build
           dotnet run --project tools/StreamVue.PlaylistProbe/StreamVue.PlaylistProbe.csproj -c Release --no-build -- --routing-scale 70000
 
@@ -72,7 +80,7 @@ jobs:
             --packVersion $env:PACKAGE_VERSION `
             --packDir artifacts/streamvue-publish `
             --mainExe StreamVue.exe `
-            --packTitle StreamVue `
+            --packTitle OrbitalVue `
             --packAuthors Chris `
             --icon src/StreamVue.Player/Assets/streamvue.ico `
             --releaseNotes RELEASE_NOTES.md `

@@ -1,0 +1,48 @@
+{
+  "contractVersion": "1.0",
+  "featureId": "personal-media-centers",
+  "purchaseModel": "one-time-non-consumable",
+  "submissionPolicy": "manual-only",
+  "platforms": {
+    "windows": {
+      "applicationId": null,
+      "distributionTarget": "microsoft-partner-center",
+      "artifactKind": "unsigned-msix",
+      "candidateWorkflow": ".github/workflows/build-windows-store-candidate.yml",
+      "premiumReleasePolicy": "requires-verified-product",
+      "verificationProvider": "microsoft-store-license"
+    },
+    "android": {
+      "applicationId": "com.orbitalvue.player",
+      "distributionTarget": "google-play",
+      "artifactKind": "upload-key-signed-aab",
+      "candidateWorkflow": ".github/workflows/build-google-play-candidate.yml",
+      "premiumReleasePolicy": "requires-verified-product",
+      "verificationProvider": "google-play-developer-api"
+    },
+    "apple": {
+      "applicationId": "com.orbitalvue.player",
+      "distributionTarget": "apple-app-store",
+      "artifactKind": "distribution-signed-ipa-set",
+      "candidateWorkflow": ".github/workflows/build-apple-store-candidate.yml",
+      "premiumReleasePolicy": "requires-verified-product-and-license",
+      "verificationProvider": "storekit2-verified-transactions"
+    },
+    "samsung": {
+      "applicationId": "OvTvPlayer.OrbitalVue",
+      "distributionTarget": "samsung-seller-office",
+      "artifactKind": "author-partner-signed-wgt",
+      "candidateWorkflow": ".github/workflows/build-samsung-store-candidate.yml",
+      "premiumReleasePolicy": "requires-verified-product",
+      "verificationProvider": "samsung-dpi-purchase-history"
+    },
+    "lg": {
+      "applicationId": "com.orbitalvue.player.tv",
+      "distributionTarget": "lg-seller-lounge",
+      "artifactKind": "webos-ipk",
+      "candidateWorkflow": ".github/workflows/build-lg-seller-lounge-candidate.yml",
+      "premiumReleasePolicy": "locked-free-app",
+      "verificationProvider": null
+    }
+  }
+}

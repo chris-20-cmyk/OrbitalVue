@@ -1,0 +1,435 @@
+name: Build Apple Store candidates
+
+on:
+  workflow_dispatch:
+    inputs:
+      marketing_version:
+        description: App Store version (three numeric components)
+        required: true
+        default: 5.7.0
+      build_number:
+        description: New App Store build string (one to three numeric components)
+        required: true
+        default: "5070001"
+
+permissions:
+  contents: read
+
+jobs:
+  apple-candidate:
+    name: Signed iOS and tvOS archives
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      APPLE_BUNDLE_ID: ${{ vars.STREAMVUE_APPLE_BUNDLE_ID }}
+      APPLE_TEAM_ID: ${{ vars.STREAMVUE_APPLE_TEAM_ID }}
+      APPLE_PREMIUM_PRODUCT_ID: ${{ vars.STREAMVUE_APPLE_PREMIUM_PRODUCT_ID }}
+      APPLE_MARKETING_VERSION: ${{ inputs.marketing_version }}
+      APPLE_BUILD_NUMBER: ${{ inputs.build_number }}
+    steps:
+      - name: Check out OrbitalVue
+        uses: actions/checkout@v7
+
+      - name: Require exact App Store, premium, and software-license readiness
+        shell: bash
+        run: |
+          required=(APPLE_BUNDLE_ID APPLE_TEAM_ID APPLE_PREMIUM_PRODUCT_ID)
+          missing=()
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then missing+=("$name"); fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required Apple repository variables: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+          if [[ ! "$APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]]; then
+            echo 'STREAMVUE_APPLE_TEAM_ID must be the exact 10-character Apple Team ID.' >&2
+            exit 1
+          fi
+          if [[ ! "$APPLE_MARKETING_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ || ${#APPLE_MARKETING_VERSION} -gt 18 ]]; then
+            echo 'The App Store marketing version must contain three numeric components.' >&2
+            exit 1
+          fi
+          if [[ ! "$APPLE_BUILD_NUMBER" =~ ^[0-9]+(\.[0-9]+){0,2}$ || ${#APPLE_BUILD_NUMBER} -gt 18 ]]; then
+            echo 'The App Store build string must contain one to three numeric components.' >&2
+            exit 1
+          fi
+          node tools/verify-cross-platform-release-contract.mjs
+          node tools/verify-privacy-readiness.mjs --require-ready apple
+          node tools/verify-public-site-readiness.mjs --require-ready
+          node tools/verify-store-listing-readiness.mjs --require-ready apple
+          node tools/verify-accessibility-readiness.mjs --require-ready apple
+          node tools/verify-premium-store-readiness.mjs \
+            --require-ready apple \
+            --expect-product-id apple "$APPLE_PREMIUM_PRODUCT_ID" \
+            --expect-verification-provider apple storekit2-verified-transactions
+          node tools/verify-apple-brand-assets.mjs
+          node tools/verify-apple-plex-account-foundation.mjs
+          node tools/verify-apple-distribution-readiness.mjs \
+            --require-ready \
+            --expect-bundle-id "$APPLE_BUNDLE_ID"
+
+      - name: Select the App Store toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+          xcodebuild -version
+          swift --version
+          xcodebuild -help 2>&1 | grep -F 'app-store-connect'
+
+      - name: Install pinned XcodeGen
+        run: |
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/xcodegen.zip" \
+            https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip
+          echo "4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 --check
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+          sudo "$RUNNER_TEMP/xcodegen/install.sh"
+          xcodegen --version | grep -F 'Version: 2.46.0'
+
+      - name: Generate, resolve, and test before signing
+        shell: bash
+        run: |
+          node tools/verify-apple-brand-assets.mjs
+          node tools/verify-apple-plex-account-foundation.mjs
+          cd platforms/apple
+          test "$(grep -c "PRODUCT_BUNDLE_IDENTIFIER: $APPLE_BUNDLE_ID" project.yml)" = "2"
+          cp Package.store.swift Package.swift
+          if grep -Fq 'github.com/kingslay/KSPlayer' Package.swift; then
+            echo 'The Apple Store package graph still contains the public GPL KSPlayer dependency.' >&2
+            exit 1
+          fi
+          xcodegen generate --spec project.yml
+          swift test --parallel
+          plutil -lint Resources/PrivacyInfo.xcprivacy
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project StreamVueApple.xcodeproj \
+            -scheme StreamVue \
+            -clonedSourcePackagesDirPath ../../artifacts/apple-source-packages
+          resolved='StreamVueApple.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved'
+          test -f "$resolved"
+          PACKAGE_RESOLVED_PATH="$resolved" node - <<'NODE'
+          const fs = require('node:fs');
+          const resolved = JSON.parse(fs.readFileSync(process.env.PACKAGE_RESOLVED_PATH, 'utf8'));
+          const distribution = JSON.parse(fs.readFileSync('../../store/apple-distribution.json', 'utf8'));
+          const pin = resolved.pins?.find(({ identity }) => identity === 'ksplayer');
+          if (distribution.ksPlayer.storePackageSource === 'absent') {
+            if (pin) throw new Error('AVKit-only resolution unexpectedly contains KSPlayer.');
+          } else if (!pin || pin.state?.version !== distribution.ksPlayer.version) {
+            throw new Error('Resolved KSPlayer version does not match the distribution manifest.');
+          }
+          NODE
+          echo "APPLE_PACKAGE_RESOLVED=$PWD/$resolved" >> "$GITHUB_ENV"
+
+      - name: Import protected distribution signing material
+        shell: bash
+        env:
+          APPLE_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.STREAMVUE_APPLE_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.STREAMVUE_APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          APPLE_IOS_PROFILE_BASE64: ${{ secrets.STREAMVUE_APPLE_IOS_APP_STORE_PROFILE_BASE64 }}
+          APPLE_TVOS_PROFILE_BASE64: ${{ secrets.STREAMVUE_APPLE_TVOS_APP_STORE_PROFILE_BASE64 }}
+        run: |
+          required=(
+            APPLE_DISTRIBUTION_CERTIFICATE_BASE64
+            APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD
+            APPLE_IOS_PROFILE_BASE64
+            APPLE_TVOS_PROFILE_BASE64
+          )
+          missing=()
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then missing+=("$name"); fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required Apple signing secrets: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
+          umask 077
+          certificate="$RUNNER_TEMP/streamvue-apple-distribution.p12"
+          ios_profile="$RUNNER_TEMP/streamvue-ios.mobileprovision"
+          tvos_profile="$RUNNER_TEMP/streamvue-tvos.mobileprovision"
+          printf '%s' "$APPLE_DISTRIBUTION_CERTIFICATE_BASE64" | base64 -D > "$certificate"
+          printf '%s' "$APPLE_IOS_PROFILE_BASE64" | base64 -D > "$ios_profile"
+          printf '%s' "$APPLE_TVOS_PROFILE_BASE64" | base64 -D > "$tvos_profile"
+          test -s "$certificate" && test -s "$ios_profile" && test -s "$tvos_profile"
+
+          keychain="$RUNNER_TEMP/streamvue-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 32)"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" \
+            -k "$keychain" \
+            -P "$APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD" \
+            -A \
+            -f pkcs12
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain"
+          security list-keychains -d user -s "$keychain"
+          identity="$(security find-identity -v -p codesigning "$keychain")"
+          test "$(awk '/valid identities found/ {print $1}' <<< "$identity")" = "1"
+          grep -F 'Apple Distribution' <<< "$identity"
+          grep -F "($APPLE_TEAM_ID)" <<< "$identity"
+
+          profiles_dir="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$profiles_dir"
+          for platform in ios tvos; do
+            profile_var="${platform}_profile"
+            profile="${!profile_var}"
+            decoded="$RUNNER_TEMP/streamvue-${platform}-profile.plist"
+            security cms -D -i "$profile" > "$decoded"
+            uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$decoded")"
+            name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$decoded")"
+            team="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.team-identifier' "$decoded")"
+            application_id="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$decoded")"
+            get_task_allow="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' "$decoded" 2>/dev/null || echo false)"
+            if [[ ! "$uuid" =~ ^[0-9A-Fa-f-]{36}$ || -z "$name" || "$name" == *$'\n'* || "$name" == *$'\r'* ]]; then
+              echo "The $platform provisioning profile identity is invalid." >&2
+              exit 1
+            fi
+            if [[ "$team" != "$APPLE_TEAM_ID" || "${application_id#*.}" != "$APPLE_BUNDLE_ID" || "$get_task_allow" != "false" ]]; then
+              echo "The $platform provisioning profile is not an App Store profile for the configured team and bundle ID." >&2
+              exit 1
+            fi
+            if /usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' "$decoded" >/dev/null 2>&1 || \
+               [[ "$(/usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' "$decoded" 2>/dev/null || echo false)" == "true" ]]; then
+              echo "The $platform provisioning profile is a device/enterprise profile, not an App Store profile." >&2
+              exit 1
+            fi
+            destination="$profiles_dir/$uuid.mobileprovision"
+            cp "$profile" "$destination"
+            printf '%s\n' "$destination" >> "$RUNNER_TEMP/streamvue-installed-profiles.txt"
+            upper_platform="$(tr '[:lower:]' '[:upper:]' <<< "$platform")"
+            echo "APPLE_${upper_platform}_PROFILE_NAME=$name" >> "$GITHUB_ENV"
+            echo "APPLE_${upper_platform}_PROFILE_PATH=$destination" >> "$GITHUB_ENV"
+          done
+          echo "APPLE_SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+
+      - name: Archive signed iPhone and iPad app
+        shell: bash
+        run: |
+          mkdir -p artifacts/apple-store/archives
+          xcodebuild \
+            -project platforms/apple/StreamVueApple.xcodeproj \
+            -scheme StreamVue \
+            -configuration Store \
+            -destination 'generic/platform=iOS' \
+            -archivePath artifacts/apple-store/archives/StreamVue-iOS.xcarchive \
+            -clonedSourcePackagesDirPath artifacts/apple-source-packages \
+            -disableAutomaticPackageResolution \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            PRODUCT_BUNDLE_IDENTIFIER="$APPLE_BUNDLE_ID" \
+            MARKETING_VERSION="$APPLE_MARKETING_VERSION" \
+            CURRENT_PROJECT_VERSION="$APPLE_BUILD_NUMBER" \
+            STREAMVUE_PREMIUM_PRODUCT_ID="$APPLE_PREMIUM_PRODUCT_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY='Apple Distribution' \
+            PROVISIONING_PROFILE_SPECIFIER="$APPLE_IOS_PROFILE_NAME" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $APPLE_SIGNING_KEYCHAIN" \
+            archive
+
+      - name: Archive signed Apple TV app
+        shell: bash
+        run: |
+          xcodebuild \
+            -project platforms/apple/StreamVueApple.xcodeproj \
+            -scheme StreamVueTV \
+            -configuration Store \
+            -destination 'generic/platform=tvOS' \
+            -archivePath artifacts/apple-store/archives/StreamVue-tvOS.xcarchive \
+            -clonedSourcePackagesDirPath artifacts/apple-source-packages \
+            -disableAutomaticPackageResolution \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            PRODUCT_BUNDLE_IDENTIFIER="$APPLE_BUNDLE_ID" \
+            MARKETING_VERSION="$APPLE_MARKETING_VERSION" \
+            CURRENT_PROJECT_VERSION="$APPLE_BUILD_NUMBER" \
+            STREAMVUE_PREMIUM_PRODUCT_ID="$APPLE_PREMIUM_PRODUCT_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY='Apple Distribution' \
+            PROVISIONING_PROFILE_SPECIFIER="$APPLE_TVOS_PROFILE_NAME" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $APPLE_SIGNING_KEYCHAIN" \
+            archive
+
+      - name: Verify signed Store archives
+        shell: bash
+        run: |
+          ios_app='artifacts/apple-store/archives/StreamVue-iOS.xcarchive/Products/Applications/OrbitalVue.app'
+          tvos_app='artifacts/apple-store/archives/StreamVue-tvOS.xcarchive/Products/Applications/OrbitalVueTV.app'
+          test -f "$tvos_app/Assets.car"
+          for app in "$ios_app" "$tvos_app"; do
+            test -d "$app"
+            info="$app/Info.plist"
+            test "$(plutil -extract CFBundleIdentifier raw -o - "$info")" = "$APPLE_BUNDLE_ID"
+            test "$(plutil -extract CFBundleShortVersionString raw -o - "$info")" = "$APPLE_MARKETING_VERSION"
+            test "$(plutil -extract CFBundleVersion raw -o - "$info")" = "$APPLE_BUILD_NUMBER"
+            test "$(plutil -extract StreamVueDistributionMode raw -o - "$info")" = "store"
+            test "$(plutil -extract StreamVuePremiumProductID raw -o - "$info")" = "$APPLE_PREMIUM_PRODUCT_ID"
+            test -f "$app/PrivacyInfo.xcprivacy"
+            codesign --verify --deep --strict --verbose=2 "$app"
+            codesign -dv --verbose=4 "$app" 2>&1 | grep -F "TeamIdentifier=$APPLE_TEAM_ID"
+          done
+
+      - name: Export App Store Connect IPAs
+        shell: bash
+        run: |
+          mkdir -p artifacts/apple-store/ios artifacts/apple-store/tvos
+          ios_options="$RUNNER_TEMP/streamvue-ios-export-options.plist"
+          tvos_options="$RUNNER_TEMP/streamvue-tvos-export-options.plist"
+          for platform in ios tvos; do
+            upper_platform="$(printf '%s' "$platform" | tr '[:lower:]' '[:upper:]')"
+            profile_name_var="APPLE_${upper_platform}_PROFILE_NAME"
+            options_var="${platform}_options"
+            options="${!options_var}"
+            PROFILE_NAME="${!profile_name_var}" \
+              OPTIONS_PATH="$options" \
+              node - <<'NODE'
+          const fs = require('node:fs');
+          const escapeXML = (value) => value
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&apos;');
+          const team = escapeXML(process.env.APPLE_TEAM_ID);
+          const bundle = escapeXML(process.env.APPLE_BUNDLE_ID);
+          const profile = escapeXML(process.env.PROFILE_NAME);
+          const xml = `<?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>export</string>
+            <key>teamID</key><string>${team}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>stripSwiftSymbols</key><true/>
+            <key>uploadSymbols</key><true/>
+            <key>provisioningProfiles</key><dict>
+              <key>${bundle}</key><string>${profile}</string>
+            </dict>
+          </dict></plist>
+          `;
+          fs.writeFileSync(process.env.OPTIONS_PATH, xml);
+          NODE
+            plutil -lint "$options"
+          done
+          xcodebuild \
+            -exportArchive \
+            -archivePath artifacts/apple-store/archives/StreamVue-iOS.xcarchive \
+            -exportPath artifacts/apple-store/ios \
+            -exportOptionsPlist "$ios_options"
+          xcodebuild \
+            -exportArchive \
+            -archivePath artifacts/apple-store/archives/StreamVue-tvOS.xcarchive \
+            -exportPath artifacts/apple-store/tvos \
+            -exportOptionsPlist "$tvos_options"
+
+      - name: Prepare audited manual-upload artifacts
+        shell: bash
+        run: |
+          shopt -s nullglob
+          ios_ipas=(artifacts/apple-store/ios/*.ipa)
+          tvos_ipas=(artifacts/apple-store/tvos/*.ipa)
+          test "${#ios_ipas[@]}" = "1" && test -s "${ios_ipas[0]}"
+          test "${#tvos_ipas[@]}" = "1" && test -s "${tvos_ipas[0]}"
+          test -d artifacts/apple-store/archives/StreamVue-iOS.xcarchive/dSYMs
+          test -d artifacts/apple-store/archives/StreamVue-tvOS.xcarchive/dSYMs
+          for ipa in "${ios_ipas[0]}" "${tvos_ipas[0]}"; do
+            inspection="$(mktemp -d "$RUNNER_TEMP/streamvue-ipa.XXXXXX")"
+            ditto -x -k "$ipa" "$inspection"
+            apps=("$inspection/Payload/"*.app)
+            test "${#apps[@]}" = "1"
+            info="${apps[0]}/Info.plist"
+            test "$(plutil -extract CFBundleIdentifier raw -o - "$info")" = "$APPLE_BUNDLE_ID"
+            test "$(plutil -extract CFBundleShortVersionString raw -o - "$info")" = "$APPLE_MARKETING_VERSION"
+            test "$(plutil -extract CFBundleVersion raw -o - "$info")" = "$APPLE_BUILD_NUMBER"
+            test "$(plutil -extract StreamVueDistributionMode raw -o - "$info")" = "store"
+            test "$(plutil -extract StreamVuePremiumProductID raw -o - "$info")" = "$APPLE_PREMIUM_PRODUCT_ID"
+            codesign --verify --deep --strict --verbose=2 "${apps[0]}"
+            codesign -dv --verbose=4 "${apps[0]}" 2>&1 | grep -F "TeamIdentifier=$APPLE_TEAM_ID"
+            rm -rf -- "$inspection"
+          done
+          mv "${ios_ipas[0]}" "artifacts/apple-store/OrbitalVue-$APPLE_MARKETING_VERSION-$APPLE_BUILD_NUMBER-iOS-App-Store.ipa"
+          mv "${tvos_ipas[0]}" "artifacts/apple-store/OrbitalVue-$APPLE_MARKETING_VERSION-$APPLE_BUILD_NUMBER-tvOS-App-Store.ipa"
+          test -f "$APPLE_PACKAGE_RESOLVED"
+          cp "$APPLE_PACKAGE_RESOLVED" artifacts/apple-store/APPLE-PACKAGE-RESOLVED.json
+          ditto -c -k --sequesterRsrc --keepParent \
+            artifacts/apple-store/archives/StreamVue-iOS.xcarchive/dSYMs \
+            "artifacts/apple-store/OrbitalVue-$APPLE_MARKETING_VERSION-$APPLE_BUILD_NUMBER-iOS-dSYMs.zip"
+          ditto -c -k --sequesterRsrc --keepParent \
+            artifacts/apple-store/archives/StreamVue-tvOS.xcarchive/dSYMs \
+            "artifacts/apple-store/OrbitalVue-$APPLE_MARKETING_VERSION-$APPLE_BUILD_NUMBER-tvOS-dSYMs.zip"
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const distribution = JSON.parse(fs.readFileSync('store/apple-distribution.json', 'utf8'));
+          const audit = {
+            schemaVersion: 1,
+            bundleId: process.env.APPLE_BUNDLE_ID,
+            teamId: process.env.APPLE_TEAM_ID,
+            marketingVersion: process.env.APPLE_MARKETING_VERSION,
+            buildNumber: process.env.APPLE_BUILD_NUMBER,
+            distributionMode: 'store',
+            premiumProductId: process.env.APPLE_PREMIUM_PRODUCT_ID,
+            ksPlayerDistributionPath: distribution.ksPlayer.distributionPath,
+            platforms: ['iOS', 'tvOS'],
+            destination: 'manual-app-store-connect-upload'
+          };
+          fs.writeFileSync('artifacts/apple-store/CANDIDATE-AUDIT.json', `${JSON.stringify(audit, null, 2)}\n`);
+          NODE
+          : > artifacts/apple-store/SHA256SUMS.txt
+          for file in artifacts/apple-store/*; do
+            if [[ -f "$file" && "$(basename "$file")" != "SHA256SUMS.txt" ]]; then
+              shasum -a 256 "$file" >> artifacts/apple-store/SHA256SUMS.txt
+            fi
+          done
+          rm -rf artifacts/apple-store/archives artifacts/apple-store/ios artifacts/apple-store/tvos
+
+      - name: Remove protected Apple signing material
+        if: always()
+        shell: bash
+        run: |
+          profile_ledger="$RUNNER_TEMP/streamvue-installed-profiles.txt"
+          if [[ -f "$profile_ledger" ]]; then
+            while IFS= read -r profile_path; do
+              if [[ "$profile_path" == "$HOME/Library/MobileDevice/Provisioning Profiles/"* ]]; then
+                rm -f -- "$profile_path"
+              fi
+            done < "$profile_ledger"
+          fi
+          if [[ -n "${APPLE_IOS_PROFILE_PATH:-}" && "$APPLE_IOS_PROFILE_PATH" == "$HOME/Library/MobileDevice/Provisioning Profiles/"* ]]; then
+            rm -f -- "$APPLE_IOS_PROFILE_PATH"
+          fi
+          if [[ -n "${APPLE_TVOS_PROFILE_PATH:-}" && "$APPLE_TVOS_PROFILE_PATH" == "$HOME/Library/MobileDevice/Provisioning Profiles/"* ]]; then
+            rm -f -- "$APPLE_TVOS_PROFILE_PATH"
+          fi
+          if [[ -n "${APPLE_SIGNING_KEYCHAIN:-}" && "$APPLE_SIGNING_KEYCHAIN" == "$RUNNER_TEMP/"* ]]; then
+            security delete-keychain "$APPLE_SIGNING_KEYCHAIN" || true
+          fi
+          security delete-keychain "$RUNNER_TEMP/streamvue-signing.keychain-db" 2>/dev/null || true
+          rm -f -- \
+            "$RUNNER_TEMP/streamvue-apple-distribution.p12" \
+            "$RUNNER_TEMP/streamvue-ios.mobileprovision" \
+            "$RUNNER_TEMP/streamvue-tvos.mobileprovision" \
+            "$RUNNER_TEMP/streamvue-ios-profile.plist" \
+            "$RUNNER_TEMP/streamvue-tvos-profile.plist" \
+            "$profile_ledger"
+
+      - name: Upload manual App Store Connect candidates
+        uses: actions/upload-artifact@v7
+        with:
+          name: streamvue-apple-${{ inputs.marketing_version }}-${{ inputs.build_number }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            artifacts/apple-store/*.ipa
+            artifacts/apple-store/*-dSYMs.zip
+            artifacts/apple-store/APPLE-PACKAGE-RESOLVED.json
+            artifacts/apple-store/CANDIDATE-AUDIT.json
+            artifacts/apple-store/SHA256SUMS.txt
+            store/store-listing.json
+            store/accessibility-readiness.json
+            store/public-site-readiness.json
+            store/listing-assets/apple/**

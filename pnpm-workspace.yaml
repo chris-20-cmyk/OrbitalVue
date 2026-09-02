@@ -2,4 +2,11 @@ packages:
   - "packages/*"
   - "platforms/tv-web"
 
+allowBuilds:
+  '@webos-tools/cli': false
+  cpu-features: false
+  esbuild: true
+  ssh2: false
+  workerd: true
+
 onlyBuiltDependencies: []

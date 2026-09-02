@@ -29,7 +29,7 @@ public sealed class FullscreenWindowController
 
         var handle = new WindowInteropHelper(window).Handle;
         if (handle == nint.Zero)
-            throw new InvalidOperationException("The StreamVue window is not ready for fullscreen yet.");
+            throw new InvalidOperationException("The OrbitalVue window is not ready for fullscreen yet.");
 
         var monitor = MonitorFromWindow(handle, MonitorDefaultToNearest);
         var monitorInfo = MonitorInfo.Create();
@@ -98,7 +98,7 @@ public sealed class FullscreenWindowController
     {
         var handle = new WindowInteropHelper(window).Handle;
         if (handle == nint.Zero || !GetWindowRect(handle, out var rectangle))
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "Windows could not read the StreamVue window bounds.");
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Windows could not read the OrbitalVue window bounds.");
         return FullscreenDisplayBounds.FromMonitorRectangle(rectangle.Left, rectangle.Top, rectangle.Right, rectangle.Bottom);
     }
 

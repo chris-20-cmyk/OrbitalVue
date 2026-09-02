@@ -1,0 +1,33 @@
+{
+  "contractVersion": "1.0",
+  "status": "draft-owner-input-required",
+  "canonicalBaseUrl": null,
+  "urls": {
+    "overview": null,
+    "privacy": null,
+    "support": null
+  },
+  "projectUrl": "https://github.com/chris-20-cmyk/StreamVue",
+  "supportRequestUrl": "https://github.com/chris-20-cmyk/StreamVue/issues/new",
+  "owner": {
+    "legalName": null,
+    "privacyContact": null,
+    "copyrightHolder": null,
+    "approved": false
+  },
+  "pages": {
+    "overview": "site/index.html",
+    "privacy": "site/privacy.html",
+    "support": "site/support.html",
+    "notFound": "site/404.html",
+    "contentReviewed": false
+  },
+  "deployment": {
+    "provider": "github-pages",
+    "customDomain": null,
+    "liveUrlsVerified": false,
+    "manualWorkflowOnly": true,
+    "ready": false
+  },
+  "ready": false
+}

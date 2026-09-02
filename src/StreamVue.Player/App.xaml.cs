@@ -27,7 +27,7 @@ public partial class App : Application
             var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StreamVue");
             Directory.CreateDirectory(directory);
             var text = new StringBuilder()
-                .AppendLine($"[{DateTimeOffset.Now:O}] StreamVue unhandled exception")
+                .AppendLine($"[{DateTimeOffset.Now:O}] OrbitalVue unhandled exception")
                 .AppendLine(exception?.ToString() ?? "Unknown exception")
                 .AppendLine()
                 .ToString();

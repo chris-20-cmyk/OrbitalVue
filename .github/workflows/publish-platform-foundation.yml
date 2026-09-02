@@ -6,11 +6,11 @@ on:
       release_tag:
         description: Prerelease tag to create or update
         required: true
-        default: v5.0.0-alpha.1
+        default: v5.7.0-alpha.1
       release_title:
         description: Public release title
         required: true
-        default: StreamVue 5.0 Cross-platform Foundation
+        default: OrbitalVue 5.7 Personal Media Progress Sync
 
 permissions:
   contents: write
@@ -25,7 +25,7 @@ jobs:
       RELEASE_TITLE: ${{ inputs.release_title }}
 
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
 
       - name: Set up Java
@@ -44,13 +44,24 @@ jobs:
         run: sdkmanager "platforms;android-37.1" "build-tools;37.0.0" "platform-tools"
 
       - name: Build and verify Android and Google TV
-        run: >-
-          bash platforms/android/gradlew -p platforms/android
-          testDebugUnitTest
-          lintDebug
-          assembleDebug
-          bundleRelease
-          --stacktrace
+        run: |
+          node tools/verify-android-plex-account-foundation.mjs
+          bash platforms/android/gradlew -p platforms/android \
+            testDebugUnitTest \
+            lintDebug \
+            assembleDebug \
+            --stacktrace
+
+      - name: Build the fail-closed Google Play bundle
+        run: |
+          bash platforms/android/gradlew -p platforms/android bundleRelease -PstreamVueDistributionMode=store --stacktrace
+          grep -F 'DISTRIBUTION_MODE = "store"' platforms/android/app/build/generated/source/buildConfig/release/com/streamvue/player/BuildConfig.java
+          verification="$(jarsigner -verify platforms/android/app/build/outputs/bundle/release/app-release.aab 2>&1)"
+          if grep -Fq 'jar verified.' <<< "$verification"; then
+            echo 'Foundation Store bundle unexpectedly contains a release signature.' >&2
+            exit 1
+          fi
+          grep -Fq 'jar is unsigned' <<< "$verification"
 
       - name: Verify Android TV metadata and 16 KB alignment
         run: |
@@ -76,19 +87,25 @@ jobs:
       - name: Verify and build Samsung and LG television clients
         run: |
           node contracts/validate-contract.mjs
+          node tools/verify-premium-store-readiness.mjs
+          node tools/verify-cross-platform-release-contract.mjs
+          node tools/verify-samsung-distribution-readiness.mjs
+          node tools/verify-lg-distribution-readiness.mjs
+          pnpm media-centers:test
           pnpm tv:check
           pnpm tv:test
           pnpm tv:build
+          VITE_STREAMVUE_DISTRIBUTION_MODE=store pnpm tv:build
 
       - name: Assemble public foundation assets
         shell: bash
         run: |
           PACKAGE_VERSION="${RELEASE_TAG#v}"
           mkdir -p artifacts/platform-foundation
-          cp platforms/android/app/build/outputs/apk/debug/app-debug.apk "artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-android-personal-test.apk"
-          cp platforms/android/app/build/outputs/bundle/release/app-release.aab "artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-google-play-unsigned.aab"
-          (cd platforms/tv-web/dist/samsung && zip -q -r "../../../../artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-samsung-tizen-unsigned.zip" .)
-          (cd platforms/tv-web/dist/webos && zip -q -r "../../../../artifacts/platform-foundation/StreamVue-${PACKAGE_VERSION}-lg-webos-unsigned.zip" .)
+          cp platforms/android/app/build/outputs/apk/debug/app-debug.apk "artifacts/platform-foundation/OrbitalVue-${PACKAGE_VERSION}-android-personal-test.apk"
+          cp platforms/android/app/build/outputs/bundle/release/app-release.aab "artifacts/platform-foundation/OrbitalVue-${PACKAGE_VERSION}-google-play-store-locked-unsigned.aab"
+          (cd platforms/tv-web/dist/samsung && zip -q -r "../../../../artifacts/platform-foundation/OrbitalVue-${PACKAGE_VERSION}-samsung-tizen-store-locked-unsigned.zip" .)
+          (cd platforms/tv-web/dist/webos && zip -q -r "../../../../artifacts/platform-foundation/OrbitalVue-${PACKAGE_VERSION}-lg-webos-store-locked-unsigned.zip" .)
           (cd artifacts/platform-foundation && sha256sum * > SHA256SUMS.txt)
 
       - name: Create or update the prerelease
@@ -104,7 +121,7 @@ jobs:
       - name: Upload the reproducible workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: streamvue-5.0-cross-platform-foundation
+          name: orbitalvue-5.7-cross-platform-foundation
           if-no-files-found: error
           retention-days: 14
           path: artifacts/platform-foundation/

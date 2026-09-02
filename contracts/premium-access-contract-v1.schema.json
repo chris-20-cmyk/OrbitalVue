@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamvue.app/contracts/premium-access/v1/schema.json",
+  "title": "OrbitalVue Premium Access Decision",
+  "description": "A secret-free decision describing whether one premium feature may run in a personal or store build.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "featureId",
+    "distributionMode",
+    "accessState",
+    "acquisition",
+    "receiptVerification"
+  ],
+  "properties": {
+    "contractVersion": { "const": "1.0" },
+    "featureId": { "const": "personal-media-centers" },
+    "distributionMode": { "enum": ["personal", "store", "unknown"] },
+    "accessState": { "enum": ["included", "verified", "unavailable"] },
+    "acquisition": { "enum": ["included", "one-time"] },
+    "receiptVerification": { "enum": ["not-required", "verified", "unavailable"] },
+    "productId": {
+      "description": "Store-owned non-consumable product identifier. It is present only after a real store product is configured and verified.",
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "distributionMode": { "const": "personal" } },
+        "required": ["distributionMode"]
+      },
+      "then": {
+        "properties": {
+          "accessState": { "const": "included" },
+          "acquisition": { "const": "included" },
+          "receiptVerification": { "const": "not-required" }
+        },
+        "not": { "required": ["productId"] }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "distributionMode": { "const": "store" },
+          "accessState": { "const": "verified" }
+        },
+        "required": ["distributionMode", "accessState"]
+      },
+      "then": {
+        "required": ["productId"],
+        "properties": {
+          "acquisition": { "const": "one-time" },
+          "receiptVerification": { "const": "verified" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "distributionMode": { "const": "store" },
+          "accessState": { "const": "unavailable" }
+        },
+        "required": ["distributionMode", "accessState"]
+      },
+      "then": {
+        "properties": {
+          "acquisition": { "const": "one-time" },
+          "receiptVerification": { "const": "unavailable" }
+        },
+        "not": { "required": ["productId"] }
+      }
+    },
+    {
+      "if": {
+        "properties": { "distributionMode": { "const": "unknown" } },
+        "required": ["distributionMode"]
+      },
+      "then": {
+        "properties": {
+          "accessState": { "const": "unavailable" },
+          "acquisition": { "const": "one-time" },
+          "receiptVerification": { "const": "unavailable" }
+        },
+        "not": { "required": ["productId"] }
+      }
+    }
+  ]
+}

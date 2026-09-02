@@ -2,25 +2,33 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>StreamVue</AssemblyName>
     <RootNamespace>StreamVue.Player</RootNamespace>
-    <Version>4.0.0-alpha.1</Version>
-    <FileVersion>4.0.0.1</FileVersion>
-    <AssemblyVersion>4.0.0.0</AssemblyVersion>
-    <Product>StreamVue</Product>
+    <Version>5.7.0-alpha.1</Version>
+    <FileVersion>5.7.0.1</FileVersion>
+    <AssemblyVersion>5.7.0.0</AssemblyVersion>
+    <AssemblyTitle>OrbitalVue</AssemblyTitle>
+    <Title>OrbitalVue</Title>
+    <Product>OrbitalVue</Product>
     <Company>Chris</Company>
-    <Description>StreamVue — a premium native IPTV player for Windows.</Description>
+    <Description>OrbitalVue — a premium native IPTV and personal-media player for Windows.</Description>
     <ApplicationIcon>Assets\streamvue.ico</ApplicationIcon>
     <StartupObject>StreamVue.Player.Program</StartupObject>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
     <PublishSingleFile>false</PublishSingleFile>
     <SelfContained>true</SelfContained>
+    <StreamVueDistributionMode Condition="'$(StreamVueDistributionMode)' == ''">Personal</StreamVueDistributionMode>
+    <StreamVuePremiumProductId Condition="'$(StreamVuePremiumProductId)' == ''"></StreamVuePremiumProductId>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(StreamVueDistributionMode)' == 'Store'">
+    <DefineConstants>$(DefineConstants);STREAMVUE_STORE_BUILD</DefineConstants>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(QaBuild)' == 'true'">
@@ -31,12 +39,29 @@
   <ItemGroup>
     <PackageReference Include="LibVLCSharp.WPF" Version="3.10.0" />
     <PackageReference Include="LibVLCSharp.WinForms" Version="3.10.0" />
+    <PackageReference Include="NSec.Cryptography" Version="26.4.0" />
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23.1" />
-    <PackageReference Include="Velopack" Version="1.2.0" />
+    <PackageReference Include="Velopack" Version="1.2.0" Condition="'$(StreamVueDistributionMode)' != 'Store'" />
   </ItemGroup>
 
   <ItemGroup>
     <Resource Include="Assets\streamvue.ico" />
   </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>StreamVuePremiumProductId</_Parameter1>
+      <_Parameter2>$(StreamVuePremiumProductId)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <Target Name="ValidateStreamVueDistributionMode" BeforeTargets="CoreCompile">
+    <Error
+      Condition="'$(StreamVueDistributionMode)' != 'Personal' and '$(StreamVueDistributionMode)' != 'Store'"
+      Text="StreamVueDistributionMode must be Personal or Store. Unknown release modes fail closed." />
+    <Error
+      Condition="'$(StreamVuePremiumProductId)' != '' and !$([System.Text.RegularExpressions.Regex]::IsMatch('$(StreamVuePremiumProductId)', '^[A-Za-z0-9._-]{3,256}$'))"
+      Text="StreamVuePremiumProductId must be empty or an exact Partner Center product identifier." />
+  </Target>
 
 </Project>

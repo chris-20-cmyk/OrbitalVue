@@ -9,11 +9,19 @@ on:
     paths:
       - "platforms/android/**"
       - "contracts/**"
+      - "store/**"
+      - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-cross-platform-release-contract.mjs"
+      - "tools/verify-android-plex-account-foundation.mjs"
       - ".github/workflows/android-foundation.yml"
   pull_request:
     paths:
       - "platforms/android/**"
       - "contracts/**"
+      - "store/**"
+      - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-cross-platform-release-contract.mjs"
+      - "tools/verify-android-plex-account-foundation.mjs"
       - ".github/workflows/android-foundation.yml"
 
 permissions:
@@ -24,17 +32,21 @@ jobs:
     name: Portable catalog contract
     runs-on: ubuntu-latest
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
       - name: Validate contract fixtures
-        run: node contracts/validate-contract.mjs
+        run: |
+          node contracts/validate-contract.mjs
+          node tools/verify-premium-store-readiness.mjs
+          node tools/verify-cross-platform-release-contract.mjs
+          node tools/verify-android-plex-account-foundation.mjs
 
   android:
     name: Android and Google TV
     needs: contract
     runs-on: ubuntu-latest
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
       - name: Set up Java
         uses: actions/setup-java@v6
@@ -53,8 +65,19 @@ jobs:
           testDebugUnitTest
           lintDebug
           assembleDebug
-          bundleRelease
           --stacktrace
+      - name: Build the fail-closed Google Play configuration
+        run: |
+          bash platforms/android/gradlew -p platforms/android bundleRelease -PstreamVueDistributionMode=store --stacktrace
+          grep -F 'DISTRIBUTION_MODE = "store"' platforms/android/app/build/generated/source/buildConfig/release/com/streamvue/player/BuildConfig.java
+          verification="$(jarsigner -verify platforms/android/app/build/outputs/bundle/release/app-release.aab 2>&1)"
+          if grep -Fq 'jar verified.' <<< "$verification"; then
+            echo 'Foundation Store bundle unexpectedly contains a release signature.' >&2
+            exit 1
+          fi
+          grep -Fq 'jar is unsigned' <<< "$verification"
+          mkdir -p artifacts/android
+          cp platforms/android/app/build/outputs/bundle/release/app-release.aab artifacts/android/OrbitalVue-5.7.0-alpha.1-google-play-store-locked-unsigned.aab
       - name: Verify Android TV metadata and 16 KB alignment
         run: |
           APK="platforms/android/app/build/outputs/apk/debug/app-debug.apk"
@@ -63,11 +86,11 @@ jobs:
       - name: Upload install and store packages
         uses: actions/upload-artifact@v7
         with:
-          name: streamvue-android-5.0-foundation
+          name: orbitalvue-android-5.7-foundation
           if-no-files-found: error
           retention-days: 14
           path: |
             platforms/android/app/build/outputs/apk/debug/app-debug.apk
-            platforms/android/app/build/outputs/bundle/release/app-release.aab
+            artifacts/android/OrbitalVue-5.7.0-alpha.1-google-play-store-locked-unsigned.aab
             platforms/android/app/build/reports/tests/testDebugUnitTest/
             platforms/android/app/build/reports/lint-results-debug.html

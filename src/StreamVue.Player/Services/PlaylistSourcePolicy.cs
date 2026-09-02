@@ -7,7 +7,7 @@ public static class PlaylistSourcePolicy
 {
     private static readonly HashSet<string> SupportedSourceTypes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "file", "url", "xtream"
+        "file", "url", "xtream", "plex", "emby"
     };
 
     public static bool NormalizeSettings(AppSettings settings)
@@ -169,8 +169,20 @@ public static class PlaylistSourcePolicy
         var candidate = sourceValue.Trim();
         if (!candidate.Contains("://", StringComparison.Ordinal)) candidate = $"http://{candidate}";
         return Uri.TryCreate(candidate, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host)
-            ? sourceType == "xtream" ? $"{uri.Host} account" : uri.Host
-            : sourceType == "xtream" ? "Xtream account" : "M3U source";
+            ? sourceType switch
+            {
+                "xtream" => $"{uri.Host} account",
+                "plex" => $"{uri.Host} Plex",
+                "emby" => $"{uri.Host} Emby",
+                _ => uri.Host
+            }
+            : sourceType switch
+            {
+                "xtream" => "Xtream account",
+                "plex" => "Plex library",
+                "emby" => "Emby library",
+                _ => "M3U source"
+            };
     }
 }
 
@@ -239,6 +251,9 @@ public static class PlaylistMergePolicy
         CatchupSource = channel.CatchupSource,
         CatchupDays = channel.CatchupDays,
         CatchupCorrectionMinutes = channel.CatchupCorrectionMinutes,
+        DurationMilliseconds = channel.DurationMilliseconds,
+        ResumePositionMilliseconds = channel.ResumePositionMilliseconds,
+        IsPlayed = channel.IsPlayed,
         Kind = channel.Kind,
         SourceId = source.Id,
         SourceName = source.Name

@@ -15,9 +15,9 @@ https://demo.invalid/live/kids-space.m3u8`;
 export function createDemoCatalog(): StreamVueCatalog {
   return createCatalogFromM3u(DEMO_PLAYLIST, {
     catalogId: "streamvue-demo",
-    displayName: "StreamVue demonstration",
+    displayName: "OrbitalVue demonstration",
     sourceId: "streamvue-demo-source",
-    sourceName: "StreamVue demonstration",
+    sourceName: "OrbitalVue demonstration",
     sourceType: "generated",
     displayLocation: "Built-in demonstration",
     refreshOnLaunch: false

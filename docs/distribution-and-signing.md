@@ -14,13 +14,37 @@ StreamVue can be built and tested on Windows, Android, Android TV, Google TV, Sa
 | LG webOS TV | Free LG developer account and Developer Mode testing | LG Seller Lounge enrollment and review; confirm any seller terms during enrollment |
 | iPhone / iPad / Apple TV | Free Apple Account with short-lived personal provisioning | Apple Developer Program: US$99 per membership year; no one-time App Store option |
 
-No paid certificate is needed to continue building StreamVue 5.0. The generated Android debug APK installs on personal devices after Android's normal sideload confirmation. The generated AAB is intentionally unsigned so Google Play can apply the account's upload and app-signing setup later.
+No paid certificate is needed to continue building StreamVue 5.2. The generated Android debug APK installs on personal devices after Android's normal sideload confirmation. Foundation CI deliberately emits an unsigned, locked AAB; the separate Google Play candidate workflow signs a publishable AAB with a protected, self-generated upload key after the real product and verifier pass readiness. Google then applies the Play-managed app-signing key to delivered APKs. Apple foundation CI compiles unsigned simulator products, while its separate signed candidate stays locked until premium, software-license, bundle, and provisioning gates all pass; physical Apple devices require Xcode signing with either a free Personal Team or a paid team.
 
 ## Windows choices
 
 ### 1. Microsoft Store MSIX — recommended free path
 
-Microsoft's current onboarding flow at [storedeveloper.microsoft.com](https://storedeveloper.microsoft.com/) has no registration fee. An MSIX submitted through the Store does not need a CA-trusted certificate: after certification, Microsoft re-signs it and provides trusted installation and Store-managed updates. StreamVue's current Velopack EXE remains useful for personal preview releases, but a separate MSIX packaging lane is needed for this route. See Microsoft's [publishing guide](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/publish-first-app) and [Store overview](https://learn.microsoft.com/en-us/windows/apps/publish/get-started).
+Microsoft's current onboarding flow at [storedeveloper.microsoft.com](https://storedeveloper.microsoft.com/) has no registration fee. An MSIX submitted through the Store does not need a CA-trusted certificate: after certification, Microsoft signs it and provides trusted installation and Store-managed updates. StreamVue's Velopack EXE remains the personal/direct-download lane; the repository now includes a separate, reproducible MSIX packaging lane for Partner Center. See Microsoft's [publishing guide](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/publish-first-app), [Store overview](https://learn.microsoft.com/en-us/windows/apps/publish/get-started), and [MSIX upload formats](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/upload-app-packages).
+
+The source includes the Microsoft Store durable-add-on adapter and package builder. A Store package must use the exact package Identity Name, Publisher, Publisher display name, and durable add-on Product ID copied from Partner Center. Purchase UI remains fail-closed until the executable is running with that final MSIX package identity; the existing direct-download/Velopack build does not impersonate Store ownership.
+
+The Store candidate is built with:
+
+```powershell
+.\tools\build-windows-msix.ps1 `
+  -IdentityName '<Partner Center package identity name>' `
+  -Publisher '<Partner Center CN= publisher>' `
+  -PublisherDisplayName '<Partner Center publisher display name>' `
+  -Version '5.1.0.0' `
+  -PremiumProductId '<durable add-on product ID>'
+```
+
+The script targets `Windows.Desktop` 10.0.19041 or later as a medium-integrity packaged classic app with `runFullTrust`, creates exact 50/44/150-pixel Store assets, strips unused x86 VLC files and symbols, and reopens the finished package to verify its identity, payload, architecture, Store audit, and lack of Velopack files. Its output is unsigned by design: Partner Center accepts `.msix` and Microsoft signs the certified submission. The synthetic CI package uses unmistakable test identity values and is not a Store candidate.
+
+After the real package identity and durable add-on exist, set these public GitHub repository variables and update the Windows entry in `store/premium-products.json` before running **Build Windows Store candidate**:
+
+- `STREAMVUE_WINDOWS_IDENTITY_NAME`
+- `STREAMVUE_WINDOWS_PUBLISHER`
+- `STREAMVUE_WINDOWS_PUBLISHER_DISPLAY_NAME`
+- `STREAMVUE_WINDOWS_PREMIUM_PRODUCT_ID`
+
+The workflow fails unless Windows is explicitly marked ready and the build input product ID exactly matches the readiness manifest. It produces an unsigned `.msix` plus SHA-256 checksum for manual Partner Center upload; it does not publish, enroll, or make a purchase claim automatically.
 
 ### 2. SignPath Foundation — free if StreamVue becomes open source
 
@@ -48,10 +72,15 @@ Android Studio/Gradle creates a free debug signing key automatically. A long-liv
 
 Google documents a [US$25 one-time Play Console registration fee](https://support.google.com/googleplay/android-developer/answer/6112435). Play App Signing then protects the app-signing key and delivers optimized packages. New personal accounts must also complete Google's identity, device, and testing requirements. There is no monthly developer-account fee in the documented registration path.
 
-The committed StreamVue pipeline produces:
+The committed StreamVue pipeline produces three deliberately separate outputs:
 
 - `app-debug.apk` for personal installation and device testing.
-- `app-release.aab` for later Play Console upload/signing configuration.
+- An unsigned `app-release.aab` from foundation CI with Store mode locked and no product/verifier identity. This artifact cannot be mistaken for a signed Play candidate.
+- A readiness-gated, upload-key-signed AAB from **Build Google Play candidate** for manual Play Console upload.
+
+The candidate workflow accepts an explicit positive version code (which must never be reused) and release version name. It requires an exact Play Console product ID, HTTPS Google Play Developer API verifier, protected upload keystore/password secrets, and the registered upload-certificate SHA-256 fingerprint. It verifies tests, lint, Store BuildConfig values, JAR/AAB signature, RSA key strength, certificate fingerprint, and absence of private key files before publishing only a temporary workflow artifact. It never commits a key and does not publish to a Play track.
+
+The upload key can be generated locally with `keytool` at no charge. It is not a CA-issued certificate and has no monthly fee. Google Play developer registration remains the separate US$25 one-time account fee described above. See the [Android build and upload-key instructions](../platforms/android/README.md), Google's [Play App Signing overview](https://support.google.com/googleplay/android-developer/answer/9842756), and [Android app-signing guide](https://developer.android.com/studio/publish/app-signing).
 
 ## Samsung TV
 
@@ -59,17 +88,29 @@ Samsung requires every TV application to be signed. Tizen Studio's Samsung Certi
 
 Back up the author `.p12` and its password securely. Samsung states that an update signed with a different author certificate can be treated as a different application. Public distribution uses [TV Seller Office](https://seller.samsungapps.com/tv/login) and Samsung review. The package format is a signed `.wgt`.
 
+StreamVue's manual **Build Samsung TV Store candidate** workflow keeps this boundary explicit. `store/samsung-distribution.json` must first be completed with the final package/widget/Checkout identities, original author-certificate SHA-256 fingerprint, Partner distributor readiness, Seller Office terms review, DPI product creation, and real-TV Checkout testing. The matching premium entry must name `samsung-dpi-purchase-history`. Put the signing secrets in the `samsung-store-signing` GitHub environment and protect it with a required reviewer. The workflow then verifies certificate validity/key strength and author continuity, creates a temporary Tizen profile, signs one `.wgt`, removes the certificates/profile, and publishes only a temporary manual-upload artifact. It serializes candidate jobs and does not send anything to Seller Office.
+
+For a personal TV, use the normal `pnpm tv:build` output and a locally created Samsung TV certificate profile whose distributor certificate contains that TV's DUID. The public-store candidate requires a Partner-level distributor because the app uses `sso.partner`; a personal DUID certificate is not evidence that Seller Office approval has been completed.
+
 ## LG webOS TV
 
 Personal testing uses an LG Developer account, the television's free Developer Mode app, and the webOS CLI. Developer Mode is time limited and must be extended while the TV is online; when it expires, developer-installed apps are removed. LG documents the process in [App Testing with Developer Mode](https://webostv.developer.lge.com/develop/getting-started/developer-mode-app).
 
-The store path uses LG Seller Lounge and a reviewed `.ipk` package. LG's public developer pages describe the account and submission workflow but do not publish a simple registration-price statement, so any seller fee or commercial term must be confirmed in the enrollment screen before accepting it. Local development can proceed without that enrollment.
+The documented TV web-app flow uses `ares-package` to produce an `.ipk`; unlike Samsung's WGT flow, LG's current CLI and submission instructions do not ask the developer to supply an author/distributor signing certificate. StreamVue pins the official `@webos-tools/cli` 3.2.5 package and does not invent a signing key or certificate field. The store path uses LG Seller Lounge, manual IPK upload, LG QA, a UX scenario, and a mandatory self-checklist containing actual test results. LG also requires 80×80 and 130×130 PNGs in the package, a 1920×1080 splash, and a separately uploaded 400×400 store icon. See LG's [CLI guide](https://webostv.developer.lge.com/develop/tools/cli-dev-guide), [app resources](https://webostv.developer.lge.com/develop/getting-started/app-resources), and [approval process](https://webostv.developer.lge.com/distribute/app-approval-process).
+
+StreamVue's manual **Build LG webOS Seller Lounge candidate** workflow requires the permanent `com.streamvue.player.tv` identity plus committed confirmation of the Seller account type, terms review, reviewed store icon and listing assets, UX scenario, self-checklist, privacy review, and a real-TV matrix. It then builds the free Store surface with premium media centers locked, stamps only the generated package metadata, analyzes the IPK with the pinned CLI, independently verifies the archive identity/assets and absence of source maps or key material, and publishes only a temporary manual-upload artifact with checksums. It never logs in, accepts terms, submits the app, or claims review approval.
+
+LG's public developer pages describe the account and submission workflow but do not publish a simple registration-price statement, so any seller fee or commercial term must be confirmed in the enrollment screen before accepting it. Local development can proceed without Seller Lounge enrollment.
 
 ## Apple devices
 
 An Apple Account can use Xcode's Personal Team for free on-device testing. Apple limits free personal provisioning to 10 App IDs and 3 devices per platform, and the App IDs, device registrations, and profiles expire after 7 days. This is enough to develop and test StreamVue on personally owned devices, but it requires periodic rebuild/reinstallation.
 
-App Store, TestFlight, ad-hoc, and normal long-lived distribution require the [Apple Developer Program](https://developer.apple.com/support/compare-memberships/), currently US$99 per membership year. Eligible nonprofit, educational, or government organizations can request a fee waiver. Apple does not provide a one-time-fee App Store membership. A Mac running Xcode is also required for the final native Apple build and submission.
+The generated Xcode project uses `com.streamvue.player` for iPhone, iPad, and Apple TV. Apple requires the same bundle ID when tvOS is added to one iOS App Store Connect record; this also lets the platform versions share one non-consumable purchase. Select the Personal Team for local testing and substitute an identifier available to that team if needed. A compatible Mac and local Xcode installation are required for Personal Team device signing; foundation CI only verifies unsigned simulator builds and never publishes them.
+
+App Store, TestFlight, ad-hoc, and normal long-lived distribution require the [Apple Developer Program](https://developer.apple.com/support/compare-memberships/), currently US$99 per membership year. Eligible nonprofit, educational, or government organizations can request a fee waiver. Apple does not provide a one-time-fee App Store membership, and no separate commercial certificate purchase is needed beyond that membership. Final distribution also requires registered identifiers, signing and provisioning, App Store Connect records, store artwork, accurate privacy answers, and signed Release archives.
+
+StreamVue now has a separate manual Apple candidate workflow. It requires the exact shared bundle ID, Apple Team ID, StoreKit product, verified readiness manifests, a protected Apple Distribution `.p12`, and separate iOS/tvOS App Store provisioning profiles. It resolves dependencies before exposing the temporary signing key, validates that profiles are distribution profiles for the configured team and bundle, archives both platforms, checks signatures and embedded configuration, exports IPAs, removes signing material, and stops at a reviewable artifact. It does not submit a build or change an App Store record. See [Apple build and signing instructions](../platforms/apple/README.md), Apple's [platform-addition rules](https://developer.apple.com/help/app-store-connect/create-an-app-record/add-platforms), and [upload instructions](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds/).
 
 ## Repository software license is a separate choice
 
@@ -79,4 +120,4 @@ A code-signing certificate proves who produced a binary; a software license stat
 - MIT or Apache-2.0: permissive open source and potentially eligible for free OSS signing, but others may reuse the code under the license terms.
 - A custom source-available license: more control, but not OSI-approved and generally not eligible for free OSS-signing programs.
 
-No source-license choice has been made automatically in this repository.
+No source-license choice has been made automatically in this repository. Personal Apple builds use the public GPL-3.0 KSPlayer 2.3.4 package and are not public distribution artifacts. The selected Apple Store graph is AVKit-only and omits KSPlayer; adding KSPlayer to a public binary would still require an explicit GPL-compatible or separately licensed decision. See [KSPlayer licensing](ksplayer-licensing.md).

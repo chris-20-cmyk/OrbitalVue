@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://streamvue.app/contracts/catalog/v1/schema.json",
-  "title": "StreamVue Portable Catalog",
-  "description": "The platform-neutral playlist catalog exchanged by StreamVue clients and conformance tests.",
+  "title": "OrbitalVue Portable Catalog",
+  "description": "The platform-neutral playlist catalog exchanged by OrbitalVue clients and conformance tests.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -70,7 +70,7 @@
           "maxLength": 256
         },
         "type": {
-          "enum": ["m3u-file", "m3u-url", "xtream", "generated"]
+          "enum": ["m3u-file", "m3u-url", "xtream", "plex", "emby", "generated"]
         },
         "displayLocation": {
           "description": "A safe display label. It must not contain credentials or tokens.",
@@ -107,7 +107,7 @@
           "maxLength": 512
         },
         "kind": {
-          "enum": ["live", "movie", "series", "recording", "replay"]
+          "enum": ["live", "movie", "series", "recording", "replay", "music"]
         },
         "sourceId": {
           "type": "string",
@@ -123,6 +123,9 @@
         "catchup": {
           "$ref": "#/$defs/catchup"
         },
+        "media": {
+          "$ref": "#/$defs/media"
+        },
         "tags": {
           "type": "array",
           "items": {
@@ -131,6 +134,59 @@
             "maxLength": 128
           },
           "uniqueItems": true
+        }
+      }
+    },
+    "media": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "libraryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "libraryTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "seriesTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "seasonNumber": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "episodeNumber": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "year": {
+          "type": "integer",
+          "minimum": 1888,
+          "maximum": 3000
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "resumePositionMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "played": {
+          "type": "boolean"
+        },
+        "addedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastPlayedAt": {
+          "type": "string",
+          "format": "date-time"
         }
       }
     },

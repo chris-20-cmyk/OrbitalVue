@@ -22,7 +22,8 @@ public sealed record StreamVueDiagnosticContext(
 
 public sealed class StreamVueMaintenanceService
 {
-    private const string BackupProduct = "StreamVue";
+    private const string BackupProduct = "OrbitalVue";
+    private const string LegacyBackupProduct = "StreamVue";
     private const int BackupFormatVersion = 2;
     private const int MaximumCrashLogBytes = 256 * 1024;
     private static readonly byte[] BackupEntropy = Encoding.UTF8.GetBytes("StreamVue.PortableBackup.v1");
@@ -34,7 +35,8 @@ public sealed class StreamVueMaintenanceService
         "epg-cache.v1.bin",
         "guide-source.v1.bin",
         "epg-mappings.v1.bin",
-        "xtream-credentials.v1.bin"
+        "xtream-credentials.v1.bin",
+        "media-center-credentials.v1.bin"
     ];
 
     private static readonly string[] KnownDataDirectories =
@@ -73,7 +75,7 @@ public sealed class StreamVueMaintenanceService
             {
                 var report = new
                 {
-                Format = "StreamVue diagnostics v1",
+                Format = "OrbitalVue diagnostics v1",
                 CreatedUtc = DateTimeOffset.UtcNow,
                 App = new
                 {
@@ -161,7 +163,7 @@ public sealed class StreamVueMaintenanceService
         File.Delete(temporaryPath);
 
         var files = EnumerateSavedDataFiles();
-        if (files.Length == 0) throw new InvalidOperationException("StreamVue does not have any saved data to back up yet.");
+        if (files.Length == 0) throw new InvalidOperationException("OrbitalVue does not have any saved data to back up yet.");
 
         try
         {
@@ -215,7 +217,7 @@ public sealed class StreamVueMaintenanceService
     public async Task<int> RestoreBackupAsync(string sourcePath, CancellationToken cancellationToken = default)
     {
         var fullSource = Path.GetFullPath(sourcePath);
-        if (!File.Exists(fullSource)) throw new FileNotFoundException("The StreamVue backup could not be found.", fullSource);
+        if (!File.Exists(fullSource)) throw new FileNotFoundException("The OrbitalVue backup could not be found.", fullSource);
 
         Directory.CreateDirectory(_dataRoot);
         var stagingRoot = Path.Combine(_dataRoot, $".restore-{Guid.NewGuid():N}");
@@ -224,13 +226,15 @@ public sealed class StreamVueMaintenanceService
         try
         {
             using var archive = ZipFile.OpenRead(fullSource);
-            var manifestEntry = archive.GetEntry("manifest.json") ?? throw new InvalidDataException("This is not a StreamVue backup.");
+            var manifestEntry = archive.GetEntry("manifest.json") ?? throw new InvalidDataException("This is not an OrbitalVue backup.");
             BackupManifest? manifest;
             await using (var manifestStream = manifestEntry.Open())
                 manifest = await JsonSerializer.DeserializeAsync<BackupManifest>(manifestStream, JsonOptions, cancellationToken);
 
-            if (manifest is null || manifest.Product != BackupProduct || manifest.FormatVersion is < 1 or > BackupFormatVersion)
-                throw new InvalidDataException("This backup format is not supported by this version of StreamVue.");
+            if (manifest is null ||
+                manifest.Product is not (BackupProduct or LegacyBackupProduct) ||
+                manifest.FormatVersion is < 1 or > BackupFormatVersion)
+                throw new InvalidDataException("This backup format is not supported by this version of OrbitalVue.");
             if (manifest.Files is null || manifest.Files.Any(string.IsNullOrWhiteSpace))
                 throw new InvalidDataException("The backup contains an unexpected data-file list.");
             var restoredFiles = manifest.Files.Select(NormalizeRelativePath).ToArray();

@@ -1,0 +1,8 @@
+{
+  "contractVersion": "1.0",
+  "featureId": "personal-media-centers",
+  "distributionMode": "personal",
+  "accessState": "included",
+  "acquisition": "included",
+  "receiptVerification": "not-required"
+}

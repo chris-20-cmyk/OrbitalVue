@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -23,8 +24,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AspectRatio
@@ -55,6 +58,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -69,7 +73,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -78,11 +88,16 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.streamvue.player.AppUiState
 import com.streamvue.player.ChannelSection
 import com.streamvue.player.GroupSummary
+import com.streamvue.player.PlexSignInPhase
+import com.streamvue.player.PlexSignInUiState
 import com.streamvue.player.data.Channel
+import com.streamvue.player.data.MediaLibraryBrowseMode
 import com.streamvue.player.playback.PlaybackSignal
 import com.streamvue.player.playback.StreamPlayerSurface
 import com.streamvue.player.playback.VideoScaleMode
 import com.streamvue.player.playback.rememberStreamPlayer
+import com.streamvue.player.data.MediaCenterPlaybackReport
+import com.streamvue.player.premium.PremiumBillingState
 import com.streamvue.player.ui.theme.StreamVueBackground
 import com.streamvue.player.ui.theme.StreamVueBorder
 import com.streamvue.player.ui.theme.StreamVueError
@@ -100,10 +115,19 @@ fun StreamVueApp(
     isTelevision: Boolean,
     onChooseFile: () -> Unit,
     onImportUrl: (String) -> Unit,
+    onConnectPlex: (String, String, String?, Boolean) -> Unit,
+    onStartPlexAccountSignIn: () -> Unit,
+    onCancelPlexAccountSignIn: () -> Unit,
+    onConnectDiscoveredPlexServer: (String, String, String, Boolean) -> Unit,
+    onConnectEmby: (String, String, String, String?, Boolean) -> Unit,
+    onPurchasePremium: () -> Unit,
+    onRestorePremium: () -> Unit,
     onRefresh: () -> Unit,
     onSelectGroup: (String?) -> Unit,
+    onSelectBrowseMode: (MediaLibraryBrowseMode) -> Unit,
     onQueryChanged: (String) -> Unit,
     onSelectChannel: (Channel) -> Unit,
+    onPlaybackReport: (String, MediaCenterPlaybackReport) -> Unit,
     onDismissNotice: () -> Unit,
     onDismissError: () -> Unit,
     onFullscreenChanged: (Boolean) -> Unit
@@ -112,7 +136,11 @@ fun StreamVueApp(
     var isFullscreen by remember { mutableStateOf(false) }
     var scaleMode by remember { mutableStateOf(VideoScaleMode.Auto) }
     var playbackSignal by remember(state.selectedChannel?.id) { mutableStateOf(PlaybackSignal()) }
-    val player = rememberStreamPlayer(state.selectedChannel) { playbackSignal = it }
+    val player = rememberStreamPlayer(
+        state.playbackChannel,
+        onSignal = { playbackSignal = it },
+        onPlaybackReport = onPlaybackReport
+    )
 
     LaunchedEffect(isFullscreen) { onFullscreenChanged(isFullscreen) }
     DisposableEffect(Unit) {
@@ -167,7 +195,7 @@ fun StreamVueApp(
                         state.catalog == null -> Onboarding(
                             isTelevision = isTelevision,
                             onChooseFile = onChooseFile,
-                            onConnectUrl = { showImport = true }
+                            onAddSource = { showImport = true }
                         )
                         useWideLayout -> WideLibrary(
                             state = state,
@@ -176,6 +204,7 @@ fun StreamVueApp(
                             scaleMode = scaleMode,
                             onScaleModeChanged = { scaleMode = it },
                             onSelectGroup = onSelectGroup,
+                            onSelectBrowseMode = onSelectBrowseMode,
                             onQueryChanged = onQueryChanged,
                             onSelectChannel = onSelectChannel,
                             onFullscreen = { isFullscreen = true }
@@ -187,6 +216,7 @@ fun StreamVueApp(
                             scaleMode = scaleMode,
                             onScaleModeChanged = { scaleMode = it },
                             onSelectGroup = onSelectGroup,
+                            onSelectBrowseMode = onSelectBrowseMode,
                             onQueryChanged = onQueryChanged,
                             onSelectChannel = onSelectChannel,
                             onFullscreen = { isFullscreen = true }
@@ -210,6 +240,7 @@ fun StreamVueApp(
 
     if (showImport) {
         ImportSourceDialog(
+            premiumBilling = state.premiumBilling,
             onDismiss = { showImport = false },
             onChooseFile = {
                 showImport = false
@@ -218,14 +249,28 @@ fun StreamVueApp(
             onImportUrl = { value ->
                 showImport = false
                 onImportUrl(value)
-            }
+            },
+            onConnectPlex = { address, token, name, allowHttp ->
+                showImport = false
+                onConnectPlex(address, token, name, allowHttp)
+            },
+            plexSignIn = state.plexSignIn,
+            onStartPlexAccountSignIn = onStartPlexAccountSignIn,
+            onCancelPlexAccountSignIn = onCancelPlexAccountSignIn,
+            onConnectDiscoveredPlexServer = onConnectDiscoveredPlexServer,
+            onConnectEmby = { address, username, password, name, allowHttp ->
+                showImport = false
+                onConnectEmby(address, username, password, name, allowHttp)
+            },
+            onPurchasePremium = onPurchasePremium,
+            onRestorePremium = onRestorePremium
         )
     }
 
     state.error?.let { message ->
         AlertDialog(
             onDismissRequest = onDismissError,
-            title = { Text("StreamVue needs attention") },
+            title = { Text("OrbitalVue needs attention") },
             text = { Text(message) },
             confirmButton = {
                 Button(onClick = onDismissError) { Text("Got it") }
@@ -266,7 +311,7 @@ private fun AppHeader(
         Spacer(modifier = Modifier.width(12.dp))
         Column {
             Text(
-                text = "STREAMVUE",
+                text = "ORBITALVUE",
                 color = StreamVueText,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 2.sp,
@@ -274,7 +319,11 @@ private fun AppHeader(
             )
             Text(
                 text = if (state.catalog == null) "YOUR SIGNAL. BEAUTIFULLY ORGANIZED."
-                else "${state.catalog.channels.size.toStringWithCommas()} CHANNELS  •  ${state.groups.size.toStringWithCommas()} GROUPS",
+                else if (state.isMediaCenterSource) {
+                    "${state.catalog.channels.size.toStringWithCommas()} ITEMS  •  ${state.groups.size.toStringWithCommas()} LIBRARIES"
+                } else {
+                    "${state.catalog.channels.size.toStringWithCommas()} CHANNELS  •  ${state.groups.size.toStringWithCommas()} GROUPS"
+                },
                 color = StreamVueMuted,
                 fontSize = if (compact) 8.sp else 10.sp,
                 maxLines = 1,
@@ -288,11 +337,11 @@ private fun AppHeader(
             Spacer(modifier = Modifier.width(10.dp))
         }
         IconButton(onClick = onRefresh, enabled = state.catalog != null && !state.isLoading) {
-            Icon(Icons.Rounded.Refresh, contentDescription = "Refresh playlist")
+            Icon(Icons.Rounded.Refresh, contentDescription = "Refresh source")
         }
         if (compact) {
             IconButton(onClick = onAddSource) {
-                Icon(Icons.Rounded.Add, contentDescription = "Add playlist")
+                Icon(Icons.Rounded.Add, contentDescription = "Add source")
             }
         } else {
             Button(onClick = onAddSource) {
@@ -353,6 +402,7 @@ private fun WideLibrary(
     scaleMode: VideoScaleMode,
     onScaleModeChanged: (VideoScaleMode) -> Unit,
     onSelectGroup: (String?) -> Unit,
+    onSelectBrowseMode: (MediaLibraryBrowseMode) -> Unit,
     onQueryChanged: (String) -> Unit,
     onSelectChannel: (Channel) -> Unit,
     onFullscreen: () -> Unit
@@ -366,12 +416,14 @@ private fun WideLibrary(
         GroupsPanel(
             groups = state.groups,
             totalChannels = state.catalog?.channels?.size ?: 0,
+            isMediaCenter = state.isMediaCenterSource,
             selectedGroup = state.selectedGroup,
             onSelectGroup = onSelectGroup,
             modifier = Modifier.width(220.dp).fillMaxHeight()
         )
         ChannelBrowser(
             state = state,
+            onSelectBrowseMode = onSelectBrowseMode,
             onQueryChanged = onQueryChanged,
             onSelectChannel = onSelectChannel,
             modifier = Modifier.width(360.dp).fillMaxHeight()
@@ -396,6 +448,7 @@ private fun CompactLibrary(
     scaleMode: VideoScaleMode,
     onScaleModeChanged: (VideoScaleMode) -> Unit,
     onSelectGroup: (String?) -> Unit,
+    onSelectBrowseMode: (MediaLibraryBrowseMode) -> Unit,
     onQueryChanged: (String) -> Unit,
     onSelectChannel: (Channel) -> Unit,
     onFullscreen: () -> Unit
@@ -422,6 +475,7 @@ private fun CompactLibrary(
         )
         ChannelBrowser(
             state = state,
+            onSelectBrowseMode = onSelectBrowseMode,
             onQueryChanged = onQueryChanged,
             onSelectChannel = onSelectChannel,
             modifier = Modifier.fillMaxWidth().weight(1f)
@@ -433,6 +487,7 @@ private fun CompactLibrary(
 private fun GroupsPanel(
     groups: List<GroupSummary>,
     totalChannels: Int,
+    isMediaCenter: Boolean,
     selectedGroup: String?,
     onSelectGroup: (String?) -> Unit,
     modifier: Modifier = Modifier
@@ -445,12 +500,14 @@ private fun GroupsPanel(
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                "CHANNEL GROUPS",
+                if (isMediaCenter) "MEDIA LIBRARIES" else "CHANNEL GROUPS",
                 color = StreamVueMuted,
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.5.sp,
-                modifier = Modifier.padding(8.dp)
+                modifier = Modifier
+                    .padding(8.dp)
+                    .semantics { heading() }
             )
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -458,7 +515,7 @@ private fun GroupsPanel(
             ) {
                 item(key = "all") {
                     GroupRow(
-                        name = "All channels",
+                        name = if (isMediaCenter) "All media" else "All channels",
                         count = totalChannels,
                         selected = selectedGroup == null,
                         onClick = { onSelectGroup(null) }
@@ -489,7 +546,10 @@ private fun GroupRow(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged { focused = it.isFocused },
+            .onFocusChanged { focused = it.isFocused }
+            .semantics {
+                stateDescription = if (selected) "Selected" else "Not selected"
+            },
         color = if (selected) StreamVueTealDim else Color.Transparent,
         shape = RoundedCornerShape(11.dp),
         border = when {
@@ -544,6 +604,7 @@ private fun GroupChips(
 @Composable
 private fun ChannelBrowser(
     state: AppUiState,
+    onSelectBrowseMode: (MediaLibraryBrowseMode) -> Unit,
     onQueryChanged: (String) -> Unit,
     onSelectChannel: (Channel) -> Unit,
     modifier: Modifier = Modifier
@@ -556,13 +617,25 @@ private fun ChannelBrowser(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.padding(14.dp)) {
+                if (state.isMediaCenterSource) {
+                    MediaBrowseChips(
+                        state = state,
+                        onSelectBrowseMode = onSelectBrowseMode
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
                 OutlinedTextField(
                     value = state.query,
                     onValueChange = onQueryChanged,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
-                    placeholder = { Text("Search channels or groups") },
+                    placeholder = {
+                        Text(
+                            if (state.isMediaCenterSource) "Search media or libraries"
+                            else "Search channels or groups"
+                        )
+                    },
                     leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -577,7 +650,11 @@ private fun ChannelBrowser(
             HorizontalDivider(color = StreamVueBorder)
             if (state.visibleChannels.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No channels match this view", color = StreamVueMuted)
+                    Text(
+                        if (state.isMediaCenterSource) "No media matches this view"
+                        else "No channels match this view",
+                        color = StreamVueMuted
+                    )
                 }
             } else {
                 ChannelSections(
@@ -587,6 +664,38 @@ private fun ChannelBrowser(
                     modifier = Modifier.fillMaxSize()
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun MediaBrowseChips(
+    state: AppUiState,
+    onSelectBrowseMode: (MediaLibraryBrowseMode) -> Unit
+) {
+    val order = listOf(
+        MediaLibraryBrowseMode.All,
+        MediaLibraryBrowseMode.ContinueWatching,
+        MediaLibraryBrowseMode.RecentlyAdded,
+        MediaLibraryBrowseMode.Live,
+        MediaLibraryBrowseMode.Movies,
+        MediaLibraryBrowseMode.Series
+    )
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        items(order, key = MediaLibraryBrowseMode::name) { mode ->
+            val count = when (mode) {
+                MediaLibraryBrowseMode.All -> state.catalog?.channels?.size ?: 0
+                MediaLibraryBrowseMode.ContinueWatching -> state.browseSummary.continueWatchingCount
+                MediaLibraryBrowseMode.RecentlyAdded -> state.browseSummary.recentlyAddedCount
+                MediaLibraryBrowseMode.Live -> state.catalog?.channels?.count { it.kind.label == "LIVE" } ?: 0
+                MediaLibraryBrowseMode.Movies -> state.browseSummary.movieCount
+                MediaLibraryBrowseMode.Series -> state.browseSummary.seriesCount
+            }
+            FilterChip(
+                selected = state.browseMode == mode,
+                onClick = { onSelectBrowseMode(mode) },
+                label = { Text("${mode.label} $count", maxLines = 1) }
+            )
         }
     }
 }
@@ -679,14 +788,32 @@ private fun ChannelRow(channel: Channel, selected: Boolean, onClick: () -> Unit)
                 )
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
-                    channel.group,
+                    channel.mediaMetadataLine ?: channel.group,
                     color = StreamVueMuted,
                     fontSize = 9.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                channel.watchProgress?.let { progress ->
+                    Spacer(modifier = Modifier.height(5.dp))
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth().height(3.dp),
+                        color = StreamVueTeal,
+                        trackColor = StreamVueBorder
+                    )
+                    channel.watchProgressLabel?.let { label ->
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(label, color = StreamVueTeal, fontSize = 8.sp, maxLines = 1)
+                    }
+                }
             }
-            Text(channel.kind.label, color = StreamVueTeal, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+            Text(
+                if (channel.canResume) "RESUME" else channel.kind.label,
+                color = StreamVueTeal,
+                fontSize = 7.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
@@ -818,7 +945,11 @@ private fun PlaybackStatus(signal: PlaybackSignal) {
         signal.isBuffering -> Color(0xFFFFC36A)
         else -> StreamVueTeal
     }
-    Surface(shape = RoundedCornerShape(30.dp), color = color.copy(alpha = 0.13f)) {
+    Surface(
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        shape = RoundedCornerShape(30.dp),
+        color = color.copy(alpha = 0.13f)
+    ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -846,7 +977,11 @@ private fun AspectModeMenu(
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { expanded = true }, enabled = enabled) {
+        IconButton(
+            onClick = { expanded = true },
+            enabled = enabled,
+            modifier = Modifier.semantics { stateDescription = "Current ratio ${mode.label}" }
+        ) {
             Icon(Icons.Rounded.AspectRatio, contentDescription = "Change screen ratio")
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -918,7 +1053,7 @@ private fun LoadingLibrary(label: String) {
 private fun Onboarding(
     isTelevision: Boolean,
     onChooseFile: () -> Unit,
-    onConnectUrl: () -> Unit
+    onAddSource: () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) {
         Surface(
@@ -938,14 +1073,14 @@ private fun Onboarding(
                 }
                 Spacer(modifier = Modifier.height(22.dp))
                 Text(
-                    "Bring your channels into focus",
+                    "Bring your content into focus",
                     color = StreamVueText,
                     fontWeight = FontWeight.Black,
                     fontSize = if (isTelevision) 30.sp else 24.sp
                 )
                 Spacer(modifier = Modifier.height(9.dp))
                 Text(
-                    "Connect your own M3U or M3U8 source. StreamVue keeps the playlist private, preserves every group, and refreshes online sources when the app opens.",
+                    "Connect an M3U playlist or your personal Plex or Emby server. OrbitalVue protects credentials on this device and refreshes the active library when the app opens.",
                     color = StreamVueMuted,
                     fontSize = if (isTelevision) 15.sp else 12.sp,
                     lineHeight = if (isTelevision) 23.sp else 19.sp
@@ -957,15 +1092,15 @@ private fun Onboarding(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Choose M3U file")
                     }
-                    Button(onClick = onConnectUrl) {
+                    Button(onClick = onAddSource) {
                         Icon(Icons.Rounded.Link, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Connect URL")
+                        Text("Add a source")
                     }
                 }
                 Spacer(modifier = Modifier.height(17.dp))
                 Text(
-                    "StreamVue is a player. It never bundles or sells channels.",
+                    "OrbitalVue is a player. It never bundles or sells content.",
                     color = StreamVueMuted,
                     fontSize = 9.sp
                 )
@@ -976,42 +1111,319 @@ private fun Onboarding(
 
 @Composable
 private fun ImportSourceDialog(
+    premiumBilling: PremiumBillingState,
     onDismiss: () -> Unit,
     onChooseFile: () -> Unit,
-    onImportUrl: (String) -> Unit
+    onImportUrl: (String) -> Unit,
+    onConnectPlex: (String, String, String?, Boolean) -> Unit,
+    plexSignIn: PlexSignInUiState,
+    onStartPlexAccountSignIn: () -> Unit,
+    onCancelPlexAccountSignIn: () -> Unit,
+    onConnectDiscoveredPlexServer: (String, String, String, Boolean) -> Unit,
+    onConnectEmby: (String, String, String, String?, Boolean) -> Unit,
+    onPurchasePremium: () -> Unit,
+    onRestorePremium: () -> Unit
 ) {
-    var url by remember { mutableStateOf("") }
+    val premiumAccess = premiumBilling.access
+    var mode by remember { mutableStateOf(SourceImportMode.Playlist) }
+    var playlistUrl by remember { mutableStateOf("") }
+    var serverAddress by remember { mutableStateOf("") }
+    var displayName by remember { mutableStateOf("") }
+    var plexToken by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var allowInsecureHttp by remember { mutableStateOf(false) }
+    var showManualPlex by remember { mutableStateOf(false) }
+    var accountConnectSubmitted by remember { mutableStateOf(false) }
+    val usesCleartextHttp = serverAddress.trim().startsWith("http://", ignoreCase = true)
+    val canConnect = when (mode) {
+        SourceImportMode.Playlist -> playlistUrl.isNotBlank()
+        SourceImportMode.Plex -> showManualPlex && premiumAccess.canUseMediaCenters &&
+            serverAddress.isNotBlank() && plexToken.isNotBlank() &&
+            (!usesCleartextHttp || allowInsecureHttp)
+        SourceImportMode.Emby -> premiumAccess.canUseMediaCenters && serverAddress.isNotBlank() && username.isNotBlank() &&
+            password.isNotEmpty() && (!usesCleartextHttp || allowInsecureHttp)
+    }
+
+    LaunchedEffect(mode) {
+        if (mode != SourceImportMode.Plex) onCancelPlexAccountSignIn()
+    }
+    LaunchedEffect(plexSignIn.phase) {
+        if (accountConnectSubmitted && plexSignIn.phase == PlexSignInPhase.Idle) onDismiss()
+    }
+    DisposableEffect(Unit) {
+        onDispose { onCancelPlexAccountSignIn() }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Connect a playlist") },
+        title = { Text("Add a source") },
         text = {
-            Column {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 540.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Text(
-                    "Paste a direct M3U/M3U8 URL or choose a file already on this device.",
+                    "Choose a private playlist or connect a premium personal media server.",
                     color = StreamVueMuted,
                     fontSize = 12.sp
                 )
+                Spacer(modifier = Modifier.height(14.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(SourceImportMode.entries, key = SourceImportMode::name) { option ->
+                        FilterChip(
+                            selected = mode == option,
+                            onClick = {
+                                mode = option
+                                if (!usesCleartextHttp) allowInsecureHttp = false
+                            },
+                            label = { Text(option.label) }
+                        )
+                    }
+                }
                 Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = { url = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Playlist URL") },
-                    placeholder = { Text("https://provider.example/list.m3u") },
-                    leadingIcon = { Icon(Icons.Rounded.Link, contentDescription = null) },
-                    singleLine = true
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                FilledTonalButton(onClick = onChooseFile, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Rounded.FileOpen, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Choose M3U file")
+
+                if (mode == SourceImportMode.Playlist) {
+                    OutlinedTextField(
+                        value = playlistUrl,
+                        onValueChange = { playlistUrl = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Playlist URL") },
+                        placeholder = { Text("https://provider.example/list.m3u") },
+                        leadingIcon = { Icon(Icons.Rounded.Link, contentDescription = null) },
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    FilledTonalButton(onClick = onChooseFile, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Rounded.FileOpen, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Choose M3U file")
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        "Online playlists refresh at launch. OrbitalVue never uploads your list.",
+                        color = StreamVueMuted,
+                        fontSize = 10.sp
+                    )
+                } else {
+                    Text(
+                        "${mode.label.uppercase()}  •  ${premiumAccess.badgeText}",
+                        color = StreamVueTeal,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        if (premiumAccess.canUseMediaCenters) premiumAccess.explanation else premiumBilling.message,
+                        color = if (premiumAccess.canUseMediaCenters) StreamVueMuted else Color(0xFFFFC36A),
+                        fontSize = 10.sp
+                    )
+                    if (!premiumAccess.canUseMediaCenters &&
+                        (premiumBilling.isBusy || premiumBilling.canPurchase || premiumBilling.canRestore)) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        if (premiumBilling.isBusy) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = StreamVueTeal
+                                )
+                                Spacer(modifier = Modifier.width(9.dp))
+                                Text("Checking purchase status…", color = StreamVueMuted, fontSize = 10.sp)
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            if (premiumBilling.canPurchase) {
+                                Button(
+                                    onClick = onPurchasePremium,
+                                    enabled = !premiumBilling.isBusy,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        premiumBilling.localizedPrice?.let { "Buy once — $it" }
+                                            ?: "Buy once"
+                                    )
+                                }
+                            }
+                            if (premiumBilling.canRestore) {
+                                OutlinedButton(
+                                    onClick = onRestorePremium,
+                                    enabled = !premiumBilling.isBusy,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Restore purchase")
+                                }
+                            }
+                        }
+                    }
+                    if (mode == SourceImportMode.Plex && !showManualPlex) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        PlexAccountConnectPanel(
+                            state = plexSignIn,
+                            enabled = premiumAccess.canUseMediaCenters,
+                            onStart = {
+                                accountConnectSubmitted = false
+                                onStartPlexAccountSignIn()
+                            },
+                            onCancel = onCancelPlexAccountSignIn,
+                            onConnect = { sessionId, serverId, connectionUrl, allowHttp ->
+                                accountConnectSubmitted = true
+                                onConnectDiscoveredPlexServer(sessionId, serverId, connectionUrl, allowHttp)
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedButton(
+                            onClick = {
+                                onCancelPlexAccountSignIn()
+                                showManualPlex = true
+                            },
+                            enabled = premiumAccess.canUseMediaCenters,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Advanced: connect with server token")
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                        value = serverAddress,
+                        onValueChange = {
+                            serverAddress = it
+                            if (!it.trim().startsWith("http://", true)) allowInsecureHttp = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Server address") },
+                        placeholder = { Text("https://media-server.example:port") },
+                        leadingIcon = { Icon(Icons.Rounded.Tv, contentDescription = null) },
+                        enabled = premiumAccess.canUseMediaCenters,
+                        singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                        value = displayName,
+                        onValueChange = { displayName = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Server nickname (optional)") },
+                        enabled = premiumAccess.canUseMediaCenters,
+                        singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        if (mode == SourceImportMode.Plex) {
+                            OutlinedTextField(
+                            value = plexToken,
+                            onValueChange = { plexToken = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Plex server token") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            enabled = premiumAccess.canUseMediaCenters,
+                            singleLine = true
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                            "Manual connection stores only this server-scoped token. Plex account sign-in remains the recommended option.",
+                            color = StreamVueMuted,
+                            fontSize = 9.sp
+                            )
+                        } else {
+                            OutlinedTextField(
+                            value = username,
+                            onValueChange = { username = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Emby username") },
+                            enabled = premiumAccess.canUseMediaCenters,
+                            singleLine = true
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Emby password") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            enabled = premiumAccess.canUseMediaCenters,
+                            singleLine = true
+                            )
+                        }
+
+                        if (usesCleartextHttp) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        HorizontalDivider(color = StreamVueBorder)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Allow unencrypted local connection",
+                                    color = Color(0xFFFFC36A),
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 11.sp
+                                )
+                                Text(
+                                    "HTTP can expose sign-in and viewing activity on this network.",
+                                    color = StreamVueMuted,
+                                    fontSize = 9.sp
+                                )
+                            }
+                            Switch(
+                                checked = allowInsecureHttp,
+                                onCheckedChange = { allowInsecureHttp = it },
+                                enabled = premiumAccess.canUseMediaCenters
+                            )
+                        }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                        "The server is verified before credentials are sent. Tokens are encrypted by Android Keystore and never written into the saved library.",
+                        color = StreamVueMuted,
+                        fontSize = 9.sp
+                        )
+                        if (mode == SourceImportMode.Plex) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            TextButton(
+                                onClick = {
+                                    showManualPlex = false
+                                    accountConnectSubmitted = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Use Plex account sign-in")
+                            }
+                        }
+                    }
                 }
             }
         },
         confirmButton = {
-            Button(onClick = { onImportUrl(url) }, enabled = url.isNotBlank()) {
-                Text("Connect")
+            if (mode != SourceImportMode.Plex || showManualPlex) Button(
+                onClick = {
+                    val name = displayName.trim().takeIf(String::isNotEmpty)
+                    when (mode) {
+                        SourceImportMode.Playlist -> onImportUrl(playlistUrl.trim())
+                        SourceImportMode.Plex -> onConnectPlex(
+                            serverAddress.trim(),
+                            plexToken.trim(),
+                            name,
+                            usesCleartextHttp && allowInsecureHttp
+                        )
+                        SourceImportMode.Emby -> onConnectEmby(
+                            serverAddress.trim(),
+                            username.trim(),
+                            password,
+                            name,
+                            usesCleartextHttp && allowInsecureHttp
+                        )
+                    }
+                },
+                enabled = canConnect
+            ) {
+                Text(if (mode == SourceImportMode.Playlist) "Connect" else "Connect ${mode.label}")
             }
         },
         dismissButton = {
@@ -1020,10 +1432,18 @@ private fun ImportSourceDialog(
     )
 }
 
+private enum class SourceImportMode(val label: String) {
+    Playlist("Playlist"),
+    Plex("Plex"),
+    Emby("Emby")
+}
+
 @Composable
 private fun NoticeBanner(message: String, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
-        modifier = modifier.widthIn(max = 680.dp),
+        modifier = modifier
+            .widthIn(max = 680.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
         color = Color(0xF2142630),
         shape = RoundedCornerShape(14.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, StreamVueTeal.copy(alpha = 0.3f)),

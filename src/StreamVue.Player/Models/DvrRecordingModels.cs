@@ -144,7 +144,7 @@ public sealed record DvrScheduleRow(
                 ? "Background recorder is armed for this program"
                 : "Added automatically by an advanced series rule",
             "Recording" => "Recording is in progress",
-            "Completed" => "Saved to the StreamVue recordings folder",
+            "Completed" => "Saved to the OrbitalVue recordings folder",
             "Partial" => "A playable segment was preserved after the provider stream ended",
             "Missed" => "The recorder was not running during this program",
             "Failed" => "The provider stream could not be recorded",

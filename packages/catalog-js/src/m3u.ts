@@ -74,8 +74,10 @@ function parseMetadata(line: string): PendingChannel {
     referrer: attributes.get("http-referrer"),
     catchupMode: attributes.get("catchup"),
     catchupSource: attributes.get("catchup-source"),
-    catchupDays: Number.isFinite(parsedDays) ? Math.max(0, parsedDays) : 0,
-    catchupCorrectionMinutes: Number.isFinite(parsedCorrection) ? Math.trunc(parsedCorrection * 60) : 0
+    catchupDays: Number.isFinite(parsedDays) ? Math.min(Math.max(0, parsedDays), 365) : 0,
+    catchupCorrectionMinutes: Number.isFinite(parsedCorrection)
+      ? Math.min(Math.max(Math.trunc(parsedCorrection * 60), -1_440), 1_440)
+      : 0
   };
 }
 

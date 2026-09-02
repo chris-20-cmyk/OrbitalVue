@@ -1,0 +1,380 @@
+name: Build Samsung TV Store candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Samsung TV package version (major.minor.patch)
+        required: true
+        default: 5.7.0
+
+permissions:
+  contents: read
+
+concurrency:
+  group: streamvue-samsung-store-candidate
+  cancel-in-progress: false
+
+jobs:
+  samsung-preflight:
+    name: Seller Office and DPI readiness before signing access
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SAMSUNG_PACKAGE_VERSION: ${{ inputs.version }}
+      SAMSUNG_CHECKOUT_APP_ID: ${{ vars.STREAMVUE_SAMSUNG_APP_ID }}
+      SAMSUNG_PREMIUM_PRODUCT_ID: ${{ vars.STREAMVUE_SAMSUNG_PREMIUM_PRODUCT_ID }}
+      SAMSUNG_VERIFICATION_URL: ${{ vars.STREAMVUE_SAMSUNG_VERIFICATION_URL }}
+      SAMSUNG_AUTHOR_CERT_SHA256: ${{ vars.STREAMVUE_SAMSUNG_AUTHOR_CERT_SHA256 }}
+    steps:
+      - name: Check out OrbitalVue
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Prove exact public readiness before requesting signing-environment access
+        shell: bash
+        run: |
+          required=(
+            SAMSUNG_CHECKOUT_APP_ID
+            SAMSUNG_PREMIUM_PRODUCT_ID
+            SAMSUNG_VERIFICATION_URL
+            SAMSUNG_AUTHOR_CERT_SHA256
+          )
+          missing=()
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then missing+=("$name"); fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required Samsung repository variables: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+          node tools/stamp-samsung-package-version.mjs \
+            --version "$SAMSUNG_PACKAGE_VERSION" \
+            --validate-only
+          node tools/verify-cross-platform-release-contract.mjs
+          node tools/verify-privacy-readiness.mjs --require-ready samsung
+          node tools/verify-public-site-readiness.mjs --require-ready
+          node tools/verify-store-listing-readiness.mjs --require-ready samsung
+          node tools/verify-accessibility-readiness.mjs --require-ready samsung
+          node tools/verify-premium-store-readiness.mjs \
+            --require-ready samsung \
+            --expect-product-id samsung "$SAMSUNG_PREMIUM_PRODUCT_ID" \
+            --expect-verification-provider samsung samsung-dpi-purchase-history
+          node tools/verify-premium-verifier-readiness.mjs \
+            --require-ready samsung \
+            --expect-url samsung "$SAMSUNG_VERIFICATION_URL"
+          node tools/verify-samsung-distribution-readiness.mjs \
+            --require-ready \
+            --expect-checkout-application-id "$SAMSUNG_CHECKOUT_APP_ID" \
+            --expect-verifier-url "$SAMSUNG_VERIFICATION_URL" \
+            --expect-author-certificate-sha256 "$SAMSUNG_AUTHOR_CERT_SHA256"
+
+  samsung-candidate:
+    name: Author and partner-distributor signed WGT
+    needs: samsung-preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: samsung-store-signing
+    env:
+      SAMSUNG_PACKAGE_VERSION: ${{ inputs.version }}
+      SAMSUNG_CHECKOUT_APP_ID: ${{ vars.STREAMVUE_SAMSUNG_APP_ID }}
+      SAMSUNG_PREMIUM_PRODUCT_ID: ${{ vars.STREAMVUE_SAMSUNG_PREMIUM_PRODUCT_ID }}
+      SAMSUNG_VERIFICATION_URL: ${{ vars.STREAMVUE_SAMSUNG_VERIFICATION_URL }}
+      SAMSUNG_AUTHOR_CERT_SHA256: ${{ vars.STREAMVUE_SAMSUNG_AUTHOR_CERT_SHA256 }}
+      TIZEN_WEB_CLI_URL: https://download.tizen.org/sdk/Installer/tizen-studio_6.1/web-cli_Tizen_Studio_6.1_ubuntu-64.bin
+      TIZEN_WEB_CLI_SHA256: 7F33FE09EDA4EB5D50463CF997E8F676D455060720470070AE1932994413AAF4
+    steps:
+      - name: Check out OrbitalVue
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Reconfirm exact Seller Office, DPI, and signing continuity readiness
+        shell: bash
+        run: |
+          required=(
+            SAMSUNG_CHECKOUT_APP_ID
+            SAMSUNG_PREMIUM_PRODUCT_ID
+            SAMSUNG_VERIFICATION_URL
+            SAMSUNG_AUTHOR_CERT_SHA256
+          )
+          missing=()
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then missing+=("$name"); fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required Samsung repository variables: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+          node tools/stamp-samsung-package-version.mjs \
+            --version "$SAMSUNG_PACKAGE_VERSION" \
+            --validate-only
+          node tools/verify-premium-store-readiness.mjs \
+            --require-ready samsung \
+            --expect-product-id samsung "$SAMSUNG_PREMIUM_PRODUCT_ID" \
+            --expect-verification-provider samsung samsung-dpi-purchase-history
+          node tools/verify-premium-verifier-readiness.mjs \
+            --require-ready samsung \
+            --expect-url samsung "$SAMSUNG_VERIFICATION_URL"
+          node tools/verify-samsung-distribution-readiness.mjs \
+            --require-ready \
+            --expect-checkout-application-id "$SAMSUNG_CHECKOUT_APP_ID" \
+            --expect-verifier-url "$SAMSUNG_VERIFICATION_URL" \
+            --expect-author-certificate-sha256 "$SAMSUNG_AUTHOR_CERT_SHA256"
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test and assemble the locked Store project
+        shell: bash
+        env:
+          VITE_STREAMVUE_DISTRIBUTION_MODE: store
+          VITE_STREAMVUE_SAMSUNG_APP_ID: ${{ env.SAMSUNG_CHECKOUT_APP_ID }}
+          VITE_STREAMVUE_SAMSUNG_PRODUCT_ID: ${{ env.SAMSUNG_PREMIUM_PRODUCT_ID }}
+          VITE_STREAMVUE_SAMSUNG_VERIFICATION_URL: ${{ env.SAMSUNG_VERIFICATION_URL }}
+        run: |
+          node contracts/validate-contract.mjs
+          pnpm entitlements:build
+          pnpm entitlements:test
+          pnpm media-centers:test
+          pnpm tv:check
+          pnpm tv:test
+          pnpm tv:build
+          node tools/stamp-samsung-package-version.mjs \
+            --project platforms/tv-web/dist/samsung \
+            --version "$SAMSUNG_PACKAGE_VERSION"
+
+          project='platforms/tv-web/dist/samsung'
+          test -s "$project/config.xml"
+          test -s "$project/index.html"
+          grep -Fq 'id="https://orbitalvue.app/tv"' "$project/config.xml"
+          grep -Fq 'id="OvTvPlayer.OrbitalVue"' "$project/config.xml"
+          grep -Fq 'package="OvTvPlayer"' "$project/config.xml"
+          grep -Fq "version=\"$SAMSUNG_PACKAGE_VERSION\"" "$project/config.xml"
+          grep -Fq '\$WEBAPIS/webapis/webapis.js' "$project/index.html"
+          grep -RFq -- "$SAMSUNG_CHECKOUT_APP_ID" "$project/assets"
+          grep -RFq -- "$SAMSUNG_PREMIUM_PRODUCT_ID" "$project/assets"
+          grep -RFq -- "$SAMSUNG_VERIFICATION_URL" "$project/assets"
+          if find "$project" -name '*.map' -print -quit | grep -q .; then
+            echo 'Samsung Store projects must not contain source maps.' >&2
+            exit 1
+          fi
+
+      - name: Install pinned Tizen Web CLI
+        shell: bash
+        run: |
+          installer="$RUNNER_TEMP/tizen-web-cli.bin"
+          curl --fail --location --silent --show-error \
+            --output "$installer" \
+            "$TIZEN_WEB_CLI_URL"
+          printf '%s  %s\n' "$TIZEN_WEB_CLI_SHA256" "$installer" | sha256sum --check --strict
+          chmod 700 "$installer"
+          tizen_root="$RUNNER_TEMP/tizen-studio"
+          "$installer" --accept-license "$tizen_root"
+          test -x "$tizen_root/tools/ide/bin/tizen"
+          echo "$tizen_root/tools/ide/bin" >> "$GITHUB_PATH"
+          echo "$tizen_root/tools" >> "$GITHUB_PATH"
+          echo "STREAMVUE_TIZEN_ROOT=$tizen_root" >> "$GITHUB_ENV"
+
+      - name: Restore and verify protected Tizen certificates
+        shell: bash
+        env:
+          SAMSUNG_AUTHOR_CERTIFICATE_BASE64: ${{ secrets.STREAMVUE_SAMSUNG_AUTHOR_CERTIFICATE_BASE64 }}
+          SAMSUNG_AUTHOR_CERTIFICATE_PASSWORD: ${{ secrets.STREAMVUE_SAMSUNG_AUTHOR_CERTIFICATE_PASSWORD }}
+          SAMSUNG_DISTRIBUTOR_CERTIFICATE_BASE64: ${{ secrets.STREAMVUE_SAMSUNG_DISTRIBUTOR_CERTIFICATE_BASE64 }}
+          SAMSUNG_DISTRIBUTOR_CERTIFICATE_PASSWORD: ${{ secrets.STREAMVUE_SAMSUNG_DISTRIBUTOR_CERTIFICATE_PASSWORD }}
+        run: |
+          required=(
+            SAMSUNG_AUTHOR_CERTIFICATE_BASE64
+            SAMSUNG_AUTHOR_CERTIFICATE_PASSWORD
+            SAMSUNG_DISTRIBUTOR_CERTIFICATE_BASE64
+            SAMSUNG_DISTRIBUTOR_CERTIFICATE_PASSWORD
+          )
+          missing=()
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then missing+=("$name"); fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required Samsung signing secrets: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
+          umask 077
+          signing_root="$RUNNER_TEMP/streamvue-samsung-signing"
+          mkdir -p "$signing_root/profiles"
+          author="$signing_root/author.p12"
+          distributor="$signing_root/distributor.p12"
+          author_pem="$signing_root/author.pem"
+          distributor_pem="$signing_root/distributor.pem"
+          printf '%s' "$SAMSUNG_AUTHOR_CERTIFICATE_BASE64" | base64 --decode > "$author"
+          printf '%s' "$SAMSUNG_DISTRIBUTOR_CERTIFICATE_BASE64" | base64 --decode > "$distributor"
+          test -s "$author" && test -s "$distributor"
+
+          for role in author distributor; do
+            p12_var="$role"
+            p12="${!p12_var}"
+            upper_role="$(tr '[:lower:]' '[:upper:]' <<< "$role")"
+            password_var="SAMSUNG_${upper_role}_CERTIFICATE_PASSWORD"
+            password="${!password_var}"
+            export STREAMVUE_P12_PASSWORD="$password"
+            info="$(openssl pkcs12 -in "$p12" -passin env:STREAMVUE_P12_PASSWORD -info -noout 2>&1)"
+            grep -Fq 'Shrouded Keybag' <<< "$info" || {
+              echo "The Samsung $role PKCS#12 file does not contain a protected private key." >&2
+              exit 1
+            }
+            pem="$signing_root/$role.pem"
+            openssl pkcs12 -in "$p12" -passin env:STREAMVUE_P12_PASSWORD -clcerts -nokeys -out "$pem"
+            openssl x509 -in "$pem" -checkend 0 -noout
+            key_bits="$(openssl x509 -in "$pem" -pubkey -noout | openssl pkey -pubin -text -noout | sed -nE 's/.*Public-Key: \(([0-9]+) bit\).*/\1/p' | head -n 1)"
+            if [[ -z "$key_bits" || "$key_bits" -lt 2048 ]]; then
+              echo "The Samsung $role certificate must use RSA 2048 bits or stronger." >&2
+              exit 1
+            fi
+            unset STREAMVUE_P12_PASSWORD
+          done
+
+          actual_author_fingerprint="$(openssl x509 -in "$author_pem" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          expected_author_fingerprint="$(tr -d ':' <<< "$SAMSUNG_AUTHOR_CERT_SHA256" | tr '[:lower:]' '[:upper:]')"
+          if [[ ! "$expected_author_fingerprint" =~ ^[0-9A-F]{64}$ || "$actual_author_fingerprint" != "$expected_author_fingerprint" ]]; then
+            echo 'The author certificate does not match the continuity fingerprint registered for OrbitalVue.' >&2
+            exit 1
+          fi
+
+          tizen security-profiles add \
+            -n OrbitalVueCandidate \
+            -a "$author" \
+            -p "$SAMSUNG_AUTHOR_CERTIFICATE_PASSWORD" \
+            -d "$distributor" \
+            -dp "$SAMSUNG_DISTRIBUTOR_CERTIFICATE_PASSWORD" \
+            -- "$signing_root/profiles"
+          profile_file="$signing_root/profiles/profiles.xml"
+          test -s "$profile_file"
+          tizen cli-config -g default.profiles.path="$profile_file"
+          echo "STREAMVUE_SAMSUNG_SIGNING_ROOT=$signing_root" >> "$GITHUB_ENV"
+          echo "STREAMVUE_SAMSUNG_AUTHOR_FINGERPRINT=$actual_author_fingerprint" >> "$GITHUB_ENV"
+
+      - name: Build and sign the Seller Office candidate
+        shell: bash
+        run: |
+          project='platforms/tv-web/dist/samsung'
+          tizen build-web -- "$project"
+          test -d "$project/.buildResult"
+          tizen package -t wgt -s OrbitalVueCandidate -- "$project/.buildResult"
+
+          mapfile -t packages < <(find "$project/.buildResult" -maxdepth 1 -type f -name '*.wgt' -print)
+          if [[ "${#packages[@]}" != 1 || ! -s "${packages[0]}" ]]; then
+            echo 'Tizen packaging must produce exactly one non-empty WGT.' >&2
+            exit 1
+          fi
+          package="${packages[0]}"
+          listing="$(unzip -Z1 "$package")"
+          grep -Fxq 'author-signature.xml' <<< "$listing"
+          grep -Fxq 'signature1.xml' <<< "$listing"
+          grep -Fxq 'config.xml' <<< "$listing"
+          grep -Fxq 'index.html' <<< "$listing"
+          if grep -Eiq '\.(p12|pfx|pem|jks|keystore)$|(^|/)profiles\.xml$|\.map$' <<< "$listing"; then
+            echo 'The signed WGT contains signing material or source maps.' >&2
+            exit 1
+          fi
+
+          signature_xml="$RUNNER_TEMP/streamvue-author-signature.xml"
+          signature_certificates="$RUNNER_TEMP/streamvue-author-signature-certificates"
+          mkdir -p "$signature_certificates"
+          unzip -p "$package" author-signature.xml > "$signature_xml"
+          SIGNATURE_XML="$signature_xml" CERTIFICATE_DIRECTORY="$signature_certificates" node - <<'NODE'
+          const fs = require('node:fs');
+          const xml = fs.readFileSync(process.env.SIGNATURE_XML, 'utf8');
+          const expression = /<(?:[A-Za-z0-9_.-]+:)?X509Certificate\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z0-9_.-]+:)?X509Certificate\s*>/g;
+          const certificates = [...xml.matchAll(expression)].map((match) => match[1].replace(/\s+/g, ''));
+          if (certificates.length === 0) throw new Error('author-signature.xml contains no X.509 certificate.');
+          certificates.forEach((certificate, index) => {
+            if (!/^[A-Za-z0-9+/]+={0,2}$/.test(certificate)) throw new Error('author-signature.xml contains invalid certificate data.');
+            fs.writeFileSync(`${process.env.CERTIFICATE_DIRECTORY}/${index}.der`, Buffer.from(certificate, 'base64'));
+          });
+          NODE
+          author_match=false
+          while IFS= read -r certificate; do
+            embedded_fingerprint="$(openssl x509 -inform DER -in "$certificate" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+            if [[ "$embedded_fingerprint" == "$STREAMVUE_SAMSUNG_AUTHOR_FINGERPRINT" ]]; then
+              author_match=true
+            fi
+          done < <(find "$signature_certificates" -maxdepth 1 -type f -name '*.der' -print)
+          if [[ "$author_match" != true ]]; then
+            echo 'The WGT author signature does not contain the registered OrbitalVue author certificate.' >&2
+            exit 1
+          fi
+
+          packaged_config="$(unzip -p "$package" config.xml)"
+          grep -Fq 'id="https://orbitalvue.app/tv"' <<< "$packaged_config"
+          grep -Fq 'id="OvTvPlayer.OrbitalVue"' <<< "$packaged_config"
+          grep -Fq 'package="OvTvPlayer"' <<< "$packaged_config"
+          grep -Fq "version=\"$SAMSUNG_PACKAGE_VERSION\"" <<< "$packaged_config"
+
+          output_dir='artifacts/samsung-tv'
+          mkdir -p "$output_dir"
+          output_package="$output_dir/OrbitalVue-$SAMSUNG_PACKAGE_VERSION-Samsung-TV-Store-Candidate.wgt"
+          cp "$package" "$output_package"
+          printf '%s\n' "$STREAMVUE_SAMSUNG_AUTHOR_FINGERPRINT" > "$output_dir/AUTHOR-CERT-SHA256.txt"
+          PACKAGE_PATH="$output_package" node - <<'NODE'
+          const fs = require('node:fs');
+          const distribution = JSON.parse(fs.readFileSync('store/samsung-distribution.json', 'utf8'));
+          const premium = JSON.parse(fs.readFileSync('store/premium-products.json', 'utf8'));
+          const audit = {
+            schemaVersion: 1,
+            widgetId: distribution.widgetId,
+            packageId: distribution.packageId,
+            applicationId: distribution.applicationId,
+            checkoutApplicationId: process.env.SAMSUNG_CHECKOUT_APP_ID,
+            packageVersion: process.env.SAMSUNG_PACKAGE_VERSION,
+            distributionMode: 'store',
+            premiumProductId: premium.platforms.samsung.productId,
+            verificationProvider: premium.platforms.samsung.verificationProvider,
+            authorCertificateSha256: process.env.STREAMVUE_SAMSUNG_AUTHOR_FINGERPRINT,
+            artifact: process.env.PACKAGE_PATH.split('/').at(-1),
+            destination: 'manual-samsung-seller-office-upload'
+          };
+          fs.writeFileSync('artifacts/samsung-tv/CANDIDATE-AUDIT.json', `${JSON.stringify(audit, null, 2)}\n`);
+          NODE
+          (cd "$output_dir" && sha256sum *.wgt AUTHOR-CERT-SHA256.txt CANDIDATE-AUDIT.json > SHA256SUMS.txt)
+
+      - name: Remove protected Samsung signing material
+        if: always()
+        shell: bash
+        run: |
+          if [[ -n "${STREAMVUE_SAMSUNG_SIGNING_ROOT:-}" && "$STREAMVUE_SAMSUNG_SIGNING_ROOT" == "$RUNNER_TEMP/"* ]]; then
+            rm -rf -- "$STREAMVUE_SAMSUNG_SIGNING_ROOT"
+          fi
+          rm -rf -- "$RUNNER_TEMP/streamvue-samsung-signing"
+          if [[ -n "${STREAMVUE_TIZEN_ROOT:-}" && "$STREAMVUE_TIZEN_ROOT" == "$RUNNER_TEMP/"* ]]; then
+            rm -rf -- "$STREAMVUE_TIZEN_ROOT"
+          fi
+          rm -f -- "$RUNNER_TEMP/tizen-web-cli.bin"
+          rm -f -- "$RUNNER_TEMP/streamvue-author-signature.xml"
+          rm -rf -- "$RUNNER_TEMP/streamvue-author-signature-certificates"
+
+      - name: Upload manual Samsung Seller Office candidate
+        uses: actions/upload-artifact@v7
+        with:
+          name: streamvue-samsung-tv-${{ inputs.version }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            artifacts/samsung-tv/
+            store/store-listing.json
+            store/accessibility-readiness.json
+            store/public-site-readiness.json
+            store/listing-assets/samsung/**

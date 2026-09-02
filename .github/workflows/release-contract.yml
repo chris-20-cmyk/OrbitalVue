@@ -1,0 +1,160 @@
+name: Cross-platform Store release contract
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "feature/**"
+    paths:
+      - ".github/workflows/build-windows-store-candidate.yml"
+      - ".github/workflows/build-google-play-candidate.yml"
+      - ".github/workflows/build-apple-store-candidate.yml"
+      - ".github/workflows/build-samsung-store-candidate.yml"
+      - ".github/workflows/build-lg-seller-lounge-candidate.yml"
+      - ".github/workflows/build-public-site-candidate.yml"
+      - ".github/workflows/release-contract.yml"
+      - "store/**"
+      - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-premium-verifier-readiness.mjs"
+      - "tools/verify-privacy-readiness.mjs"
+      - "tools/verify-store-listing-readiness.mjs"
+      - "tools/verify-accessibility-readiness.mjs"
+      - "tools/verify-public-site-readiness.mjs"
+      - "site/**"
+      - "tools/generate-release-readiness-report.mjs"
+      - "tools/verify-apple-brand-assets.mjs"
+      - "tools/verify-apple-distribution-readiness.mjs"
+      - "tools/verify-samsung-distribution-readiness.mjs"
+      - "tools/verify-lg-distribution-readiness.mjs"
+      - "tools/verify-cross-platform-release-contract.mjs"
+      - "platforms/android/app/build.gradle.kts"
+      - "platforms/android/app/src/main/**"
+      - "platforms/apple/Package.swift"
+      - "platforms/apple/project.yml"
+      - "platforms/apple/Resources/PrivacyInfo.xcprivacy"
+      - "platforms/apple/Sources/**"
+      - "platforms/apple/Apps/tvOS/Assets.xcassets/**"
+      - "platforms/tv-web/assets/**"
+      - "platforms/tv-web/platform/samsung/config.xml"
+      - "platforms/tv-web/platform/webos/appinfo.json"
+      - "platforms/tv-web/scripts/package-platforms.mjs"
+      - "platforms/tv-web/src/**"
+      - "platforms/tv-web/package.json"
+      - "packages/entitlement-verifier/**"
+      - "packages/entitlement-verifier-worker/**"
+      - "contracts/google-play-verifier-v1.schema.json"
+      - "contracts/samsung-checkout-verifier-v1.schema.json"
+      - "contracts/validate-contract.mjs"
+      - "contracts/fixtures/google-play.verify.*.json"
+      - "contracts/fixtures/samsung-checkout.status.*.json"
+      - "pnpm-lock.yaml"
+      - "src/StreamVue.Player/App.xaml.cs"
+      - "src/StreamVue.Player/Services/**"
+      - "src/StreamVue.Player/StreamVue.Player.csproj"
+      - "package.json"
+  pull_request:
+    paths:
+      - ".github/workflows/build-windows-store-candidate.yml"
+      - ".github/workflows/build-google-play-candidate.yml"
+      - ".github/workflows/build-apple-store-candidate.yml"
+      - ".github/workflows/build-samsung-store-candidate.yml"
+      - ".github/workflows/build-lg-seller-lounge-candidate.yml"
+      - ".github/workflows/build-public-site-candidate.yml"
+      - ".github/workflows/release-contract.yml"
+      - "store/**"
+      - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-premium-verifier-readiness.mjs"
+      - "tools/verify-privacy-readiness.mjs"
+      - "tools/verify-store-listing-readiness.mjs"
+      - "tools/verify-accessibility-readiness.mjs"
+      - "tools/verify-public-site-readiness.mjs"
+      - "site/**"
+      - "tools/generate-release-readiness-report.mjs"
+      - "tools/verify-apple-brand-assets.mjs"
+      - "tools/verify-apple-distribution-readiness.mjs"
+      - "tools/verify-samsung-distribution-readiness.mjs"
+      - "tools/verify-lg-distribution-readiness.mjs"
+      - "tools/verify-cross-platform-release-contract.mjs"
+      - "platforms/android/app/build.gradle.kts"
+      - "platforms/android/app/src/main/**"
+      - "platforms/apple/Package.swift"
+      - "platforms/apple/project.yml"
+      - "platforms/apple/Resources/PrivacyInfo.xcprivacy"
+      - "platforms/apple/Sources/**"
+      - "platforms/apple/Apps/tvOS/Assets.xcassets/**"
+      - "platforms/tv-web/assets/**"
+      - "platforms/tv-web/platform/samsung/config.xml"
+      - "platforms/tv-web/platform/webos/appinfo.json"
+      - "platforms/tv-web/scripts/package-platforms.mjs"
+      - "platforms/tv-web/src/**"
+      - "platforms/tv-web/package.json"
+      - "packages/entitlement-verifier/**"
+      - "packages/entitlement-verifier-worker/**"
+      - "contracts/google-play-verifier-v1.schema.json"
+      - "contracts/samsung-checkout-verifier-v1.schema.json"
+      - "contracts/validate-contract.mjs"
+      - "contracts/fixtures/google-play.verify.*.json"
+      - "contracts/fixtures/samsung-checkout.status.*.json"
+      - "pnpm-lock.yaml"
+      - "src/StreamVue.Player/App.xaml.cs"
+      - "src/StreamVue.Player/Services/**"
+      - "src/StreamVue.Player/StreamVue.Player.csproj"
+      - "package.json"
+
+permissions:
+  contents: read
+
+jobs:
+  release-contract:
+    name: Identities, entitlements, and manual candidate lanes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out OrbitalVue
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install locked verifier dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify every Store release boundary
+        run: |
+          pnpm entitlements:build
+          pnpm entitlements:test
+          pnpm verifier-worker:check
+          node contracts/validate-contract.mjs
+          node tools/verify-premium-store-readiness.mjs
+          node tools/verify-premium-verifier-readiness.mjs
+          node tools/verify-privacy-readiness.mjs
+          node tools/verify-orbitalvue-brand.mjs
+          node tools/verify-store-listing-readiness.mjs
+          node tools/verify-accessibility-readiness.mjs
+          node tools/verify-public-site-readiness.mjs
+          node tools/verify-apple-brand-assets.mjs
+          node tools/verify-apple-distribution-readiness.mjs
+          node tools/verify-samsung-distribution-readiness.mjs
+          node tools/verify-lg-distribution-readiness.mjs
+          node tools/verify-cross-platform-release-contract.mjs
+
+      - name: Generate the release-readiness dossier
+        run: node tools/generate-release-readiness-report.mjs
+
+      - name: Upload the non-release readiness dossier
+        uses: actions/upload-artifact@v7
+        with:
+          name: orbitalvue-release-readiness
+          path: artifacts/release-readiness/
+          if-no-files-found: error
+          retention-days: 14

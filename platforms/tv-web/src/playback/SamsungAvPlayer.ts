@@ -1,5 +1,5 @@
 import type { CatalogChannel } from "@streamvue/catalog";
-import type { AspectMode, PlaybackSignal, PlayerAdapter } from "./PlayerAdapter.js";
+import type { AspectMode, PlaybackSignal, PlaybackTimeline, PlayerAdapter } from "./PlayerAdapter.js";
 
 export class SamsungAvPlayer implements PlayerAdapter {
   readonly kind = "samsung-avplay" as const;
@@ -9,13 +9,17 @@ export class SamsungAvPlayer implements PlayerAdapter {
     private readonly objectElement: HTMLObjectElement,
     private readonly surface: HTMLElement,
     private readonly avplay: SamsungAvPlay,
-    private readonly onSignal: (signal: PlaybackSignal) => void
+    private readonly onSignal: (signal: PlaybackSignal) => void,
+    private readonly onTimeline: (timeline: PlaybackTimeline) => void
   ) {
     this.avplay.setListener({
       onbufferingstart: () => this.onSignal({ state: "buffering", message: null, warning: null }),
       onbufferingprogress: () => undefined,
       onbufferingcomplete: () => this.onSignal({ state: "playing", message: null, warning: null }),
-      oncurrentplaytime: () => undefined,
+      oncurrentplaytime: (milliseconds) => this.onTimeline({
+        positionMs: Math.max(0, Math.floor(milliseconds)),
+        ...this.duration()
+      }),
       onevent: () => undefined,
       onstreamcompleted: () => this.onSignal({ state: "ended", message: null, warning: null }),
       onerror: (eventType) => this.onSignal({ state: "error", message: `Samsung AVPlay error: ${eventType}`, warning: null }),
@@ -25,7 +29,7 @@ export class SamsungAvPlayer implements PlayerAdapter {
     window.addEventListener("resize", this.resize);
   }
 
-  async play(channel: CatalogChannel): Promise<void> {
+  async play(channel: CatalogChannel, startPositionMs = 0): Promise<void> {
     this.stop();
     const warning = channel.stream.requestHeaders.Referer
       ? "Samsung AVPlay cannot apply a custom Referer header; User-Agent and Cookie remain supported."
@@ -44,6 +48,7 @@ export class SamsungAvPlayer implements PlayerAdapter {
           () => {
             try {
               this.resize();
+              if (startPositionMs > 0) this.avplay.seekTo(Math.floor(startPositionMs));
               this.avplay.play();
               this.onSignal({ state: "playing", message: null, warning });
               resolve();
@@ -139,6 +144,17 @@ export class SamsungAvPlayer implements PlayerAdapter {
       this.avplay.setDisplayMethod(mode);
     } catch {
       // AVPlay accepts display settings only in supported lifecycle states.
+    }
+  }
+
+  private duration(): { durationMs?: number } {
+    try {
+      const durationMs = this.avplay.getDuration();
+      return Number.isFinite(durationMs) && durationMs > 0
+        ? { durationMs: Math.floor(durationMs) }
+        : {};
+    } catch {
+      return {};
     }
   }
 }

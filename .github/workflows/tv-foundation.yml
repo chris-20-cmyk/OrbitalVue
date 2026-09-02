@@ -8,8 +8,16 @@ on:
       - "feature/**"
     paths:
       - "packages/catalog-js/**"
+      - "packages/media-centers/**"
       - "platforms/tv-web/**"
       - "contracts/**"
+      - "store/**"
+      - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-cross-platform-release-contract.mjs"
+      - "tools/verify-samsung-distribution-readiness.mjs"
+      - "tools/stamp-samsung-package-version.mjs"
+      - "tools/verify-lg-distribution-readiness.mjs"
+      - "tools/stamp-lg-package-version.mjs"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -18,8 +26,16 @@ on:
   pull_request:
     paths:
       - "packages/catalog-js/**"
+      - "packages/media-centers/**"
       - "platforms/tv-web/**"
       - "contracts/**"
+      - "store/**"
+      - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-cross-platform-release-contract.mjs"
+      - "tools/verify-samsung-distribution-readiness.mjs"
+      - "tools/stamp-samsung-package-version.mjs"
+      - "tools/verify-lg-distribution-readiness.mjs"
+      - "tools/stamp-lg-package-version.mjs"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -34,7 +50,7 @@ jobs:
     name: Shared catalog and television packages
     runs-on: ubuntu-latest
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -49,12 +65,20 @@ jobs:
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
       - name: Validate portable catalog contract
-        run: node contracts/validate-contract.mjs
+        run: |
+          node contracts/validate-contract.mjs
+          node tools/verify-premium-store-readiness.mjs
+          node tools/verify-cross-platform-release-contract.mjs
+          node tools/verify-samsung-distribution-readiness.mjs
+          node tools/verify-lg-distribution-readiness.mjs
+      - name: Build and test authenticated media-center adapters
+        run: pnpm media-centers:test
       - name: Check, test, and build television clients
         run: |
           pnpm tv:check
           pnpm tv:test
           pnpm tv:build
+          VITE_STREAMVUE_DISTRIBUTION_MODE=store pnpm tv:build
       - name: Verify platform package contents
         run: |
           test -f platforms/tv-web/dist/samsung/config.xml
@@ -62,11 +86,14 @@ jobs:
           test -f platforms/tv-web/dist/webos/appinfo.json
           test -f platforms/tv-web/dist/webos/splash.png
           grep -q '\$WEBAPIS/webapis/webapis.js' platforms/tv-web/dist/samsung/index.html
+          grep -q 'http://developer.samsung.com/privilege/sso.partner' platforms/tv-web/dist/samsung/config.xml
+          grep -q 'http://developer.samsung.com/privilege/productinfo' platforms/tv-web/dist/samsung/config.xml
+          grep -q 'http://developer.samsung.com/privilege/billing' platforms/tv-web/dist/samsung/config.xml
           if find platforms/tv-web/dist/samsung platforms/tv-web/dist/webos -name '*.map' -print -quit | grep -q .; then exit 1; fi
       - name: Upload unsigned television projects
         uses: actions/upload-artifact@v7
         with:
-          name: streamvue-tv-5.0-foundation
+          name: orbitalvue-tv-5.6-store-locked-foundation
           if-no-files-found: error
           retention-days: 14
           path: |

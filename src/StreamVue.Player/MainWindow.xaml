@@ -7,7 +7,7 @@
         xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
         xmlns:controls="clr-namespace:StreamVue.Player.Controls"
         mc:Ignorable="d"
-        Title="StreamVue"
+        Title="OrbitalVue"
         Width="1540"
         Height="930"
         MinWidth="1180"
@@ -77,7 +77,7 @@
                     <Button x:Name="MiniPlayerButton" Margin="0,0,8,0" Height="32" Padding="12,0" Style="{StaticResource SecondaryButton}" Click="ToggleMiniPlayer_Click" ToolTip="Compact always-on-top player (Ctrl+Shift+M)">
                         <TextBlock x:Name="MiniPlayerButtonText" VerticalAlignment="Center" FontSize="9.5" FontWeight="Bold" Text="MINI" />
                     </Button>
-                    <Button x:Name="UpdateNavigationButton" Margin="0,0,10,0" Height="32" Padding="14,0" Style="{StaticResource SecondaryButton}" Click="OpenUpdate_Click" ToolTip="Check for a new StreamVue version">
+                    <Button x:Name="UpdateNavigationButton" Margin="0,0,10,0" Height="32" Padding="14,0" Style="{StaticResource SecondaryButton}" Click="OpenUpdate_Click" ToolTip="Check for a new OrbitalVue version">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Margin="0,0,7,0" FontSize="14" Foreground="{StaticResource AccentBrush}" Text="↥" />
                             <TextBlock x:Name="UpdateNavigationText" VerticalAlignment="Center" FontSize="10" FontWeight="Bold" Text="UPDATE" />
@@ -169,28 +169,35 @@
                     </Grid>
 
                     <Grid Grid.Row="1" Margin="20,0,20,12">
-                        <TextBox x:Name="SearchBox" Height="42" Padding="39,10,12,10" TextChanged="SearchBox_TextChanged" />
+                        <TextBox x:Name="SearchBox" Height="42" Padding="39,10,12,10" TextChanged="SearchBox_TextChanged" AutomationProperties.Name="Search channels or groups" />
                         <TextBlock Margin="14,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" Foreground="#66758B" FontSize="17" IsHitTestVisible="False" Text="⌕" />
                         <TextBlock x:Name="SearchHint" Margin="39,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" Foreground="#5E6B7F" IsHitTestVisible="False" Text="Search channels or groups" />
                     </Grid>
 
                     <Grid Grid.Row="2" Margin="20,0,20,12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Horizontal">
-                            <RadioButton x:Name="AllFilter" GroupName="KindFilter" IsChecked="True" Checked="KindFilter_Checked" Tag="All" Content="All" Style="{StaticResource FilterPill}" />
-                            <RadioButton GroupName="KindFilter" Checked="KindFilter_Checked" Tag="Live" Content="Live" Style="{StaticResource FilterPill}" />
-                            <RadioButton GroupName="KindFilter" Checked="KindFilter_Checked" Tag="Movie" Content="Movies" Style="{StaticResource FilterPill}" />
-                        </StackPanel>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" PanningMode="HorizontalOnly">
+                            <StackPanel Orientation="Horizontal">
+                                <RadioButton x:Name="AllFilter" GroupName="KindFilter" IsChecked="True" Checked="KindFilter_Checked" Tag="All" Content="All" Style="{StaticResource FilterPill}" />
+                                <RadioButton x:Name="ContinueWatchingFilter" GroupName="KindFilter" Checked="KindFilter_Checked" Tag="ContinueWatching" Content="Continue" Style="{StaticResource FilterPill}" Visibility="Collapsed" />
+                                <RadioButton x:Name="RecentlyAddedFilter" GroupName="KindFilter" Checked="KindFilter_Checked" Tag="RecentlyAdded" Content="Recent" Style="{StaticResource FilterPill}" Visibility="Collapsed" />
+                                <RadioButton GroupName="KindFilter" Checked="KindFilter_Checked" Tag="Live" Content="Live" Style="{StaticResource FilterPill}" />
+                                <RadioButton GroupName="KindFilter" Checked="KindFilter_Checked" Tag="Movies" Content="Movies" Style="{StaticResource FilterPill}" />
+                                <RadioButton GroupName="KindFilter" Checked="KindFilter_Checked" Tag="Series" Content="Series" Style="{StaticResource FilterPill}" />
+                            </StackPanel>
+                        </ScrollViewer>
                         <ComboBox x:Name="CategoryBox"
-                                  Grid.Column="1"
-                                  Width="164"
+                                  Grid.Row="1"
+                                  Margin="0,9,0,0"
+                                  HorizontalAlignment="Stretch"
                                   ScrollViewer.CanContentScroll="True"
                                   VirtualizingPanel.IsVirtualizing="True"
                                   VirtualizingPanel.VirtualizationMode="Recycling"
-                                  SelectionChanged="CategoryBox_SelectionChanged">
+                                  SelectionChanged="CategoryBox_SelectionChanged"
+                                  AutomationProperties.Name="Channel group">
                             <ComboBox.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <VirtualizingStackPanel />
@@ -212,7 +219,8 @@
                              VirtualizingPanel.VirtualizationMode="Recycling"
                              SelectionChanged="ChannelList_SelectionChanged"
                              PreviewMouseLeftButtonDown="ChannelList_PreviewMouseLeftButtonDown"
-                             PreviewMouseMove="ChannelList_PreviewMouseMove">
+                             PreviewMouseMove="ChannelList_PreviewMouseMove"
+                             AutomationProperties.Name="Channels">
                         <ListBox.GroupStyle>
                             <GroupStyle HidesIfEmpty="True">
                                 <GroupStyle.HeaderTemplate>
@@ -248,7 +256,6 @@
                                 <Setter Property="Margin" Value="0,2" />
                                 <Setter Property="Background" Value="Transparent" />
                                 <Setter Property="BorderThickness" Value="0" />
-                                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="ListBoxItem">
@@ -270,10 +277,16 @@
                                         <Grid Width="39" Height="39" HorizontalAlignment="Left">
                                             <Border CornerRadius="10" Background="#1B2432" BorderBrush="#2A3649" BorderThickness="1" />
                                             <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#B8C5D8" FontSize="11" FontWeight="Bold" Text="{Binding Initials}" />
+                                            <Border CornerRadius="10" ClipToBounds="True">
+                                                <Image Source="{Binding ArtworkSource}" Stretch="UniformToFill" Loaded="ChannelArtwork_Loaded" />
+                                            </Border>
                                         </Grid>
                                         <StackPanel Grid.Column="1" Margin="7,0,8,0" VerticalAlignment="Center">
                                             <TextBlock Foreground="{StaticResource TextBrush}" FontSize="13" FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" Text="{Binding Group}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock x:Name="GroupLine" Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" Text="{Binding Group}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock x:Name="LibraryMetadataLine" Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" Text="{Binding LibraryMetadataLine}" TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
+                                            <TextBlock x:Name="WatchProgressText" Margin="0,4,0,0" Foreground="#62CFC4" FontSize="9" FontWeight="SemiBold" Text="{Binding WatchProgressLabel}" TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
+                                            <ProgressBar x:Name="WatchProgressBar" Margin="0,5,0,0" Height="3" Minimum="0" Maximum="100" Value="{Binding WatchProgressPercent}" Foreground="{StaticResource AccentBrush}" Background="#223044" BorderThickness="0" Visibility="Collapsed" />
                                             <TextBlock x:Name="GuideLineText" Margin="0,4,0,0" Foreground="#62CFC4" FontSize="9" Text="{Binding GuideLine}" TextTrimming="CharacterEllipsis">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
@@ -305,6 +318,14 @@
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding IsFavorite}" Value="True">
                                         <Setter TargetName="FavoriteButton" Property="Foreground" Value="#F4BD6B" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsProtectedMedia}" Value="True">
+                                        <Setter TargetName="GroupLine" Property="Visibility" Value="Collapsed" />
+                                        <Setter TargetName="LibraryMetadataLine" Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding HasWatchProgress}" Value="True">
+                                        <Setter TargetName="WatchProgressText" Property="Visibility" Value="Visible" />
+                                        <Setter TargetName="WatchProgressBar" Property="Visibility" Value="Visible" />
                                     </DataTrigger>
                                 </DataTemplate.Triggers>
                             </DataTemplate>
@@ -430,7 +451,7 @@
                                                 <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="18" FontWeight="SemiBold" Foreground="#F0F4FA" Text="Quick Tune" />
                                                 <TextBlock Margin="0,4,0,0" Foreground="#7D8DA4" FontSize="9.5" Text="Type a channel number, name, or group • Enter to tune" />
                                             </StackPanel>
-                                            <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseQuickTune_Click"><TextBlock FontSize="17" Text="×" /></Button>
+                                            <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseQuickTune_Click" ToolTip="Close Quick Tune"><TextBlock FontSize="17" Text="×" /></Button>
                                         </Grid>
                                         <TextBox x:Name="QuickTuneBox" Margin="0,15,0,10" Height="42" Padding="13,9" FontSize="13" TextChanged="QuickTuneBox_TextChanged" PreviewKeyDown="QuickTuneBox_PreviewKeyDown" />
                                         <ListBox x:Name="QuickTuneList" MaxHeight="340" Background="Transparent" BorderThickness="0" MouseDoubleClick="QuickTuneList_MouseDoubleClick" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
@@ -520,12 +541,12 @@
                             </Button>
                         </StackPanel>
                         <StackPanel Grid.Column="2" Margin="16,0" VerticalAlignment="Center">
-                            <TextBlock x:Name="PlaybackStatusText" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="IDLE" />
-                            <TextBlock x:Name="PlaybackDetailText" Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" Text="No channel selected" TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="PlaybackStatusText" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="IDLE" AutomationProperties.LiveSetting="Polite" />
+                            <TextBlock x:Name="PlaybackDetailText" Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" Text="No channel selected" TextTrimming="CharacterEllipsis" AutomationProperties.LiveSetting="Polite" />
                             <Grid x:Name="RecordingSeekPanel" Margin="0,5,0,0" Visibility="Collapsed">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <TextBlock x:Name="RecordingPositionText" VerticalAlignment="Center" Foreground="#8E9DB1" FontSize="8.5" Text="0:00" />
-                                <Slider x:Name="PlaybackSeekSlider" Grid.Column="1" Height="15" Margin="9,0" Minimum="0" Maximum="1" IsMoveToPointEnabled="True" PreviewMouseLeftButtonDown="PlaybackSeekSlider_PreviewMouseLeftButtonDown" PreviewMouseLeftButtonUp="PlaybackSeekSlider_PreviewMouseLeftButtonUp" KeyUp="PlaybackSeekSlider_KeyUp" Foreground="{StaticResource AccentBrush}" />
+                                <Slider x:Name="PlaybackSeekSlider" Grid.Column="1" Height="15" Margin="9,0" Minimum="0" Maximum="1" IsMoveToPointEnabled="True" PreviewMouseLeftButtonDown="PlaybackSeekSlider_PreviewMouseLeftButtonDown" PreviewMouseLeftButtonUp="PlaybackSeekSlider_PreviewMouseLeftButtonUp" KeyUp="PlaybackSeekSlider_KeyUp" Foreground="{StaticResource AccentBrush}" AutomationProperties.Name="Playback position" />
                                 <TextBlock x:Name="RecordingDurationText" Grid.Column="2" VerticalAlignment="Center" Foreground="#8E9DB1" FontSize="8.5" Text="0:00" />
                             </Grid>
                             <Grid x:Name="TimeshiftPanel" Margin="0,5,0,0" Visibility="Collapsed">
@@ -539,9 +560,9 @@
                             <Button Style="{StaticResource IconButton}" Click="Mute_Click" ToolTip="Mute">
                                 <TextBlock x:Name="VolumeGlyph" FontSize="17" Text="◖" />
                             </Button>
-                            <Slider x:Name="VolumeSlider" Width="94" Minimum="0" Maximum="100" Value="82" ValueChanged="VolumeSlider_ValueChanged" Foreground="{StaticResource AccentBrush}" />
+                            <Slider x:Name="VolumeSlider" Width="94" Minimum="0" Maximum="100" Value="82" ValueChanged="VolumeSlider_ValueChanged" Foreground="{StaticResource AccentBrush}" AutomationProperties.Name="Volume" />
                         </StackPanel>
-                        <ComboBox x:Name="AspectBox" Grid.Column="4" Width="92" Margin="16,0,0,0" SelectionChanged="AspectBox_SelectionChanged" ToolTip="Aspect ratio" />
+                        <ComboBox x:Name="AspectBox" Grid.Column="4" Width="92" Margin="16,0,0,0" SelectionChanged="AspectBox_SelectionChanged" ToolTip="Aspect ratio" AutomationProperties.Name="Aspect ratio" />
                     </Grid>
                 </Border>
             </Grid>
@@ -562,6 +583,9 @@
                                 <Grid Width="56" Height="56" HorizontalAlignment="Left">
                                     <Border CornerRadius="14" Background="{StaticResource AccentGradient}" Opacity="0.18" />
                                     <TextBlock x:Name="InspectorInitials" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}" FontSize="15" FontWeight="Bold" Text="KN" />
+                                    <Border CornerRadius="14" ClipToBounds="True">
+                                        <Image x:Name="InspectorArtwork" Source="{Binding ArtworkSource}" Stretch="UniformToFill" />
+                                    </Border>
                                 </Grid>
                                 <TextBlock x:Name="InspectorChannelName" Margin="0,14,0,0" FontFamily="{StaticResource DisplayFont}" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Nothing playing" TextTrimming="CharacterEllipsis" />
                                 <TextBlock x:Name="InspectorGroupName" Margin="0,5,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Select a channel" TextTrimming="CharacterEllipsis" />
@@ -832,7 +856,7 @@
                                                     </ItemsControl.ItemContainerStyle>
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
-                                                            <Button Width="{Binding Width}" Height="64" Padding="11,8" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Click="GuideProgramme_Click" ToolTip="Watch now • right-click for reminder and recording options" FocusVisualStyle="{x:Null}">
+                                                            <Button Width="{Binding Width}" Height="64" Padding="11,8" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Click="GuideProgramme_Click" ToolTip="Watch now • right-click for reminder and recording options">
                                                                 <Button.Style>
                                                                     <Style TargetType="Button">
                                                                         <Setter Property="Foreground" Value="#DCE5F2" />
@@ -903,7 +927,7 @@
                             </Grid>
                         </Border>
                         <ListBox x:Name="GuideList" Grid.Row="1" Background="#0C111A" BorderBrush="#273246" BorderThickness="1,0,1,1" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" MouseDoubleClick="GuideList_MouseDoubleClick">
-                            <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                            <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Background" Value="Transparent" /></Style></ListBox.ItemContainerStyle>
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <Border x:Name="GuideRowCard" Padding="16,12" Background="Transparent" BorderBrush="#1C2635" BorderThickness="0,0,0,1">
@@ -924,7 +948,7 @@
                     <StackPanel x:Name="GuideEmptyState" Panel.ZIndex="10" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="430">
                         <TextBlock HorizontalAlignment="Center" Foreground="{StaticResource AccentBrush}" FontSize="36" Text="▦" />
                         <TextBlock Margin="0,12,0,0" HorizontalAlignment="Center" FontFamily="{StaticResource DisplayFont}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Guide data is being prepared" />
-                        <TextBlock Margin="0,7,0,0" TextAlignment="Center" Foreground="{StaticResource TextMutedBrush}" FontSize="11" LineHeight="17" Text="StreamVue can use an advertised XMLTV source, a local file, or the verified US guide pack." TextWrapping="Wrap" />
+                        <TextBlock Margin="0,7,0,0" TextAlignment="Center" Foreground="{StaticResource TextMutedBrush}" FontSize="11" LineHeight="17" Text="OrbitalVue can use an advertised XMLTV source, a local file, or the verified US guide pack." TextWrapping="Wrap" />
                         <Button Margin="0,17,0,0" HorizontalAlignment="Center" Style="{StaticResource PrimaryButton}" Click="OpenGuideSource_Click" Content="Choose guide source" />
                     </StackPanel>
                 </Grid>
@@ -1098,7 +1122,7 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Ellipse x:Name="FooterStatusDot" Width="6" Height="6" Fill="#5B687C" />
-                    <TextBlock x:Name="FooterStatusText" Margin="8,0,0,0" Foreground="#7E8CA1" FontSize="9.5" Text="StreamVue is ready" />
+                    <TextBlock x:Name="FooterStatusText" Margin="8,0,0,0" Foreground="#7E8CA1" FontSize="9.5" Text="OrbitalVue is ready" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Foreground="#566176" FontSize="9" Text="F11 TRUE FULLSCREEN" />
@@ -1107,14 +1131,14 @@
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
                     <TextBlock Foreground="#566176" FontSize="9" Text="↑↓ CHANNELS • BACKSPACE LAST" />
                     <Border Width="1" Height="12" Margin="12,0" Background="#283244" />
-                    <TextBlock Foreground="#566176" FontSize="9" Text="4.0 RESILIENCE" />
+                    <TextBlock Foreground="#566176" FontSize="9" Text="5.6 MEDIA LIBRARY" />
                 </StackPanel>
             </Grid>
         </Border>
 
         <!-- Source connection modal -->
         <Grid x:Name="ImportOverlay" Grid.RowSpan="3" Panel.ZIndex="90" Background="#F0080B12" Visibility="Collapsed">
-            <Border Width="760" MaxHeight="760" Margin="24" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="28" CornerRadius="22" Background="#111722" BorderBrush="#344158" BorderThickness="1" ClipToBounds="True">
+            <Border Width="900" MaxHeight="780" Margin="24" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="28" CornerRadius="22" Background="#111722" BorderBrush="#344158" BorderThickness="1" ClipToBounds="True">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="36" ShadowDepth="8" Opacity="0.55" Color="#000000" />
                 </Border.Effect>
@@ -1126,10 +1150,10 @@
                     </Grid.RowDefinitions>
                     <Grid>
                         <StackPanel>
-                            <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Connect your television" />
-                            <TextBlock Margin="0,6,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Text="Choose any standard IPTV source. Credentials stay on this PC." />
+                            <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Connect your sources" />
+                            <TextBlock Margin="0,6,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Text="Connect IPTV or your personal Plex and Emby libraries. Credentials stay protected on this PC." />
                         </StackPanel>
-                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseImport_Click">
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseImport_Click" ToolTip="Close source manager">
                             <TextBlock FontSize="18" Text="×" />
                         </Button>
                     </Grid>
@@ -1174,7 +1198,7 @@
                                 <Grid>
                                     <StackPanel>
                                         <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Your channel sources" />
-                                        <TextBlock x:Name="SourceManagerSummaryText" Margin="0,5,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" Text="Add an M3U file, URL, or Xtream account to begin." />
+                                        <TextBlock x:Name="SourceManagerSummaryText" Margin="0,5,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" Text="Add an M3U, Xtream, Plex, or Emby source to begin." />
                                     </StackPanel>
                                     <Button HorizontalAlignment="Right" VerticalAlignment="Center" Padding="12,7" Style="{StaticResource SecondaryButton}" Click="AddPlaylistSource_Click" Content="+ Add source" />
                                 </Grid>
@@ -1191,7 +1215,6 @@
                                                 <Setter Property="Margin" Value="0,0,0,8" />
                                                 <Setter Property="Background" Value="Transparent" />
                                                 <Setter Property="BorderThickness" Value="0" />
-                                                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
                                             </Style>
                                         </ListBox.ItemContainerStyle>
                                         <ListBox.ItemTemplate>
@@ -1289,6 +1312,156 @@
                             </StackPanel>
                         </TabItem>
 
+                        <TabItem x:Name="PlexSourceTab" Header="Plex">
+                            <StackPanel Margin="2,20,2,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Plex personal library" />
+                                    <Border Margin="10,0,0,0" Padding="7,3" CornerRadius="5" Background="#17312F">
+                                        <TextBlock x:Name="PlexAccessBadge" Foreground="{StaticResource AccentBrush}" FontSize="7.5" FontWeight="Bold" Text="PREMIUM" />
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock x:Name="PlexAccessDetailText" Margin="0,6,0,14" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Index movies and episodes without storing playable token URLs in the library." TextWrapping="Wrap" />
+                                <Border x:Name="PlexPurchasePanel" Margin="0,0,0,14" Padding="12,10" CornerRadius="10" Background="#10211F" BorderBrush="#21443F" BorderThickness="1" Visibility="Collapsed">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock x:Name="PlexPurchaseProductText" Foreground="#D8E9E7" FontSize="10" FontWeight="SemiBold" Text="Lifetime media centers" />
+                                            <ProgressBar x:Name="PlexPurchaseProgress" Width="90" Height="3" Margin="0,6,0,0" HorizontalAlignment="Left" Foreground="{StaticResource AccentBrush}" IsIndeterminate="True" Visibility="Collapsed" />
+                                        </StackPanel>
+                                        <Button x:Name="PlexPurchaseButton" Grid.Column="1" Margin="10,0,0,0" Padding="12,7" VerticalAlignment="Center" Style="{StaticResource PrimaryButton}" Click="PurchasePremium_Click" Content="Buy once" />
+                                        <Button x:Name="PlexRestoreButton" Grid.Column="2" Margin="8,0,0,0" Padding="12,7" VerticalAlignment="Center" Style="{StaticResource SecondaryButton}" Click="RestorePremium_Click" Content="Restore" />
+                                    </Grid>
+                                </Border>
+                                <Border x:Name="PlexAccountPanel" Padding="14" CornerRadius="12" Background="#0D171D" BorderBrush="#244147" BorderThickness="1">
+                                    <StackPanel>
+                                        <DockPanel LastChildFill="True">
+                                            <Border DockPanel.Dock="Right" Padding="7,3" CornerRadius="5" Background="#17312F">
+                                                <TextBlock Foreground="{StaticResource AccentBrush}" FontSize="7.5" FontWeight="Bold" Text="RECOMMENDED" />
+                                            </Border>
+                                            <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextBrush}" FontSize="11.5" FontWeight="SemiBold" Text="Sign in with your Plex account" />
+                                        </DockPanel>
+                                        <TextBlock x:Name="PlexAccountStatusText" Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" Text="Approve OrbitalVue in Plex, then choose an automatically discovered server. Your Plex password never enters OrbitalVue." TextWrapping="Wrap" />
+                                        <ProgressBar x:Name="PlexAccountProgress" Width="120" Height="3" Margin="0,12,0,0" HorizontalAlignment="Left" Foreground="{StaticResource AccentBrush}" IsIndeterminate="True" Visibility="Collapsed" />
+                                        <WrapPanel Margin="0,13,0,0">
+                                            <Button x:Name="PlexAccountSignInButton" Style="{StaticResource PrimaryButton}" Click="StartPlexAccountSignIn_Click" Content="Sign in with Plex" />
+                                            <Button x:Name="PlexAccountOpenButton" Margin="8,0,0,0" Style="{StaticResource SecondaryButton}" Click="OpenPlexAccountApproval_Click" Content="Open approval" Visibility="Collapsed" />
+                                            <Button x:Name="PlexAccountCancelButton" Margin="8,0,0,0" Style="{StaticResource SecondaryButton}" Click="CancelPlexAccountSignIn_Click" Content="Cancel" Visibility="Collapsed" />
+                                        </WrapPanel>
+                                        <Grid x:Name="PlexAccountPicker" Margin="0,14,0,0" Visibility="Collapsed">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <TextBlock Foreground="#AAB6C8" FontSize="9" Text="PLEX SERVER" />
+                                            <ComboBox x:Name="PlexAccountServerBox" Grid.Row="1" Height="40" Margin="0,5,0,0" DisplayMemberPath="DisplayLabel" SelectionChanged="PlexAccountServer_SelectionChanged" />
+                                            <StackPanel Grid.Row="2" Margin="0,10,0,0">
+                                                <TextBlock Foreground="#AAB6C8" FontSize="9" Text="CONNECTION" />
+                                                <ComboBox x:Name="PlexAccountConnectionBox" Height="40" Margin="0,5,0,0" DisplayMemberPath="DisplayLabel" SelectionChanged="PlexAccountConnection_SelectionChanged" />
+                                                <TextBlock x:Name="PlexAccountLocationText" Margin="1,5,0,0" Foreground="#718198" FontSize="9" />
+                                            </StackPanel>
+                                            <CheckBox x:Name="PlexAccountAllowHttpBox" Grid.Row="3" Margin="0,11,0,0" Foreground="#F4BD6B" FontSize="9.5" Content="Allow this unencrypted HTTP connection on my trusted local network" Visibility="Collapsed" />
+                                            <Button x:Name="PlexAccountConnectButton" Grid.Row="4" Margin="0,13,0,0" HorizontalAlignment="Left" Style="{StaticResource PrimaryButton}" Click="ConnectPlexAccount_Click" Content="Connect selected server" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                                <Expander Margin="0,14,0,0" Foreground="#AAB6C8" Header="Advanced: connect with a server token">
+                                    <StackPanel Margin="0,12,0,0">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="2*" />
+                                                <ColumnDefinition Width="12" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Margin="0,0,0,6" Foreground="#AAB6C8" FontSize="10" Text="SERVER ADDRESS" />
+                                                <TextBox x:Name="PlexServerBox" Height="43" ToolTip="Example: https://192-168-1-20.example.direct:32400" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Margin="0,0,0,6" Foreground="#AAB6C8" FontSize="10" Text="LIBRARY NAME (OPTIONAL)" />
+                                                <TextBox x:Name="PlexNameBox" Height="43" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <TextBlock Margin="0,12,0,6" Foreground="#AAB6C8" FontSize="10" Text="PLEX SERVER TOKEN" />
+                                        <PasswordBox x:Name="PlexTokenBox" Height="43" Padding="12,9" Foreground="{StaticResource TextBrush}" Background="#0B1018" BorderBrush="{StaticResource BorderBrush}" />
+                                        <CheckBox x:Name="PlexAllowHttpBox" Margin="0,13,0,0" Foreground="#9EACBF" FontSize="10" Content="Allow unencrypted HTTP on a trusted local network" />
+                                        <Grid Margin="0,16,0,0">
+                                            <TextBlock VerticalAlignment="Center" Foreground="#718198" FontSize="9.5" Text="Identity is checked before OrbitalVue sends the server token." />
+                                            <Button x:Name="PlexConnectButton" HorizontalAlignment="Right" Style="{StaticResource PrimaryButton}" Click="LoadPlex_Click" Content="Connect Plex" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Expander>
+                            </StackPanel>
+                        </TabItem>
+
+                        <TabItem x:Name="EmbySourceTab" Header="Emby">
+                            <StackPanel Margin="2,20,2,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Emby personal library" />
+                                    <Border Margin="10,0,0,0" Padding="7,3" CornerRadius="5" Background="#17312F">
+                                        <TextBlock x:Name="EmbyAccessBadge" Foreground="{StaticResource AccentBrush}" FontSize="7.5" FontWeight="Bold" Text="PREMIUM" />
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock x:Name="EmbyAccessDetailText" Margin="0,6,0,14" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Connect directly to your Emby server with a protected, Windows-user-bound session." TextWrapping="Wrap" />
+                                <Border x:Name="EmbyPurchasePanel" Margin="0,0,0,14" Padding="12,10" CornerRadius="10" Background="#10211F" BorderBrush="#21443F" BorderThickness="1" Visibility="Collapsed">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock x:Name="EmbyPurchaseProductText" Foreground="#D8E9E7" FontSize="10" FontWeight="SemiBold" Text="Lifetime media centers" />
+                                            <ProgressBar x:Name="EmbyPurchaseProgress" Width="90" Height="3" Margin="0,6,0,0" HorizontalAlignment="Left" Foreground="{StaticResource AccentBrush}" IsIndeterminate="True" Visibility="Collapsed" />
+                                        </StackPanel>
+                                        <Button x:Name="EmbyPurchaseButton" Grid.Column="1" Margin="10,0,0,0" Padding="12,7" VerticalAlignment="Center" Style="{StaticResource PrimaryButton}" Click="PurchasePremium_Click" Content="Buy once" />
+                                        <Button x:Name="EmbyRestoreButton" Grid.Column="2" Margin="8,0,0,0" Padding="12,7" VerticalAlignment="Center" Style="{StaticResource SecondaryButton}" Click="RestorePremium_Click" Content="Restore" />
+                                    </Grid>
+                                </Border>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2*" />
+                                        <ColumnDefinition Width="12" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Margin="0,0,0,6" Foreground="#AAB6C8" FontSize="10" Text="SERVER ADDRESS" />
+                                        <TextBox x:Name="EmbyServerBox" Height="43" ToolTip="Example: https://media.example.com:8920" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Margin="0,0,0,6" Foreground="#AAB6C8" FontSize="10" Text="LIBRARY NAME (OPTIONAL)" />
+                                        <TextBox x:Name="EmbyNameBox" Height="43" />
+                                    </StackPanel>
+                                </Grid>
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="12" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Margin="0,0,0,6" Foreground="#AAB6C8" FontSize="10" Text="USERNAME" />
+                                        <TextBox x:Name="EmbyUsernameBox" Height="43" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Margin="0,0,0,6" Foreground="#AAB6C8" FontSize="10" Text="PASSWORD" />
+                                        <PasswordBox x:Name="EmbyPasswordBox" Height="43" Padding="12,9" Foreground="{StaticResource TextBrush}" Background="#0B1018" BorderBrush="{StaticResource BorderBrush}" />
+                                    </StackPanel>
+                                </Grid>
+                                <CheckBox x:Name="EmbyAllowHttpBox" Margin="0,13,0,0" Foreground="#9EACBF" FontSize="10" Content="Allow unencrypted HTTP on a trusted local network" />
+                                <Grid Margin="0,16,0,0">
+                                    <TextBlock VerticalAlignment="Center" Foreground="#718198" FontSize="9.5" Text="Your password is exchanged for a protected Emby access token." />
+                                    <Button x:Name="EmbyConnectButton" HorizontalAlignment="Right" Style="{StaticResource PrimaryButton}" Click="LoadEmby_Click" Content="Connect Emby" />
+                                </Grid>
+                            </StackPanel>
+                        </TabItem>
+
                         <TabItem x:Name="GuideSourceTab" Header="TV guide">
                             <StackPanel Margin="2,24,2,0">
                                 <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="XMLTV guide sources" />
@@ -1313,7 +1486,7 @@
                         <Grid>
                             <StackPanel>
                                 <TextBlock x:Name="ImportStatusText" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Ready to connect" />
-                                <TextBlock x:Name="ImportDetailText" Margin="0,4,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" Text="Nothing is uploaded; StreamVue reads the source directly." />
+                                <TextBlock x:Name="ImportDetailText" Margin="0,4,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" Text="Nothing is uploaded; OrbitalVue reads the source directly." />
                             </StackPanel>
                             <ProgressBar x:Name="ImportProgress" Width="90" Height="4" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}" Visibility="Collapsed" />
                         </Grid>
@@ -1330,9 +1503,9 @@
                     <Grid>
                         <StackPanel>
                             <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Playlist health" />
-                            <TextBlock Margin="0,6,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="StreamVue verifies the source at launch and protects the last working copy." />
+                            <TextBlock Margin="0,6,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="OrbitalVue verifies the source at launch and protects the last working copy." />
                         </StackPanel>
-                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="ClosePlaylistHealth_Click"><TextBlock FontSize="18" Text="×" /></Button>
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="ClosePlaylistHealth_Click" ToolTip="Close playlist health center"><TextBlock FontSize="18" Text="×" /></Button>
                     </Grid>
                     <Border Margin="0,22,0,0" Padding="18" CornerRadius="14" Background="#0B111A" BorderBrush="#28364A" BorderThickness="1">
                         <Grid>
@@ -1377,7 +1550,7 @@
                             </StackPanel>
                             <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Find missing guide data, artwork gaps, weak feeds, duplicate routes, and replay-ready channels." />
                         </StackPanel>
-                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseChannelHealth_Click"><TextBlock FontSize="18" Text="×" /></Button>
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseChannelHealth_Click" ToolTip="Close channel health center"><TextBlock FontSize="18" Text="×" /></Button>
                     </Grid>
                     <Grid Grid.Row="1" Margin="24,0,24,0">
                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
@@ -1402,7 +1575,7 @@
                             </ComboBox>
                         </Grid>
                         <ListBox x:Name="ChannelHealthList" Grid.Row="2" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
-                            <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,8" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                            <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,8" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style></ListBox.ItemContainerStyle>
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <Border x:Name="HealthCard" Padding="14,12" CornerRadius="12" Background="#0D131D" BorderBrush="#273247" BorderThickness="1">
@@ -1439,10 +1612,10 @@
 
                     <Grid Margin="28,24,28,18">
                         <StackPanel>
-                            <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="StreamVue settings" />
+                            <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="OrbitalVue settings" />
                             <TextBlock Margin="0,6,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Text="Tune playback, convenience, recovery, and private support tools for this PC." />
                         </StackPanel>
-                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseSettings_Click">
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseSettings_Click" ToolTip="Close playback settings">
                             <TextBlock FontSize="18" Text="×" />
                         </Button>
                     </Grid>
@@ -1618,7 +1791,7 @@
                                     <CheckBox x:Name="ResumeLastChannelCheck" Foreground="{StaticResource TextBrush}" Checked="SettingsChanged" Unchecked="SettingsChanged">
                                         <StackPanel Margin="9,0,0,0">
                                             <TextBlock FontSize="12" FontWeight="SemiBold" Text="Reopen the last channel at startup" />
-                                            <TextBlock Margin="0,4,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" Text="After the playlist refreshes, return to the channel that was playing when StreamVue closed." TextWrapping="Wrap" />
+                                            <TextBlock Margin="0,4,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" Text="After the playlist refreshes, return to the channel that was playing when OrbitalVue closed." TextWrapping="Wrap" />
                                         </StackPanel>
                                     </CheckBox>
                                     <Border Height="1" Margin="0,14" Background="#222D3E" />
@@ -1653,14 +1826,14 @@
                                     <Border Height="1" Margin="0,14" Background="#222D3E" />
                                     <TextBlock Foreground="#AAB6C8" FontSize="10" FontWeight="SemiBold" Text="BACKUP &amp; SUPPORT" />
                                     <WrapPanel Margin="0,10,0,0">
-                                        <Button Margin="0,0,8,8" Padding="12,7" Style="{StaticResource SecondaryButton}" Click="CreateBackup_Click" Content="Back up StreamVue" />
+                                        <Button Margin="0,0,8,8" Padding="12,7" Style="{StaticResource SecondaryButton}" Click="CreateBackup_Click" Content="Back up OrbitalVue" />
                                         <Button Margin="0,0,8,8" Padding="12,7" Style="{StaticResource SecondaryButton}" Click="RestoreBackup_Click" Content="Restore backup" />
                                         <Button Margin="0,0,0,8" Padding="12,7" Style="{StaticResource PrimaryButton}" Click="ExportDiagnostics_Click" Content="Export diagnostics" />
                                     </WrapPanel>
                                     <TextBlock Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="9.5" LineHeight="15" Text="Backups include encrypted playlist, guide, account, favorite, and Playback IQ data for this Windows user. Diagnostics exclude playlist addresses, credentials, channel names, and guide titles." TextWrapping="Wrap" />
 
                                     <Border Margin="0,14,0,0" Padding="12,10" CornerRadius="10" Background="#111A27" BorderBrush="#29384D" BorderThickness="1">
-                                        <TextBlock Foreground="#8797AD" FontSize="9.5" LineHeight="15" Text="KEYS  •  F11 fullscreen  •  Ctrl+Shift+C Cast  •  Ctrl+Shift+M Mini Player  •  Ctrl+K search  •  Ctrl+D favorite  •  Ctrl+↑/↓ channels  •  Backspace previous  •  Space play/pause  •  Media keys when StreamVue is focused" TextWrapping="Wrap" />
+                                        <TextBlock Foreground="#8797AD" FontSize="9.5" LineHeight="15" Text="KEYS  •  F11 fullscreen  •  Ctrl+Shift+C Cast  •  Ctrl+Shift+M Mini Player  •  Ctrl+K search  •  Ctrl+D favorite  •  Ctrl+↑/↓ channels  •  Backspace previous  •  Space play/pause  •  Media keys when OrbitalVue is focused" TextWrapping="Wrap" />
                                     </Border>
                                 </StackPanel>
                             </Border>
@@ -1697,10 +1870,10 @@
 
                     <Grid Margin="28,24,28,18">
                         <StackPanel>
-                            <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="StreamVue update" />
-                            <TextBlock Margin="0,6,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Text="Install the newest release without uninstalling your current version." />
+                            <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="OrbitalVue update" />
+                            <TextBlock x:Name="UpdateSubtitleText" Margin="0,6,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Text="Install the newest release without uninstalling your current version." />
                         </StackPanel>
-                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseUpdate_Click">
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseUpdate_Click" ToolTip="Close update window">
                             <TextBlock FontSize="18" Text="×" />
                         </Button>
                     </Grid>
@@ -1728,13 +1901,13 @@
 
                                     <StackPanel Grid.Row="2">
                                         <TextBlock x:Name="UpdateStatusText" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Ready to check for a new version" TextWrapping="Wrap" />
-                                        <TextBlock x:Name="UpdateDetailText" Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" LineHeight="17" Text="StreamVue checks the official public release feed. Your playlists and settings stay on this PC." TextWrapping="Wrap" />
+                                        <TextBlock x:Name="UpdateDetailText" Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" LineHeight="17" Text="OrbitalVue checks the official public release feed. Your playlists and settings stay on this PC." TextWrapping="Wrap" />
                                         <ProgressBar x:Name="UpdateProgress" Margin="0,18,0,0" Height="5" Minimum="0" Maximum="100" Foreground="{StaticResource AccentBrush}" Visibility="Collapsed" />
                                     </StackPanel>
                                 </Grid>
                             </Border>
 
-                            <Border Margin="0,14,0,0" Padding="17,15" CornerRadius="14" Background="#0D131D" BorderBrush="#273247" BorderThickness="1">
+                            <Border x:Name="UpdateOptionsPanel" Margin="0,14,0,0" Padding="17,15" CornerRadius="14" Background="#0D131D" BorderBrush="#273247" BorderThickness="1">
                                 <StackPanel>
                                     <Grid>
                                         <StackPanel>
@@ -1750,21 +1923,21 @@
                                     <CheckBox x:Name="UpdateRollbackCheck" IsChecked="True" Foreground="{StaticResource TextBrush}" Checked="UpdateRollback_Changed" Unchecked="UpdateRollback_Changed">
                                         <StackPanel Margin="9,0,0,0">
                                             <TextBlock FontSize="11.5" FontWeight="SemiBold" Text="Restore the last working version automatically" />
-                                            <TextBlock Margin="0,4,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" LineHeight="15" Text="If a new build cannot open successfully, StreamVue rolls back without touching playlists or settings." TextWrapping="Wrap" />
+                                            <TextBlock Margin="0,4,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10" LineHeight="15" Text="If a new build cannot open successfully, OrbitalVue rolls back without touching playlists or settings." TextWrapping="Wrap" />
                                         </StackPanel>
                                     </CheckBox>
                                 </StackPanel>
                             </Border>
 
                             <Border Margin="0,14,0,2" Padding="15,12" CornerRadius="12" Background="#101C24" BorderBrush="#24414A" BorderThickness="1">
-                                <TextBlock Foreground="#90A8AF" FontSize="10.5" LineHeight="16" Text="Every update is verified before installation. Rollback protection keeps one local last-known-good package until the new version proves it can run." TextWrapping="Wrap" />
+                                <TextBlock x:Name="UpdateProtectionNote" Foreground="#90A8AF" FontSize="10.5" LineHeight="16" Text="Every update is verified before installation. Rollback protection keeps one local last-known-good package until the new version proves it can run." TextWrapping="Wrap" />
                             </Border>
                         </StackPanel>
                     </ScrollViewer>
 
                     <Border Grid.Row="2" Margin="0,18,0,0" Padding="28,16" Background="#0D131D" BorderBrush="#273247" BorderThickness="0,1,0,0">
                         <Grid>
-                            <TextBlock VerticalAlignment="Center" Foreground="#65748A" FontSize="9.5" Text="IN-PLACE WINDOWS UPDATE" />
+                            <TextBlock x:Name="UpdateFooterLabel" VerticalAlignment="Center" Foreground="#65748A" FontSize="9.5" Text="IN-PLACE WINDOWS UPDATE" />
                             <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                                 <Button x:Name="UpdateCloseButton" Margin="0,0,10,0" Style="{StaticResource SecondaryButton}" Click="CloseUpdate_Click" Content="Close" />
                                 <Button x:Name="UpdateActionButton" Style="{StaticResource PrimaryButton}" Click="UpdateAction_Click" Content="Check for updates" />
@@ -1791,12 +1964,12 @@
                     <Grid Margin="28,24,28,18">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Cast StreamVue" />
+                                <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Cast OrbitalVue" />
                                 <Border Margin="10,3,0,0" Padding="8,4" VerticalAlignment="Top" CornerRadius="6" Background="#17312F">
                                     <TextBlock Foreground="{StaticResource AccentBrush}" FontSize="8" FontWeight="Bold" Text="WINDOWS WIRELESS DISPLAY" />
                                 </Border>
                             </StackPanel>
-                            <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Mirror StreamVue video and sound to a nearby compatible TV, projector, or PC." />
+                            <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Mirror OrbitalVue video and sound to a nearby compatible TV, projector, or PC." />
                         </StackPanel>
                         <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseCast_Click" ToolTip="Close">
                             <TextBlock FontSize="18" Text="×" />
@@ -1842,7 +2015,7 @@
                                 <Border Padding="14" CornerRadius="12" Background="#101822" BorderBrush="#273247" BorderThickness="1">
                                     <StackPanel>
                                         <TextBlock Foreground="{StaticResource AccentBrush}" FontSize="9" FontWeight="Bold" Text="FORMAT SAFE" />
-                                        <TextBlock Margin="0,6,0,0" Foreground="#98A7BB" FontSize="9.5" LineHeight="14" Text="StreamVue keeps decoding every IPTV format on this PC." TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,6,0,0" Foreground="#98A7BB" FontSize="9.5" LineHeight="14" Text="OrbitalVue keeps decoding every IPTV format on this PC." TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>
                                 <Border Grid.Column="2" Padding="14" CornerRadius="12" Background="#101822" BorderBrush="#273247" BorderThickness="1">
@@ -1862,7 +2035,7 @@
                             <Border Margin="0,14,0,0" Padding="17,14" CornerRadius="13" Background="#0D131D" BorderBrush="#273247" BorderThickness="1">
                                 <StackPanel>
                                     <TextBlock Foreground="#DDE5F0" FontSize="10.5" FontWeight="SemiBold" Text="Before you connect" />
-                                    <TextBlock Margin="0,9,0,0" Foreground="#8797AD" FontSize="9.8" LineHeight="16" Text="1  Turn on the target TV or display and enable its Screen Mirroring or Miracast mode.&#x0a;2  Choose Find nearby displays, then select the device in Windows Cast.&#x0a;3  If Windows asks for a layout, choose Duplicate to mirror StreamVue." TextWrapping="Wrap" />
+                                    <TextBlock Margin="0,9,0,0" Foreground="#8797AD" FontSize="9.8" LineHeight="16" Text="1  Turn on the target TV or display and enable its Screen Mirroring or Miracast mode.&#x0a;2  Choose Find nearby displays, then select the device in Windows Cast.&#x0a;3  If Windows asks for a layout, choose Duplicate to mirror OrbitalVue." TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
 
@@ -1900,7 +2073,7 @@
                                     <TextBlock Foreground="#FF7184" FontSize="8" FontWeight="Bold" Text="DIRECT TRANSPORT STREAM" />
                                 </Border>
                             </StackPanel>
-                            <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Record live channels, schedule from the TV Guide, and play your saved library without leaving StreamVue." />
+                            <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Record live channels, schedule from the TV Guide, and play your saved library without leaving OrbitalVue." />
                         </StackPanel>
                         <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseDvr_Click" ToolTip="Close"><TextBlock FontSize="18" Text="×" /></Button>
                     </Grid>
@@ -1956,7 +2129,7 @@
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                     <StackPanel>
                                         <TextBlock Foreground="#718198" FontSize="8.5" FontWeight="Bold" Text="RECORDINGS FOLDER" />
-                                        <TextBox x:Name="RecordingFolderBox" Height="38" Margin="0,8,12,0" Padding="11,8" ToolTip="Where StreamVue saves .ts recordings" />
+                                        <TextBox x:Name="RecordingFolderBox" Height="38" Margin="0,8,12,0" Padding="11,8" ToolTip="Where OrbitalVue saves .ts recordings" />
                                         <TextBlock x:Name="DvrStorageText" Margin="0,8,12,0" Foreground="#8090A6" FontSize="9" Text="Storage information will appear here" />
                                         <ProgressBar x:Name="DvrStorageProgress" Height="3" Margin="0,6,12,0" Minimum="0" Maximum="100" Value="0" Foreground="{StaticResource AccentBrush}" Background="#253145" />
                                     </StackPanel>
@@ -2043,7 +2216,7 @@
                                 <Grid>
                                     <TextBlock x:Name="DvrSeriesRuleEmptyText" Margin="18" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#66758B" FontSize="10.5" Text="No recurring series rules" />
                                     <ListBox x:Name="DvrSeriesRuleList" MaxHeight="150" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style></ListBox.ItemContainerStyle>
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
                                                 <Border Padding="15,11" BorderBrush="#202B3B" BorderThickness="0,0,0,1">
@@ -2099,7 +2272,7 @@
                                 <Grid>
                                     <TextBlock x:Name="DvrScheduleEmptyText" Margin="18" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#66758B" FontSize="10.5" Text="No scheduled recordings" />
                                     <ListBox x:Name="DvrScheduleList" MaxHeight="220" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style></ListBox.ItemContainerStyle>
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
                                                 <Border Padding="15,12" BorderBrush="#202B3B" BorderThickness="0,0,0,1">
@@ -2143,7 +2316,7 @@
                                 <Grid>
                                     <TextBlock x:Name="DvrLibraryEmptyText" Margin="18" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#66758B" FontSize="10.5" Text="Recordings will appear here" />
                                     <ListBox x:Name="DvrLibraryList" MaxHeight="190" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style></ListBox.ItemContainerStyle>
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
                                                 <Border Padding="15,11" BorderBrush="#202B3B" BorderThickness="0,0,0,1">
@@ -2175,7 +2348,7 @@
                             </Border>
 
                             <Border Margin="0,14,0,2" Padding="15,12" CornerRadius="12" Background="#251D13" BorderBrush="#4B3A22" BorderThickness="1">
-                                <TextBlock Foreground="#D4B47D" FontSize="9.8" LineHeight="15" Text="Recording opens a separate direct stream so your picture is never interrupted. Closing the window leaves the tray recorder and wake timer armed; choose Exit StreamVue from the tray only when you want scheduled recording to stop." TextWrapping="Wrap" />
+                                <TextBlock Foreground="#D4B47D" FontSize="9.8" LineHeight="15" Text="Recording opens a separate direct stream so your picture is never interrupted. Closing the window leaves the tray recorder and wake timer armed; choose Exit OrbitalVue from the tray only when you want scheduled recording to stop." TextWrapping="Wrap" />
                             </Border>
                         </StackPanel>
                     </ScrollViewer>
@@ -2204,11 +2377,11 @@
                         <StackPanel>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Smart signal routing" />
-                                <Border Margin="10,3,0,0" Padding="8,4" CornerRadius="6" Background="#17312F" VerticalAlignment="Top"><TextBlock Foreground="{StaticResource AccentBrush}" FontSize="8" FontWeight="Bold" Text="4.0 ROUTE EDITOR" /></Border>
+                                <Border Margin="10,3,0,0" Padding="8,4" CornerRadius="6" Background="#17312F" VerticalAlignment="Top"><TextBlock Foreground="{StaticResource AccentBrush}" FontSize="8" FontWeight="Bold" Text="SIGNAL ROUTES" /></Border>
                             </StackPanel>
                             <TextBlock Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="One channel, every available provider feed, ranked from real playback history." />
                         </StackPanel>
-                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseSignalRouting_Click"><TextBlock FontSize="18" Text="×" /></Button>
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseSignalRouting_Click" ToolTip="Close signal routing"><TextBlock FontSize="18" Text="×" /></Button>
                     </Grid>
 
                     <Grid Grid.Row="1" Margin="24,0">
@@ -2233,7 +2406,7 @@
                                     <Grid>
                                         <StackPanel>
                                             <TextBlock x:Name="SignalRouteHeadingText" Foreground="#E8F0F8" FontSize="13" FontWeight="SemiBold" Text="Select a channel route" />
-                                            <TextBlock x:Name="SignalRouteSummaryText" Margin="0,5,0,0" Foreground="#85A8A5" FontSize="9.5" Text="Feed scores improve as StreamVue observes real playback." />
+                                            <TextBlock x:Name="SignalRouteSummaryText" Margin="0,5,0,0" Foreground="#85A8A5" FontSize="9.5" Text="Feed scores improve as OrbitalVue observes real playback." />
                                         </StackPanel>
                                         <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="9,5" CornerRadius="7" Background="#17312F">
                                             <TextBlock x:Name="SignalRouteStatusText" Foreground="{StaticResource AccentBrush}" FontSize="8.5" FontWeight="Bold" Text="READY" />
@@ -2249,7 +2422,7 @@
                             </Border>
 
                             <ListBox x:Name="SignalRouteList" Grid.Row="2" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
-                                <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,9" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                                <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,9" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style></ListBox.ItemContainerStyle>
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <Border x:Name="SignalFeedCard" Padding="16,14" CornerRadius="14" Background="#0D131D" BorderBrush="#273247" BorderThickness="1">
@@ -2329,7 +2502,7 @@
                             </StackPanel>
                             <TextBlock x:Name="MappingStatusText" Margin="0,7,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="Match playlist channels to XMLTV listings that have different names." />
                         </StackPanel>
-                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseMapping_Click"><TextBlock FontSize="18" Text="×" /></Button>
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource IconButton}" Click="CloseMapping_Click" ToolTip="Close guide mapping"><TextBlock FontSize="18" Text="×" /></Button>
                     </Grid>
 
                     <Grid Grid.Row="1" Margin="24,0,24,0">
@@ -2342,7 +2515,7 @@
                                     <StackPanel><TextBlock Foreground="#DCE5F2" FontSize="11" FontWeight="SemiBold" Text="Playlist channels needing attention" /><TextBlock Margin="0,4,0,0" Foreground="#6E7D92" FontSize="9" Text="Temporary game feeds are excluded automatically." /></StackPanel>
                                 </Border>
                                 <ListBox x:Name="MappingChannelList" Grid.Row="1" Background="Transparent" BorderThickness="0" SelectionChanged="MappingChannelList_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
-                                    <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                                    <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style></ListBox.ItemContainerStyle>
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <Border x:Name="MappingChannelCard" Padding="13,11" Background="Transparent" BorderBrush="#202B3B" BorderThickness="0,0,0,1">
@@ -2367,7 +2540,7 @@
                                     <TextBlock x:Name="MappingSearchHint" Margin="35,0,0,0" VerticalAlignment="Center" Foreground="#56667C" FontSize="9.5" IsHitTestVisible="False" Text="Search XMLTV channel names or IDs" />
                                 </Grid>
                                 <ListBox x:Name="MappingCandidateList" Grid.Row="2" Margin="14,0,14,14" Background="#0A1018" BorderBrush="#243044" BorderThickness="1" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
-                                    <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /></Style></ListBox.ItemContainerStyle>
+                                    <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style></ListBox.ItemContainerStyle>
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <Border x:Name="CandidateCard" Padding="13,9" Background="Transparent" BorderBrush="#1D2736" BorderThickness="0,0,0,1"><StackPanel><TextBlock Foreground="#DCE4EF" FontSize="10.5" FontWeight="SemiBold" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" /><TextBlock Margin="0,3,0,0" Foreground="#66758B" FontSize="8.5" Text="{Binding ChannelId}" TextTrimming="CharacterEllipsis" /></StackPanel></Border>

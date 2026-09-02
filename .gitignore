@@ -16,3 +16,9 @@ node_modules/
 **/node_modules/
 **/dist/
 **/coverage/
+**/.build/
+**/.dev.vars*
+**/.env*
+!**/.dev.vars.example
+platforms/apple/Generated/
+platforms/apple/StreamVueApple.xcodeproj/

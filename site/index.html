@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="OrbitalVue privacy, support, and project information.">
+  <title>OrbitalVue — Your sources, your player</title>
+  <link rel="stylesheet" href="assets/site.css">
+  <script type="module" src="assets/site.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="index.html" aria-label="OrbitalVue overview">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 4.8v14.4L19 12 7 4.8Z"/></svg></span>
+        ORBITALVUE
+      </a>
+      <button class="menu-toggle" type="button" aria-label="Open navigation" aria-controls="site-menu" aria-expanded="false" data-menu-button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <nav class="site-nav" id="site-menu" aria-label="Main navigation" data-site-menu data-open="false">
+        <a href="index.html" aria-current="page">Overview</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="support.html">Support</a>
+        <a class="project-link" href="https://github.com/chris-20-cmyk/StreamVue">View project</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="section hero">
+      <div class="hero-copy">
+        <p class="eyebrow">A player built around your sources</p>
+        <h1>Your channels. Your privacy. Your player.</h1>
+        <p class="lede">OrbitalVue connects only to sources you choose. Learn what stays on your device, what reaches your provider, and how to get help.</p>
+        <div class="button-row">
+          <a class="button primary" href="privacy.html">Read the privacy policy</a>
+          <a class="button" href="support.html">Get support</a>
+        </div>
+      </div>
+
+      <div class="product-frame" aria-label="Illustration of the OrbitalVue player interface">
+        <div class="product-bar"><span>OrbitalVue player</span><span class="window-dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
+        <div class="product-body">
+          <div class="channel-list" aria-hidden="true">
+            <strong>Channels</strong>
+            <div class="channel active"><span class="channel-badge">01</span><span>Newsroom</span></div>
+            <div class="channel"><span class="channel-badge">02</span><span>Field live</span></div>
+            <div class="channel"><span class="channel-badge">03</span><span>Film room</span></div>
+            <div class="channel"><span class="channel-badge">04</span><span>Local view</span></div>
+            <div class="channel"><span class="channel-badge">05</span><span>Archive</span></div>
+          </div>
+          <div class="player-preview">
+            <div class="video-stage" aria-hidden="true"><span class="play-disc"><svg viewBox="0 0 24 24"><path d="M7 4.8v14.4L19 12 7 4.8Z"/></svg></span></div>
+            <div class="player-meta"><div><strong>Ready when you are</strong><p>Direct playback from a source you choose</p></div><span class="live-pill">LOCAL FIRST</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="principles-band">
+      <section class="section principles" aria-label="OrbitalVue principles">
+        <article class="principle"><span>01</span><h3>Private by default</h3><p>No OrbitalVue account, advertising, cross-app tracking, or automatic telemetry.</p></article>
+        <article class="principle"><span>02</span><h3>Your sources</h3><p>Connect playlists and personal Plex or Emby servers you own or are authorized to use.</p></article>
+        <article class="principle"><span>03</span><h3>Store-safe updates</h3><p>Each platform release stays behind explicit privacy, accessibility, listing, and distribution checks.</p></article>
+      </section>
+    </div>
+
+    <section class="section">
+      <div class="signal-intro">
+        <div><p class="eyebrow">The signal path</p><h2>Simple connections. Clear boundaries.</h2></div>
+        <p class="lede">Playback requests go from your device to the provider you selected. OrbitalVue does not run a channel service in the middle.</p>
+      </div>
+      <div class="signal-path" aria-label="OrbitalVue data flow">
+        <article class="signal-node"><span class="step-number">01</span><h3>Your device</h3><p>Catalog data, favorites, playback preferences, and local diagnostics stay here.</p></article>
+        <div class="signal-connector" aria-hidden="true"><small>you connect</small></div>
+        <article class="signal-node"><span class="step-number">02</span><h3>Your chosen provider</h3><p>Playlist, IPTV, Plex, and Emby requests go directly to the service you configure.</p></article>
+        <div class="signal-connector" aria-hidden="true"><small>when buying</small></div>
+        <article class="signal-node"><span class="step-number">03</span><h3>Your platform Store</h3><p>Store builds use the platform's purchase system for premium entitlement verification.</p></article>
+      </div>
+    </section>
+
+    <div class="platform-band">
+      <section class="section compact platforms" aria-label="Platforms in development">
+        <article class="platform"><span class="platform-icon">WIN</span><h3>Windows</h3><p>Native desktop playback and Microsoft Store release foundation.</p></article>
+        <article class="platform"><span class="platform-icon">AND</span><h3>Android & Google TV</h3><p>Phone, tablet, and television foundation in development.</p></article>
+        <article class="platform"><span class="platform-icon">APL</span><h3>iPhone, iPad & Apple TV</h3><p>AVKit foundation with KSPlayer integration under review.</p></article>
+        <article class="platform"><span class="platform-icon">SAM</span><h3>Samsung TV</h3><p>Remote-first television experience and Store candidate lane.</p></article>
+        <article class="platform"><span class="platform-icon">LG</span><h3>LG webOS TV</h3><p>Free Store lane while premium commerce remains safely locked.</p></article>
+      </section>
+    </div>
+
+    <section class="section support-band">
+      <div><p class="eyebrow">Support</p><h2>Need a hand?</h2><p>Start with focused troubleshooting or check the latest project releases.</p></div>
+      <div class="button-row"><a class="button primary" href="support.html">Open support</a><a class="button" href="https://github.com/chris-20-cmyk/StreamVue/releases">View release status</a></div>
+    </section>
+  </main>
+
+  <footer class="site-footer"><div class="footer-inner"><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 4.8v14.4L19 12 7 4.8Z"/></svg></span>ORBITALVUE</a><nav class="footer-links" aria-label="Footer"><a href="privacy.html">Privacy</a><a href="support.html">Support</a><a href="https://github.com/chris-20-cmyk/StreamVue">Project</a></nav><span class="footer-disclaimer">OrbitalVue does not provide channels or media.</span></div></footer>
+</body>
+</html>

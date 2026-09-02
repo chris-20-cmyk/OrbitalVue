@@ -17,6 +17,8 @@ interface SamsungAvPlay {
   play(): void;
   pause(): void;
   stop(): void;
+  seekTo(milliseconds: number): void;
+  getDuration(): number;
   getState(): "NONE" | "IDLE" | "READY" | "PLAYING" | "PAUSED";
   setListener(listener: SamsungAvPlayListener): void;
   setDisplayRect(x: number, y: number, width: number, height: number): void;
@@ -25,7 +27,36 @@ interface SamsungAvPlay {
 }
 
 interface SamsungWebApis {
-  avplay: SamsungAvPlay;
+  avplay?: SamsungAvPlay;
+  billing?: SamsungBilling;
+  productinfo?: SamsungProductInfo;
+  sso?: SamsungSso;
+}
+
+interface SamsungBilling {
+  isServiceAvailable(
+    serverType: "DEV" | "PRD",
+    successCallback: (data: { apiResult: string }) => void,
+    errorCallback?: (error: { name?: string; message?: string }) => void
+  ): void;
+  buyItem(
+    appId: string,
+    serverType: "DEV" | "PRD",
+    paymentDetails: string,
+    successCallback: (data: { payResult?: string; payDetail?: string }) => void,
+    errorCallback?: (error: { name?: string; message?: string }) => void
+  ): void;
+}
+
+interface SamsungProductInfo {
+  ProductInfoConfigKey: {
+    CONFIG_KEY_SERVICE_COUNTRY: string;
+  };
+  getSystemConfig(key: string): string;
+}
+
+interface SamsungSso {
+  getLoginUid(): string | null;
 }
 
 interface SamsungTizen {
@@ -35,10 +66,46 @@ interface SamsungTizen {
   tvinputdevice: {
     registerKey(keyName: string): void;
   };
+  keymanager?: {
+    saveData(
+      name: string,
+      data: string,
+      password?: string | null,
+      successCallback?: () => void,
+      errorCallback?: (error: { name?: string; message?: string }) => void
+    ): void;
+    getData(alias: { name: string }, password?: string | null): string;
+    removeData(alias: { name: string }): void;
+  };
+}
+
+interface WebOsServiceResponse {
+  returnValue?: boolean;
+  errorCode?: number;
+  errorText?: string;
+  handle?: string;
+  iv?: string;
+  output?: string;
+}
+
+interface WebOsService {
+  request(
+    uri: string,
+    options: {
+      method: string;
+      parameters: Record<string, unknown>;
+      onSuccess(response: WebOsServiceResponse): void;
+      onFailure(error: WebOsServiceResponse): void;
+    }
+  ): unknown;
+}
+
+interface WebOsApi {
+  service?: WebOsService;
 }
 
 interface Window {
   webapis?: SamsungWebApis;
   tizen?: SamsungTizen;
-  webOS?: unknown;
+  webOS?: WebOsApi;
 }

@@ -26,6 +26,10 @@ public sealed class DvrRecordingService : IDisposable
 
     public static string DefaultRecordingsFolder => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
+        "OrbitalVue Recordings");
+
+    public static string LegacyDefaultRecordingsFolder => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
         "StreamVue Recordings");
 
     public DvrRecordingSnapshot Start(
@@ -197,7 +201,7 @@ public sealed class DvrRecordingService : IDisposable
         var parent = Path.GetDirectoryName(candidate)?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         if (!string.Equals(parent, folder, StringComparison.OrdinalIgnoreCase) ||
             !Path.GetExtension(candidate).Equals(".ts", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("StreamVue only deletes transport-stream files from the selected recordings folder.");
+            throw new InvalidOperationException("OrbitalVue only deletes transport-stream files from the selected recordings folder.");
 
         lock (_gate)
         {
@@ -245,7 +249,12 @@ public sealed class DvrRecordingService : IDisposable
     }
 
     public static string NormalizeRecordingsFolder(string? folder)
-        => string.IsNullOrWhiteSpace(folder) ? DefaultRecordingsFolder : Path.GetFullPath(folder.Trim());
+    {
+        if (!string.IsNullOrWhiteSpace(folder)) return Path.GetFullPath(folder.Trim());
+        return Directory.Exists(LegacyDefaultRecordingsFolder) && !Directory.Exists(DefaultRecordingsFolder)
+            ? LegacyDefaultRecordingsFolder
+            : DefaultRecordingsFolder;
+    }
 
     public static string CreateRecordingFileName(string channelName, string? programTitle, DateTimeOffset localStart)
     {
@@ -265,7 +274,7 @@ public sealed class DvrRecordingService : IDisposable
         if (_disposed) return;
         lock (_gate)
         {
-            if (_snapshot.IsActive) StopCore(completed: true, "Recording stopped when StreamVue closed");
+            if (_snapshot.IsActive) StopCore(completed: true, "Recording stopped when OrbitalVue closed");
             CleanupPlayer();
             _libVlc?.Dispose();
             _libVlc = null;
@@ -345,7 +354,7 @@ public sealed class DvrRecordingService : IDisposable
         var builder = new StringBuilder(value.Length);
         foreach (var character in value.Trim()) builder.Append(invalid.Contains(character) ? ' ' : character);
         var cleaned = string.Join(' ', builder.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries)).Trim(' ', '.');
-        if (cleaned.Length == 0) cleaned = "StreamVue";
+        if (cleaned.Length == 0) cleaned = "OrbitalVue";
         if (cleaned.Length > maximumLength) cleaned = cleaned[..maximumLength].TrimEnd(' ', '.');
         var stem = cleaned.Split('.')[0];
         if (ReservedWindowsNames.Contains(stem)) cleaned = "_" + cleaned;

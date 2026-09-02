@@ -1,6 +1,6 @@
 {
   "name": "@streamvue/tv-web",
-  "version": "5.0.0-alpha.1",
+  "version": "5.7.0-alpha.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,6 +10,7 @@
     "build": "vite build && node scripts/package-platforms.mjs"
   },
   "dependencies": {
-    "@streamvue/catalog": "workspace:*"
+    "@streamvue/catalog": "workspace:*",
+    "@streamvue/media-centers": "workspace:*"
   }
 }

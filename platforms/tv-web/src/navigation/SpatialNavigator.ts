@@ -45,6 +45,12 @@ export function chooseNextIndex(rectangles: RectLike[], currentIndex: number, di
   return bestIndex;
 }
 
+export function chooseTabIndex(itemCount: number, currentIndex: number, reverse: boolean): number {
+  if (itemCount <= 0) return -1;
+  if (reverse) return currentIndex <= 0 ? itemCount - 1 : currentIndex - 1;
+  return currentIndex < 0 || currentIndex >= itemCount - 1 ? 0 : currentIndex + 1;
+}
+
 export class SpatialNavigator {
   private scope: HTMLElement;
 
@@ -92,6 +98,16 @@ export class SpatialNavigator {
       if (this.onBack()) event.preventDefault();
       return;
     }
+    if (event.key === "Tab") {
+      const focusable = this.focusableElements();
+      if (focusable.length === 0) return;
+      const current = document.activeElement as HTMLElement | null;
+      const currentIndex = current ? focusable.indexOf(current) : -1;
+      const nextIndex = chooseTabIndex(focusable.length, currentIndex, event.shiftKey);
+      event.preventDefault();
+      this.focusElement(focusable[nextIndex] ?? null);
+      return;
+    }
     if (event.key === "Enter") {
       const active = document.activeElement as HTMLElement | null;
       if (active?.dataset.focusable === "true") {
@@ -100,10 +116,9 @@ export class SpatialNavigator {
       }
       return;
     }
-    if (isTextEntry(document.activeElement)) return;
-
     const direction = keyDirection(event.key);
     if (!direction) return;
+    if (isTextEntry(document.activeElement) && (direction === "left" || direction === "right")) return;
     const focusable = this.focusableElements();
     const current = document.activeElement as HTMLElement | null;
     const currentIndex = current ? focusable.indexOf(current) : -1;

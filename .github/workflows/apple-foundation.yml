@@ -1,0 +1,224 @@
+name: Apple foundation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "feature/**"
+    paths:
+      - "platforms/apple/**"
+      - "contracts/**"
+      - "store/**"
+      - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-cross-platform-release-contract.mjs"
+      - "tools/verify-apple-brand-assets.mjs"
+      - "tools/verify-apple-distribution-readiness.mjs"
+      - "tools/verify-apple-plex-account-foundation.mjs"
+      - ".github/workflows/apple-foundation.yml"
+  pull_request:
+    paths:
+      - "platforms/apple/**"
+      - "contracts/**"
+      - "store/**"
+      - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-cross-platform-release-contract.mjs"
+      - "tools/verify-apple-brand-assets.mjs"
+      - "tools/verify-apple-distribution-readiness.mjs"
+      - "tools/verify-apple-plex-account-foundation.mjs"
+      - ".github/workflows/apple-foundation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Portable catalog contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out OrbitalVue
+        uses: actions/checkout@v7
+      - name: Validate contract fixtures
+        run: |
+          node contracts/validate-contract.mjs
+          node tools/verify-premium-store-readiness.mjs
+          node tools/verify-cross-platform-release-contract.mjs
+          node tools/verify-apple-brand-assets.mjs
+          node tools/verify-apple-distribution-readiness.mjs
+          node tools/verify-apple-plex-account-foundation.mjs
+
+  apple:
+    name: iPhone, iPad, and Apple TV
+    needs: contract
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Check out OrbitalVue
+        uses: actions/checkout@v7
+
+      - name: Select the App Store toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+          xcodebuild -version
+          swift --version
+
+      - name: Install pinned XcodeGen
+        run: |
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/xcodegen.zip" \
+            https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip
+          echo "4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 --check
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+          sudo "$RUNNER_TEMP/xcodegen/install.sh"
+          xcodegen --version | grep -F "Version: 2.46.0"
+
+      - name: Generate the Xcode project
+        working-directory: platforms/apple
+        run: |
+          test "$(grep -c 'PRODUCT_BUNDLE_IDENTIFIER: com.orbitalvue.player' project.yml)" = "2"
+          xcodegen generate --spec project.yml
+
+      - name: Test the shared Swift catalog and source layer
+        run: swift test --package-path platforms/apple --parallel
+
+      - name: Validate the privacy manifest
+        run: plutil -lint platforms/apple/Resources/PrivacyInfo.xcprivacy
+
+      - name: Validate the Apple artwork
+        shell: bash
+        run: |
+          node tools/verify-apple-brand-assets.mjs
+          ICON="platforms/apple/Apps/iOS/Assets.xcassets/AppIcon.appiconset/StreamVue-AppIcon-1024.png"
+          test "$(sips -g pixelWidth "$ICON" | awk '/pixelWidth/ {print $2}')" = "1024"
+          test "$(sips -g pixelHeight "$ICON" | awk '/pixelHeight/ {print $2}')" = "1024"
+          test "$(sips -g hasAlpha "$ICON" | awk '/hasAlpha/ {print $2}')" = "no"
+
+      - name: Build iPhone and iPad
+        shell: bash
+        run: |
+          xcodebuild \
+            -quiet \
+            -jobs 2 \
+            -project platforms/apple/StreamVueApple.xcodeproj \
+            -scheme StreamVue \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath artifacts/apple-derived-data/ios \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            SWIFT_ENABLE_BATCH_MODE=NO \
+            build
+
+      - name: Analyze iPhone and iPad
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -jobs 2 \
+            -project platforms/apple/StreamVueApple.xcodeproj \
+            -scheme StreamVue \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath artifacts/apple-derived-data/ios \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            SWIFT_ENABLE_BATCH_MODE=NO \
+            analyze | xcbeautify
+
+      - name: Build Apple TV
+        shell: bash
+        run: |
+          xcodebuild \
+            -quiet \
+            -jobs 2 \
+            -project platforms/apple/StreamVueApple.xcodeproj \
+            -scheme StreamVueTV \
+            -destination "generic/platform=tvOS Simulator" \
+            -derivedDataPath artifacts/apple-derived-data/tvos \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            SWIFT_ENABLE_BATCH_MODE=NO \
+            build
+
+      - name: Analyze Apple TV
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -jobs 2 \
+            -project platforms/apple/StreamVueApple.xcodeproj \
+            -scheme StreamVueTV \
+            -destination "generic/platform=tvOS Simulator" \
+            -derivedDataPath artifacts/apple-derived-data/tvos \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            SWIFT_ENABLE_BATCH_MODE=NO \
+            analyze | xcbeautify
+
+      - name: Build and verify locked Apple Store configurations
+        shell: bash
+        run: |
+          cp platforms/apple/Package.store.swift platforms/apple/Package.swift
+          if grep -Fq 'github.com/kingslay/KSPlayer' platforms/apple/Package.swift; then
+            echo 'The Apple Store package graph still contains the public GPL KSPlayer dependency.' >&2
+            exit 1
+          fi
+          rm -rf platforms/apple/StreamVueApple.xcodeproj
+          (cd platforms/apple && xcodegen generate --spec project.yml)
+          swift test --package-path platforms/apple --parallel
+          xcodebuild \
+            -quiet \
+            -jobs 2 \
+            -project platforms/apple/StreamVueApple.xcodeproj \
+            -scheme StreamVue \
+            -configuration Store \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath artifacts/apple-derived-data/store-ios \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            SWIFT_ENABLE_BATCH_MODE=NO \
+            build
+          xcodebuild \
+            -quiet \
+            -jobs 2 \
+            -project platforms/apple/StreamVueApple.xcodeproj \
+            -scheme StreamVueTV \
+            -configuration Store \
+            -destination "generic/platform=tvOS Simulator" \
+            -derivedDataPath artifacts/apple-derived-data/store-tvos \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            SWIFT_ENABLE_BATCH_MODE=NO \
+            build
+          test "$(plutil -extract StreamVueDistributionMode raw -o - artifacts/apple-derived-data/store-ios/Build/Products/Store-iphonesimulator/OrbitalVue.app/Info.plist)" = "store"
+          test "$(plutil -extract StreamVueDistributionMode raw -o - artifacts/apple-derived-data/store-tvos/Build/Products/Store-appletvsimulator/OrbitalVueTV.app/Info.plist)" = "store"
+          test "$(plutil -extract CFBundleIdentifier raw -o - artifacts/apple-derived-data/store-ios/Build/Products/Store-iphonesimulator/OrbitalVue.app/Info.plist)" = "com.orbitalvue.player"
+          test "$(plutil -extract CFBundleIdentifier raw -o - artifacts/apple-derived-data/store-tvos/Build/Products/Store-appletvsimulator/OrbitalVueTV.app/Info.plist)" = "com.orbitalvue.player"
+          resolved='platforms/apple/StreamVueApple.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved'
+          if [[ -f "$resolved" ]] && grep -Eiq 'ksplayer|kingslay' "$resolved"; then
+            echo 'The AVKit-only Store graph unexpectedly resolved KSPlayer.' >&2
+            exit 1
+          fi
+          if find \
+            artifacts/apple-derived-data/store-ios/Build/Products/Store-iphonesimulator/OrbitalVue.app \
+            artifacts/apple-derived-data/store-tvos/Build/Products/Store-appletvsimulator/OrbitalVueTV.app \
+            -iname '*ksplayer*' -print | grep -q .; then
+            echo 'An AVKit-only Store product contains a KSPlayer-named bundle artifact.' >&2
+            exit 1
+          fi
+
+      - name: Verify simulator products without distributing them
+        run: |
+          test -d artifacts/apple-derived-data/ios/Build/Products/Debug-iphonesimulator/OrbitalVue.app
+          test -d artifacts/apple-derived-data/tvos/Build/Products/Debug-appletvsimulator/OrbitalVueTV.app
+          echo "Personal simulator products include pinned KSPlayer; Store simulator products are AVKit-only and remain inside CI."

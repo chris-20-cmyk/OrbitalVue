@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamvue.app/contracts/media-center/v1/schema.json",
+  "title": "OrbitalVue Portable Media Center Snapshot",
+  "description": "Cache-safe Plex or Emby browse metadata. Secrets and resolved playback requests are intentionally excluded.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contractVersion", "loadedAt", "connection", "libraries", "items"],
+  "properties": {
+    "contractVersion": { "const": "1.0" },
+    "loadedAt": { "type": "string", "format": "date-time" },
+    "connection": { "$ref": "#/$defs/connection" },
+    "libraries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/library" }
+    },
+    "items": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/item" }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:-]{1,256}$"
+    },
+    "connection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion",
+        "provider",
+        "serverId",
+        "displayName",
+        "baseUrl",
+        "displayLocation",
+        "credentialId"
+      ],
+      "properties": {
+        "contractVersion": { "const": "1.0" },
+        "provider": { "enum": ["plex", "emby"] },
+        "serverId": { "$ref": "#/$defs/identifier" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "baseUrl": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://"
+        },
+        "displayLocation": {
+          "description": "A safe server label without credentials or tokens.",
+          "type": "string",
+          "maxLength": 512
+        },
+        "credentialId": {
+          "description": "Opaque lookup key for a platform secure store; never the credential itself.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "userId": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "library": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "kind"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "kind": { "enum": ["movies", "shows", "recordings", "live-tv", "music", "other"] },
+        "itemCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "track": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "type", "isDefault", "isForced"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "type": { "enum": ["video", "audio", "subtitle"] },
+        "codec": { "type": "string", "maxLength": 64 },
+        "language": { "type": "string", "maxLength": 64 },
+        "title": { "type": "string", "maxLength": 256 },
+        "isDefault": { "type": "boolean" },
+        "isForced": { "type": "boolean" },
+        "channels": { "type": "integer", "minimum": 1, "maximum": 64 }
+      }
+    },
+    "mediaSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "supportsDirectPlay",
+        "supportsDirectStream",
+        "supportsTranscode",
+        "tracks"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "playbackPath": {
+          "description": "Provider-relative path only; never a resolved URL or credential-bearing query.",
+          "type": "string",
+          "pattern": "^/[^#]*$",
+          "maxLength": 2048
+        },
+        "container": { "type": "string", "maxLength": 64 },
+        "videoCodec": { "type": "string", "maxLength": 64 },
+        "audioCodec": { "type": "string", "maxLength": 64 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "bitrate": { "type": "integer", "minimum": 0 },
+        "supportsDirectPlay": { "type": "boolean" },
+        "supportsDirectStream": { "type": "boolean" },
+        "supportsTranscode": { "type": "boolean" },
+        "tracks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/track" }
+        }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "provider",
+        "serverId",
+        "libraryId",
+        "libraryTitle",
+        "kind",
+        "title",
+        "played",
+        "mediaSources"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "provider": { "enum": ["plex", "emby"] },
+        "serverId": { "$ref": "#/$defs/identifier" },
+        "libraryId": { "$ref": "#/$defs/identifier" },
+        "libraryTitle": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "kind": { "enum": ["movie", "episode", "video", "recording", "live-tv", "audio"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "sortTitle": { "type": "string", "maxLength": 512 },
+        "seriesTitle": { "type": "string", "maxLength": 512 },
+        "seasonNumber": { "type": "integer", "minimum": 0 },
+        "episodeNumber": { "type": "integer", "minimum": 0 },
+        "year": { "type": "integer", "minimum": 1800, "maximum": 3000 },
+        "durationMs": { "type": "integer", "minimum": 0 },
+        "resumePositionMs": { "type": "integer", "minimum": 0 },
+        "played": { "type": "boolean" },
+        "artworkPath": {
+          "type": "string",
+          "pattern": "^/[^#]*$",
+          "maxLength": 2048
+        },
+        "mediaSources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/mediaSource" }
+        }
+      }
+    }
+  }
+}

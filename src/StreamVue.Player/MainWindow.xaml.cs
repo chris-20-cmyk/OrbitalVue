@@ -48,6 +48,9 @@ public partial class MainWindow : Window
 
     private readonly PlaylistSourceService _playlistSource = new();
     private readonly XtreamSourceService _xtreamSource = new();
+    private readonly MediaCenterSourceService _mediaCenterSource;
+    private readonly MicrosoftStorePremiumService _premiumStore = new();
+    private PremiumAccessSnapshot _premiumAccess = PremiumAccessPolicy.Current;
     private readonly AppSettingsStore _settingsStore = new();
     private readonly PlaylistCacheStore _playlistCache = new();
     private readonly PlaylistSourceRefreshService _playlistSourceRefresh;
@@ -85,6 +88,10 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _loadCancellation;
     private CancellationTokenSource? _updateCancellation;
     private CancellationTokenSource? _guideCancellation;
+    private CancellationTokenSource? _mediaPlaybackCancellation;
+    private CancellationTokenSource? _plexAccountCancellation;
+    private PlexPinChallenge? _plexAccountChallenge;
+    private PlexServerDiscovery? _plexAccountDiscovery;
     private ChannelItem? _currentChannel;
     private ChannelItem? _activeSignalFeed;
     private ChannelItem? _previousChannel;
@@ -103,7 +110,8 @@ public partial class MainWindow : Window
     private DateTimeOffset _lastGuidePresentationUpdate;
     private DateTimeOffset _guideWindowStart = AlignTimelineStart(DateTimeOffset.UtcNow);
     private string _guideFilter = "All";
-    private string _kindFilter = "All";
+    private MediaLibraryBrowseMode _libraryBrowseMode = MediaLibraryBrowseMode.All;
+    private MediaLibraryBrowseSummary _libraryBrowseSummary = new(false, 0, 0, 0, 0);
     private string _categoryFilter = string.Empty;
     private bool _favoritesOnly;
     private bool _windowReady;
@@ -143,6 +151,12 @@ public partial class MainWindow : Window
     private string _dvrWakeSignature = string.Empty;
     private string? _currentRecordingPath;
     private bool _recordingResumeApplied = true;
+    private long _pendingMediaResumeMilliseconds;
+    private bool _mediaResumeApplied = true;
+    private string? _mediaPlaybackReportingSessionId;
+    private PlaybackState _mediaPlaybackState = PlaybackState.Idle;
+    private MediaCenterPlaybackState? _lastReportedMediaPlaybackState;
+    private DateTimeOffset _lastMediaPlaybackReportUtc = DateTimeOffset.MinValue;
     private bool _seekingRecording;
     private bool _allowFinalClose;
     private bool _hiddenToTray;
@@ -179,7 +193,12 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
+        _mediaCenterSource = new MediaCenterSourceService(
+            premiumAccessProvider: () => _premiumAccess);
+        _premiumStore.StateChanged += PremiumStore_StateChanged;
         InitializeComponent();
+        ApplyPremiumAccessPresentation();
+        SourceTabs.SelectionChanged += SourceTabs_SelectionChanged;
         _playlistSourceRefresh = new PlaylistSourceRefreshService(
             LoadPlaylistSourceDefinitionAsync,
             (sourceType, sourceValue, token) => _playlistCache.TryLoadAsync(sourceType, sourceValue, token),
@@ -213,6 +232,120 @@ public partial class MainWindow : Window
 
         AspectBox.SelectedIndex = 0;
         DefaultAspectBox.SelectedIndex = 0;
+    }
+
+    private void ApplyPremiumAccessPresentation()
+    {
+        var purchase = _premiumStore.State;
+        PlexAccessBadge.Text = _premiumAccess.BadgeText;
+        EmbyAccessBadge.Text = _premiumAccess.BadgeText;
+        var purchaseControlsVisible = !_premiumAccess.CanUseMediaCenters &&
+            (purchase.IsBusy || purchase.CanPurchase || purchase.CanRestore);
+        PlexPurchasePanel.Visibility = purchaseControlsVisible ? Visibility.Visible : Visibility.Collapsed;
+        EmbyPurchasePanel.Visibility = purchaseControlsVisible ? Visibility.Visible : Visibility.Collapsed;
+        PlexPurchaseProgress.Visibility = purchase.IsBusy ? Visibility.Visible : Visibility.Collapsed;
+        EmbyPurchaseProgress.Visibility = purchase.IsBusy ? Visibility.Visible : Visibility.Collapsed;
+        var productLabel = string.IsNullOrWhiteSpace(purchase.ProductTitle)
+            ? "Lifetime Plex + Emby access"
+            : purchase.ProductTitle;
+        PlexPurchaseProductText.Text = productLabel;
+        EmbyPurchaseProductText.Text = productLabel;
+        var purchaseLabel = string.IsNullOrWhiteSpace(purchase.FormattedPrice)
+            ? "Buy once"
+            : $"Buy once — {purchase.FormattedPrice}";
+        PlexPurchaseButton.Content = purchaseLabel;
+        EmbyPurchaseButton.Content = purchaseLabel;
+        PlexPurchaseButton.IsEnabled = purchase.CanPurchase && !purchase.IsBusy;
+        EmbyPurchaseButton.IsEnabled = purchase.CanPurchase && !purchase.IsBusy;
+        PlexRestoreButton.IsEnabled = purchase.CanRestore && !purchase.IsBusy;
+        EmbyRestoreButton.IsEnabled = purchase.CanRestore && !purchase.IsBusy;
+        if (_premiumAccess.CanUseMediaCenters)
+        {
+            PlexAccessDetailText.Text = $"Index movies and episodes without storing playable token URLs in the library. {_premiumAccess.Explanation}";
+            EmbyAccessDetailText.Text = $"Connect directly with a protected Windows-user-bound session. {_premiumAccess.Explanation}";
+            PlexConnectButton.Content = "Connect Plex";
+            EmbyConnectButton.Content = "Connect Emby";
+            PlexConnectButton.Opacity = 1;
+            EmbyConnectButton.Opacity = 1;
+            PlexAccountPanel.IsEnabled = true;
+            foreach (var control in MediaCenterCredentialControls()) control.IsEnabled = true;
+            PlexConnectButton.IsEnabled = true;
+            EmbyConnectButton.IsEnabled = true;
+            return;
+        }
+
+        var lockedMessage = purchase.Message ?? _premiumAccess.Explanation;
+        PlexAccessDetailText.Text = lockedMessage;
+        EmbyAccessDetailText.Text = lockedMessage;
+        PlexConnectButton.Content = "Premium unavailable";
+        EmbyConnectButton.Content = "Premium unavailable";
+        PlexConnectButton.IsEnabled = false;
+        EmbyConnectButton.IsEnabled = false;
+        PlexConnectButton.Opacity = 0.48;
+        EmbyConnectButton.Opacity = 0.48;
+        CancelPlexAccountSignInCore(lockedMessage);
+        PlexAccountPanel.IsEnabled = false;
+        foreach (var control in MediaCenterCredentialControls()) control.IsEnabled = false;
+    }
+
+    private System.Windows.Controls.Control[] MediaCenterCredentialControls() =>
+    [
+        PlexServerBox, PlexNameBox, PlexTokenBox, PlexAllowHttpBox,
+        EmbyServerBox, EmbyNameBox, EmbyUsernameBox, EmbyPasswordBox, EmbyAllowHttpBox
+    ];
+
+    private void PremiumStore_StateChanged(object? sender, PremiumPurchaseState state)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            _ = Dispatcher.BeginInvoke(() => PremiumStore_StateChanged(sender, state));
+            return;
+        }
+        var previous = _premiumAccess;
+        _premiumAccess = state.Access;
+        ApplyPremiumAccessPresentation();
+        RefreshPlaylistSourceList();
+        if (!previous.CanUseMediaCenters && state.Access.CanUseMediaCenters)
+        {
+            ImportStatusText.Text = "Lifetime premium access verified";
+            ImportDetailText.Text = state.Message ?? state.Access.Explanation;
+            FooterStatusDot.Fill = LiveBrush;
+            FooterStatusText.Text = "Microsoft Store premium access verified";
+            return;
+        }
+        if (!previous.CanUseMediaCenters || state.Access.CanUseMediaCenters) return;
+        CancelPlexAccountSignInCore("Premium access is no longer verified. Plex account sign-in was canceled.");
+        ResetArtworkLoading();
+        if (_currentChannel?.IsProtectedMedia == true)
+        {
+            ObserveMediaPlaybackReport(EndCurrentMediaPlaybackReporting(_playback?.GetSnapshot()));
+            _mediaCenterSource.CancelAllPlaybackReportingSessions();
+            CancelMediaPlaybackResolution(clearResume: true);
+            _playback?.Stop();
+            _displayRefreshRate?.Restore();
+        }
+        ImportStatusText.Text = "Premium access is no longer verified";
+        ImportDetailText.Text = state.Message ?? state.Access.Explanation;
+        FooterStatusDot.Fill = WarningBrush;
+        FooterStatusText.Text = "Protected media-center playback stopped";
+    }
+
+    private void SourceTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!ReferenceEquals(e.OriginalSource, SourceTabs) || _premiumAccess.CanUseMediaCenters) return;
+        if (ReferenceEquals(SourceTabs.SelectedItem, PlexSourceTab) ||
+            ReferenceEquals(SourceTabs.SelectedItem, EmbySourceTab))
+        {
+            ImportStatusText.Text = "Premium store verification required";
+            ImportDetailText.Text = "No media-server credential or request is allowed in this store build. Playlist sources remain available.";
+            return;
+        }
+
+        if (ImportStatusText.Text == "Premium store verification required")
+        {
+            ImportStatusText.Text = "Ready to connect";
+            ImportDetailText.Text = "Choose a source that you are authorized to access.";
+        }
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
@@ -250,6 +383,7 @@ public partial class MainWindow : Window
         _settings.Multiview.ChannelKeys ??= [null, null, null, null];
         _settings.Multiview.SavedLayouts ??= [];
         _favoriteKeys = new HashSet<string>(_settings.FavoriteChannelKeys ?? [], StringComparer.OrdinalIgnoreCase);
+        await _premiumStore.StartAsync(new WindowInteropHelper(this).EnsureHandle());
         ApplySettingsToControls();
         RefreshSavedMultiviewLayouts();
         UpdatePlaylistHealthUi();
@@ -730,6 +864,10 @@ public partial class MainWindow : Window
             await PrepareModalCaptureAsync(commandLineArguments);
             if (commandLineArguments.Contains("--guide-tab", StringComparer.OrdinalIgnoreCase))
                 SourceTabs.SelectedItem = GuideSourceTab;
+            if (commandLineArguments.Contains("--plex-tab", StringComparer.OrdinalIgnoreCase))
+                SourceTabs.SelectedItem = PlexSourceTab;
+            if (commandLineArguments.Contains("--emby-tab", StringComparer.OrdinalIgnoreCase))
+                SourceTabs.SelectedItem = EmbySourceTab;
             if (commandLineArguments.Contains("--maximized", StringComparer.OrdinalIgnoreCase))
                 WindowState = WindowState.Maximized;
             ShowModal(ImportOverlay);
@@ -793,6 +931,12 @@ public partial class MainWindow : Window
                 XtreamUsernameBox.Text = credentials.Username;
                 XtreamPasswordBox.Password = credentials.Password;
                 break;
+            case "plex":
+                PlexServerBox.Text = _settings.LastSource;
+                break;
+            case "emby":
+                EmbyServerBox.Text = _settings.LastSource;
+                break;
         }
     }
 
@@ -801,11 +945,17 @@ public partial class MainWindow : Window
         IProgress<PlaylistProgress>? progress,
         CancellationToken cancellationToken)
     {
+        if (source.SourceType is "plex" or "emby") PremiumAccessPolicy.RequireMediaCenters(_premiumAccess);
         return source.SourceType switch
         {
             "file" => await _playlistSource.LoadFileAsync(source.SourceValue, progress, cancellationToken),
             "url" => await _playlistSource.LoadUrlAsync(source.SourceValue, progress, cancellationToken),
             "xtream" => await LoadSavedXtreamSourceAsync(source.SourceValue, progress, cancellationToken),
+            "plex" or "emby" => await _mediaCenterSource.LoadSavedAsync(
+                source.SourceType,
+                source.SourceValue,
+                progress,
+                cancellationToken),
             _ => throw new InvalidDataException("This saved playlist type is not supported.")
         };
     }
@@ -829,11 +979,19 @@ public partial class MainWindow : Window
     private async Task<bool> LoadUnifiedPlaylistSourcesAsync(bool startup, bool closeImportOnSuccess = false)
     {
         if (_isLoading) return false;
-        var enabledSources = (_settings.PlaylistSources ?? [])
+        var configuredSources = (_settings.PlaylistSources ?? [])
             .Where(source => source.IsEnabled)
             .OrderBy(source => source.SortOrder)
             .ThenBy(source => source.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        var enabledSources = configuredSources
+            .Where(source => _premiumAccess.CanUseMediaCenters || source.SourceType is not ("plex" or "emby"))
+            .ToList();
+        if (enabledSources.Count == 0 && configuredSources.Count > 0)
+        {
+            EnsureMediaCenterAccess(configuredSources[0].TypeLabel);
+            return false;
+        }
         if (enabledSources.Count == 0) return false;
 
         _isLoading = true;
@@ -977,7 +1135,7 @@ public partial class MainWindow : Window
         SourceManagerEmptyText.Visibility = sources.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         var enabled = sources.Count(source => source.IsEnabled);
         SourceManagerSummaryText.Text = sources.Count == 0
-            ? "Add an M3U file, URL, or Xtream account to begin."
+            ? "Add an M3U, Xtream, Plex, or Emby source to begin."
             : $"{sources.Count:N0} saved • {enabled:N0} enabled • startup refresh is set per source";
         SourceRefreshEnabledButton.IsEnabled = !_isLoading && enabled > 0;
     }
@@ -1194,7 +1352,7 @@ public partial class MainWindow : Window
         {
             PlaylistHealthGlyph.Text = "○";
             PlaylistHealthStateText.Text = "Waiting for a playlist";
-            PlaylistHealthDetailText.Text = "Connect an M3U file, URL, or Xtream account to enable launch verification.";
+            PlaylistHealthDetailText.Text = "Connect an M3U, Xtream, Plex, or Emby source to enable launch verification.";
         }
         else if (health.UsedCachedFallback)
         {
@@ -1335,6 +1493,9 @@ public partial class MainWindow : Window
                 (progress, token) => _playlistSource.LoadUrlAsync(_activePlaylistSourceValue, progress, token),
                 "url", _activePlaylistSourceValue, allowCachedFallback: true),
             "xtream" => await RefreshSavedXtreamPlaylistAsync(_activePlaylistSourceValue),
+            "plex" or "emby" => await RefreshSavedMediaCenterAsync(
+                _activePlaylistSourceType,
+                _activePlaylistSourceValue),
             _ => false
         };
         UpdatePlaylistHealthUi();
@@ -1350,6 +1511,16 @@ public partial class MainWindow : Window
             "xtream", sourceValue, allowCachedFallback: true);
     }
 
+    private Task<bool> RefreshSavedMediaCenterAsync(string provider, string sourceValue)
+    {
+        if (!EnsureMediaCenterAccess(provider)) return Task.FromResult(false);
+        return LoadPlaylistAsync(
+            (progress, token) => _mediaCenterSource.LoadSavedAsync(provider, sourceValue, progress, token),
+            provider,
+            sourceValue,
+            allowCachedFallback: true);
+    }
+
     private static bool IsPlaylistFileExtension(string extension) =>
         extension.Equals(".m3u", StringComparison.OrdinalIgnoreCase) ||
         extension.Equals(".m3u8", StringComparison.OrdinalIgnoreCase) ||
@@ -1357,6 +1528,7 @@ public partial class MainWindow : Window
 
     private void ApplyPlaylist(PlaylistResult result)
     {
+        ResetArtworkLoading();
         var rebuildMultiview = _multiviewSession is not null;
         _multiviewSession?.Dispose();
         _multiviewSession = null;
@@ -1385,12 +1557,17 @@ public partial class MainWindow : Window
         _channelView = CollectionViewSource.GetDefaultView(_channels);
         _channelView.Filter = FilterChannel;
         _categoryFilter = string.Empty;
+        _libraryBrowseSummary = MediaLibraryBrowsePolicy.Summarize(_channels);
         ApplyChannelGrouping();
         ChannelList.ItemsSource = _channelView;
         SourceNameText.Text = result.DisplayName;
 
         CategoryBox.Items.Clear();
-        CategoryBox.Items.Add(new ComboBoxItem { Content = "All groups", Tag = string.Empty });
+        CategoryBox.Items.Add(new ComboBoxItem
+        {
+            Content = _libraryBrowseSummary.IsMediaCenterLibrary ? "All libraries" : "All groups",
+            Tag = string.Empty
+        });
         foreach (var group in _channels
                      .GroupBy(channel => channel.Group, StringComparer.OrdinalIgnoreCase)
                      .Select(group => new { group.Key, Count = group.Count() }))
@@ -1399,8 +1576,20 @@ public partial class MainWindow : Window
         }
 
         CategoryBox.SelectedIndex = 0;
-        _kindFilter = "All";
+        _libraryBrowseMode = MediaLibraryBrowseMode.All;
         AllFilter.IsChecked = true;
+        ContinueWatchingFilter.Visibility = _libraryBrowseSummary.IsMediaCenterLibrary
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        ContinueWatchingFilter.Content = $"Continue ({_libraryBrowseSummary.ContinueWatchingCount:N0})";
+        RecentlyAddedFilter.Visibility = _libraryBrowseSummary.IsMediaCenterLibrary
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        RecentlyAddedFilter.Content = $"Recent ({_libraryBrowseSummary.RecentlyAddedCount:N0})";
+        CatalogHeading.Text = _libraryBrowseSummary.IsMediaCenterLibrary ? "Library" : "Channels";
+        SearchHint.Text = _libraryBrowseSummary.IsMediaCenterLibrary
+            ? "Search titles, series, or libraries"
+            : "Search channels or groups";
         RefreshChannelCount();
         var alternateFeedCount = Math.Max(0, _allChannels.Count - _channels.Count);
         NowPlayingSubheading.Text = alternateFeedCount == 0
@@ -1973,7 +2162,7 @@ public partial class MainWindow : Window
             new() { Number = 5, Name = "Night Sessions", Group = "Music", Url = "https://example.invalid/live/5.ts", Kind = ChannelKind.Live },
             new() { Number = 6, Name = "Archive Series", Group = "Series", Url = "https://example.invalid/series/6.mkv", Kind = ChannelKind.Series }
         };
-        ApplyPlaylist(new PlaylistResult(previewChannels, "StreamVue editorial preview", "preview", DateTimeOffset.Now));
+        ApplyPlaylist(new PlaylistResult(previewChannels, "OrbitalVue editorial preview", "preview", DateTimeOffset.Now));
         HideModal(ImportOverlay);
         FooterStatusDot.Fill = LiveBrush;
         FooterStatusText.Text = "Native interface preview • Direct MPEG-TS ready";
@@ -2038,6 +2227,7 @@ public partial class MainWindow : Window
         InspectorChannelName.Text = route.Representative.Name;
         InspectorGroupName.Text = route.Representative.Group;
         InspectorInitials.Text = route.Representative.Initials;
+        ShowChannelArtwork(route.Representative);
         ActiveFeedValue.Text = SmartSignalRoutingPolicy.SourceLabel(_activeSignalFeed);
         UpdateSignalRouteAvailability();
         FooterStatusDot.Fill = LiveBrush;
@@ -2072,7 +2262,7 @@ public partial class MainWindow : Window
         catalog["FS1.US2"] = "FOX Sports 1";
         catalog["SPECTRUMSPORTSNET.US2"] = "Spectrum SportsNet";
         catalog["REDBULLTV.US2"] = "Red Bull TV";
-        return new EpgSchedule(programmes, aliases, "StreamVue guide preview", now, catalog);
+        return new EpgSchedule(programmes, aliases, "OrbitalVue guide preview", now, catalog);
     }
 
     private async Task RunGuideSmokeAsync(string playlistPath, string reportPath, string capturePath)
@@ -2486,7 +2676,7 @@ public partial class MainWindow : Window
     {
         if (item is not ChannelItem channel) return false;
         if (_favoritesOnly && !channel.IsFavorite) return false;
-        if (_kindFilter != "All" && !channel.Kind.ToString().Equals(_kindFilter, StringComparison.OrdinalIgnoreCase)) return false;
+        if (!MediaLibraryBrowsePolicy.Matches(channel, _libraryBrowseMode)) return false;
         if (_categoryFilter.Length > 0 && !channel.Group.Equals(_categoryFilter, StringComparison.OrdinalIgnoreCase)) return false;
 
         var query = SearchBox.Text.Trim();
@@ -2506,9 +2696,10 @@ public partial class MainWindow : Window
     {
         var visible = ChannelList.Items.Count;
         FavoritesEmptyState.Visibility = _favoritesOnly && visible == 0 ? Visibility.Visible : Visibility.Collapsed;
+        var unit = _libraryBrowseSummary.IsMediaCenterLibrary ? "titles" : "channels";
         var channelText = visible == _channels.Count
-            ? $"{_channels.Count:N0} channels"
-            : $"{visible:N0} of {_channels.Count:N0} channels";
+            ? $"{_channels.Count:N0} {unit}"
+            : $"{visible:N0} of {_channels.Count:N0} {unit}";
         var visibleGroups = _channelView?.Groups?.Count ?? 0;
         ChannelCountText.Text = _categoryFilter.Length == 0 && visibleGroups > 0
             ? $"{channelText} • {visibleGroups:N0} groups"
@@ -2520,6 +2711,12 @@ public partial class MainWindow : Window
         if (ChannelList.SelectedItem is not ChannelItem channel) return;
         if (_multiviewMode)
         {
+            if (channel.IsProtectedMedia)
+            {
+                FooterStatusDot.Fill = WarningBrush;
+                FooterStatusText.Text = "Plex and Emby libraries currently open in the main player • exit Multiview to play this item";
+                return;
+            }
             EnsureMultiviewSession();
             _multiviewSession!.AssignChannel(_multiviewSession.ActiveSlot, ResolveBestSignalFeed(channel));
             UpdateMultiviewPresentation();
@@ -2537,19 +2734,45 @@ public partial class MainWindow : Window
         ChannelItem? requestedSignalFeed = null,
         bool rememberChannel = true)
     {
-        var route = string.IsNullOrWhiteSpace(recordingPath) ? GetSignalRoute(channel) : null;
+        if (string.IsNullOrWhiteSpace(recordingPath) && channel.IsProtectedMedia)
+        {
+            _ = TuneProtectedMediaAsync(channel, rememberChannel);
+            return;
+        }
+
+        CancelMediaPlaybackResolution(clearResume: true);
+        TuneChannelCore(channel, recordingPath, requestedSignalFeed, rememberChannel);
+    }
+
+    private void TuneChannelCore(
+        ChannelItem channel,
+        string? recordingPath = null,
+        ChannelItem? requestedSignalFeed = null,
+        bool rememberChannel = true,
+        ChannelItem? playbackOverride = null,
+        ChannelPlaybackProfile? playbackProfile = null,
+        string? mediaPlaybackReportingSessionId = null,
+        bool force = false)
+    {
+        var route = string.IsNullOrWhiteSpace(recordingPath) && playbackOverride is null ? GetSignalRoute(channel) : null;
         var logicalChannel = route?.Representative ?? channel;
-        if (ReferenceEquals(logicalChannel, _currentChannel) &&
+        if (!force && ReferenceEquals(logicalChannel, _currentChannel) &&
             string.Equals(recordingPath, _currentRecordingPath, StringComparison.OrdinalIgnoreCase) &&
             (requestedSignalFeed is null || string.Equals(requestedSignalFeed.StableKey, _activeSignalFeed?.StableKey, StringComparison.OrdinalIgnoreCase))) return;
-        CaptureSignalTelemetry(_playback?.GetSnapshot(), persist: false);
+        var previousSnapshot = _playback?.GetSnapshot();
+        CaptureSignalTelemetry(previousSnapshot, persist: false);
         SaveCurrentRecordingProgress(force: true);
+        ObserveMediaPlaybackReport(EndCurrentMediaPlaybackReporting(previousSnapshot));
         _displayRefreshRate?.Restore();
         if (_currentChannel is not null && string.IsNullOrWhiteSpace(_currentRecordingPath) && !ReferenceEquals(_currentChannel, logicalChannel))
             _previousChannel = _currentChannel;
         _currentRecordingPath = string.IsNullOrWhiteSpace(recordingPath) ? null : Path.GetFullPath(recordingPath);
         _recordingResumeApplied = _currentRecordingPath is null;
         _currentChannel = logicalChannel;
+        _mediaPlaybackReportingSessionId = mediaPlaybackReportingSessionId;
+        _mediaPlaybackState = PlaybackState.Idle;
+        _lastReportedMediaPlaybackState = null;
+        _lastMediaPlaybackReportUtc = DateTimeOffset.MinValue;
         if (_currentRecordingPath is null && rememberChannel) _settings.LastChannelKey = logicalChannel.StableKey;
         _learnedProfileSignature = string.Empty;
         NowPlayingHeading.Text = logicalChannel.Name;
@@ -2557,12 +2780,13 @@ public partial class MainWindow : Window
         InspectorChannelName.Text = logicalChannel.Name;
         InspectorGroupName.Text = logicalChannel.Group;
         InspectorInitials.Text = logicalChannel.Initials;
+        ShowChannelArtwork(logicalChannel);
         UpdateCurrentFavoriteButton(logicalChannel);
         UpdateCurrentGuide(logicalChannel);
         _showPlayerTopStatus = logicalChannel.Kind == ChannelKind.Live;
         RefreshPlayerSurfaceVisibility();
         PlaybackDetailText.Text = logicalChannel.Group;
-        var profile = GetOrCreateChannelProfile(logicalChannel);
+        var profile = playbackProfile ?? GetOrCreateChannelProfile(logicalChannel);
         _applyingChannelProfile = true;
         SelectComboByContent(AspectBox, profile.AspectRatio ?? _settings.Playback.AspectRatio);
         _applyingChannelProfile = false;
@@ -2579,11 +2803,99 @@ public partial class MainWindow : Window
         {
             _activeSignalFeed = logicalChannel;
             ResetSignalSessionCounters();
-            _playback?.Play(logicalChannel, profile);
+            _playback?.Play(playbackOverride ?? logicalChannel, profile);
         }
         if (_currentRecordingPath is null && rememberChannel) TouchRecentChannel(logicalChannel);
         UpdateSignalRouteAvailability();
         UpdateFullscreenHud();
+    }
+
+    private async Task TuneProtectedMediaAsync(
+        ChannelItem logicalChannel,
+        bool rememberChannel,
+        ChannelPlaybackProfile? profile = null)
+    {
+        if (!EnsureMediaCenterAccess(logicalChannel.SourceName ?? "Media center")) return;
+        CancelMediaPlaybackResolution(clearResume: false);
+        var cancellation = new CancellationTokenSource();
+        _mediaPlaybackCancellation = cancellation;
+        FooterStatusDot.Fill = WarningBrush;
+        FooterStatusText.Text = $"Preparing protected {logicalChannel.SourceName ?? "media-center"} playback…";
+        PlaybackDetailText.Text = "Resolving a short-lived playback address";
+
+        string? pendingReportingSessionId = null;
+        var reportingSessionAdopted = false;
+        try
+        {
+            var resolved = await _mediaCenterSource.ResolvePlaybackAsync(logicalChannel, cancellation.Token);
+            cancellation.Token.ThrowIfCancellationRequested();
+            pendingReportingSessionId = resolved.ReportingSessionId;
+            var playbackChannel = CreateResolvedMediaChannel(logicalChannel, resolved);
+            _pendingMediaResumeMilliseconds = Math.Max(0, resolved.ResumePositionMilliseconds);
+            _mediaResumeApplied = _pendingMediaResumeMilliseconds < 30_000 || logicalChannel.Kind == ChannelKind.Live;
+            TuneChannelCore(
+                logicalChannel,
+                rememberChannel: rememberChannel,
+                playbackOverride: playbackChannel,
+                playbackProfile: profile,
+                mediaPlaybackReportingSessionId: pendingReportingSessionId,
+                force: true);
+            reportingSessionAdopted = string.Equals(
+                _mediaPlaybackReportingSessionId,
+                pendingReportingSessionId,
+                StringComparison.Ordinal);
+            PlaybackDetailText.Text = $"{logicalChannel.Group} • {resolved.Method.Replace('-', ' ')}";
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            if (cancellation.IsCancellationRequested) return;
+            FooterStatusDot.Fill = ErrorBrush;
+            FooterStatusText.Text = "Protected playback could not be prepared";
+            PlaybackDetailText.Text = SafeErrorMessage(exception);
+        }
+        finally
+        {
+            if (!reportingSessionAdopted)
+                _mediaCenterSource.CancelPlaybackReportingSession(pendingReportingSessionId);
+            if (ReferenceEquals(_mediaPlaybackCancellation, cancellation))
+                _mediaPlaybackCancellation = null;
+            cancellation.Dispose();
+        }
+    }
+
+    private static ChannelItem CreateResolvedMediaChannel(ChannelItem logicalChannel, ResolvedMediaPlayback resolved) => new()
+    {
+        Number = logicalChannel.Number,
+        Name = logicalChannel.Name,
+        Url = resolved.Url,
+        Group = logicalChannel.Group,
+        LogoUrl = logicalChannel.LogoUrl,
+        TvgId = logicalChannel.TvgId,
+        TvgName = logicalChannel.TvgName,
+        UserAgent = logicalChannel.UserAgent,
+        Referrer = resolved.Referrer ?? logicalChannel.Referrer,
+        Kind = logicalChannel.Kind == ChannelKind.Recording ? ChannelKind.Replay : logicalChannel.Kind,
+        SourceId = logicalChannel.SourceId,
+        SourceName = logicalChannel.SourceName,
+        CatchupMode = logicalChannel.CatchupMode,
+        CatchupSource = logicalChannel.CatchupSource,
+        CatchupDays = logicalChannel.CatchupDays,
+        CatchupCorrectionMinutes = logicalChannel.CatchupCorrectionMinutes,
+        DurationMilliseconds = logicalChannel.DurationMilliseconds,
+        ResumePositionMilliseconds = resolved.ResumePositionMilliseconds,
+        IsPlayed = logicalChannel.IsPlayed
+    };
+
+    private void CancelMediaPlaybackResolution(bool clearResume)
+    {
+        _mediaPlaybackCancellation?.Cancel();
+        _mediaPlaybackCancellation = null;
+        if (!clearResume) return;
+        _pendingMediaResumeMilliseconds = 0;
+        _mediaResumeApplied = true;
     }
 
     private void PlaySignalFeed(SignalRoute route, ChannelItem feed, ChannelPlaybackProfile? profile = null)
@@ -2615,6 +2927,11 @@ public partial class MainWindow : Window
     private void RetuneCurrentPlayback(ChannelPlaybackProfile? profile = null)
     {
         if (_currentChannel is null) return;
+        if (_currentChannel.IsProtectedMedia && _currentRecordingPath is null)
+        {
+            _ = TuneProtectedMediaAsync(_currentChannel, rememberChannel: false, profile: profile);
+            return;
+        }
         CaptureSignalTelemetry(_playback?.GetSnapshot(), persist: false);
         var route = GetSignalRoute(_currentChannel);
         if (route is not null && _currentChannel.Kind == ChannelKind.Live && _currentRecordingPath is null)
@@ -2636,6 +2953,7 @@ public partial class MainWindow : Window
     private bool TryAutomaticSignalFailover(PlaybackStatus status)
     {
         if (!status.IsTerminalFailure || _currentRecordingPath is not null || _currentChannel?.Kind != ChannelKind.Live ||
+            _currentChannel.IsProtectedMedia ||
             _activeSignalFeed is null || !_settings.SignalRouting.Enabled || !_settings.SignalRouting.AutomaticFailover)
             return false;
         var route = GetSignalRoute(_currentChannel);
@@ -2752,6 +3070,8 @@ public partial class MainWindow : Window
     {
         Dispatcher.BeginInvoke(() =>
         {
+            var previousMediaPlaybackState = _mediaPlaybackState;
+            _mediaPlaybackState = status.State;
             if (status.IsTerminalFailure && TryAutomaticSignalFailover(status)) return;
             if (status.IsTerminalFailure) RecordSignalFailure(status.TechnicalDetail ?? status.Message);
             StreamStateValue.Text = status.State.ToString();
@@ -2803,11 +3123,15 @@ public partial class MainWindow : Window
                         : $"DVR playback • {_currentChannel?.Name}";
                     LiveDot.Fill = LiveBrush;
                     PlayPauseGlyph.Text = "Ⅱ";
+                    QueueMediaPlaybackReport(
+                        MediaCenterPlaybackState.Playing,
+                        force: previousMediaPlaybackState != PlaybackState.Playing);
                     break;
                 case PlaybackState.Paused:
                     FooterStatusDot.Fill = WarningBrush;
                     LiveDot.Fill = WarningBrush;
                     PlayPauseGlyph.Text = "▶";
+                    QueueMediaPlaybackReport(MediaCenterPlaybackState.Paused, force: true);
                     break;
                 case PlaybackState.Stopped when _currentRecordingPath is not null && status.Message == "Recording finished":
                     _settings.RecordingPlaybackProgress.Remove(DvrRecordingService.CreateLibraryKey(_currentRecordingPath));
@@ -2817,7 +3141,21 @@ public partial class MainWindow : Window
                     LiveDot.Fill = IdleBrush;
                     PlayPauseGlyph.Text = "▶";
                     break;
+                case PlaybackState.Stopped when _currentRecordingPath is null:
+                    if (!string.IsNullOrWhiteSpace(_mediaPlaybackReportingSessionId))
+                    {
+                        var stoppedSnapshot = _playback?.GetSnapshot();
+                        var stoppedChannel = _currentChannel;
+                        ObserveMediaPlaybackEndAndRefresh(
+                            EndCurrentMediaPlaybackReporting(stoppedSnapshot),
+                            stoppedChannel,
+                            stoppedSnapshot);
+                    }
+                    LiveDot.Fill = IdleBrush;
+                    PlayPauseGlyph.Text = "▶";
+                    break;
                 case PlaybackState.Error:
+                    ObserveMediaPlaybackReport(EndCurrentMediaPlaybackReporting(_playback?.GetSnapshot()));
                     FooterStatusDot.Fill = ErrorBrush;
                     FooterStatusText.Text = _currentRecordingPath is null
                         ? "Playback error — try Stable buffer or another channel"
@@ -2932,7 +3270,17 @@ public partial class MainWindow : Window
     private void UpdateRecordingPlayback(PlaybackSnapshot snapshot)
     {
         var isRecordingPlayback = _currentRecordingPath is not null && _currentChannel?.Kind == ChannelKind.Recording;
-        RecordingSeekPanel.Visibility = isRecordingPlayback ? Visibility.Visible : Visibility.Collapsed;
+        var isProtectedLibraryPlayback = _currentRecordingPath is null &&
+                                         _currentChannel?.IsProtectedMedia == true &&
+                                         _currentChannel.Kind != ChannelKind.Live;
+        RecordingSeekPanel.Visibility = isRecordingPlayback || isProtectedLibraryPlayback
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        if (isProtectedLibraryPlayback)
+        {
+            UpdateProtectedLibraryPlayback(snapshot);
+            return;
+        }
         if (!isRecordingPlayback) return;
 
         var length = Math.Max(0, snapshot.Length);
@@ -2962,6 +3310,136 @@ public partial class MainWindow : Window
 
         if (DateTimeOffset.UtcNow - _lastRecordingProgressSaveUtc >= TimeSpan.FromSeconds(10))
             SaveCurrentRecordingProgress(force: false, snapshot);
+    }
+
+    private void UpdateProtectedLibraryPlayback(PlaybackSnapshot snapshot)
+    {
+        var length = Math.Max(0, snapshot.Length);
+        var position = Math.Clamp(snapshot.Time, 0, Math.Max(0, length));
+        if (!_mediaResumeApplied && length > 0)
+        {
+            var resumePosition = Math.Clamp(_pendingMediaResumeMilliseconds, 0, length);
+            if (resumePosition < 30_000 || resumePosition >= length - 30_000)
+            {
+                _mediaResumeApplied = true;
+            }
+            else if (_playback?.SeekTo(resumePosition) == true)
+            {
+                _mediaResumeApplied = true;
+                position = resumePosition;
+                FooterStatusDot.Fill = LiveBrush;
+                FooterStatusText.Text = $"Resumed at {FormatPlaybackTime(position)} • {_currentChannel?.Name}";
+                QueueMediaPlaybackReport(MediaCenterPlaybackState.Playing, snapshot with { Time = position }, force: true);
+            }
+        }
+
+        if (!_seekingRecording)
+        {
+            PlaybackSeekSlider.Maximum = Math.Max(1, length);
+            PlaybackSeekSlider.Value = position;
+        }
+        RecordingPositionText.Text = FormatPlaybackTime(position);
+        RecordingDurationText.Text = FormatPlaybackTime(length);
+        if (_mediaPlaybackState == PlaybackState.Playing)
+            QueueMediaPlaybackReport(MediaCenterPlaybackState.Playing, snapshot);
+    }
+
+    private void QueueMediaPlaybackReport(
+        MediaCenterPlaybackState state,
+        PlaybackSnapshot? snapshot = null,
+        bool force = false)
+    {
+        if (string.IsNullOrWhiteSpace(_mediaPlaybackReportingSessionId) ||
+            _currentChannel?.IsProtectedMedia != true ||
+            _currentChannel.Kind == ChannelKind.Live) return;
+        var now = DateTimeOffset.UtcNow;
+        if (!force &&
+            _lastReportedMediaPlaybackState == state &&
+            now - _lastMediaPlaybackReportUtc < TimeSpan.FromSeconds(10)) return;
+        snapshot ??= _playback?.GetSnapshot();
+        if (snapshot is null) return;
+        _lastReportedMediaPlaybackState = state;
+        _lastMediaPlaybackReportUtc = now;
+        try
+        {
+            ObserveMediaPlaybackReport(_mediaCenterSource.ReportPlaybackAsync(
+                _mediaPlaybackReportingSessionId,
+                state,
+                snapshot.Time,
+                snapshot.Length,
+                snapshot.IsMuted,
+                snapshot.Volume));
+        }
+        catch
+        {
+            // Reporting is best-effort and must never interrupt local playback.
+        }
+    }
+
+    private Task EndCurrentMediaPlaybackReporting(
+        PlaybackSnapshot? snapshot = null,
+        CancellationToken cancellationToken = default)
+    {
+        var reportingSessionId = _mediaPlaybackReportingSessionId;
+        _mediaPlaybackReportingSessionId = null;
+        _lastReportedMediaPlaybackState = null;
+        _lastMediaPlaybackReportUtc = DateTimeOffset.MinValue;
+        if (string.IsNullOrWhiteSpace(reportingSessionId)) return Task.CompletedTask;
+        snapshot ??= _playback?.GetSnapshot();
+        try
+        {
+            return _mediaCenterSource.StopPlaybackReportingAsync(
+                reportingSessionId,
+                snapshot?.Time ?? 0,
+                snapshot?.Length ?? 0,
+                snapshot?.IsMuted ?? false,
+                snapshot?.Volume ?? 100,
+                cancellationToken);
+        }
+        catch
+        {
+            _mediaCenterSource.CancelPlaybackReportingSession(reportingSessionId);
+            return Task.CompletedTask;
+        }
+    }
+
+    private static async void ObserveMediaPlaybackReport(Task report)
+    {
+        try
+        {
+            await report.ConfigureAwait(false);
+        }
+        catch
+        {
+            // Plex/Emby progress synchronization fails open so video keeps playing.
+        }
+    }
+
+    private async void ObserveMediaPlaybackEndAndRefresh(
+        Task report,
+        ChannelItem? channel,
+        PlaybackSnapshot? snapshot)
+    {
+        try
+        {
+            await report;
+        }
+        catch
+        {
+            return;
+        }
+
+        if (channel?.IsProtectedMedia != true || channel.Kind == ChannelKind.Live || snapshot is null) return;
+        await Dispatcher.InvokeAsync(() =>
+        {
+            if (!_channels.Contains(channel)) return;
+            channel.UpdateMediaPlaybackProgress(snapshot.Time, snapshot.Length);
+            _libraryBrowseSummary = MediaLibraryBrowsePolicy.Summarize(_channels);
+            ContinueWatchingFilter.Content = $"Continue ({_libraryBrowseSummary.ContinueWatchingCount:N0})";
+            RecentlyAddedFilter.Content = $"Recent ({_libraryBrowseSummary.RecentlyAddedCount:N0})";
+            _channelView?.Refresh();
+            RefreshChannelCount();
+        });
     }
 
     private void SaveCurrentRecordingProgress(bool force, PlaybackSnapshot? snapshot = null)
@@ -2998,23 +3476,34 @@ public partial class MainWindow : Window
     }
 
     private void PlaybackSeekSlider_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) =>
-        _seekingRecording = _currentRecordingPath is not null;
+        _seekingRecording = HasSeekableLibraryPlayback;
 
     private void PlaybackSeekSlider_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (_currentRecordingPath is null) return;
+        if (!HasSeekableLibraryPlayback) return;
         _seekingRecording = false;
         _playback?.SeekTo((long)PlaybackSeekSlider.Value);
         RecordingPositionText.Text = FormatPlaybackTime((long)PlaybackSeekSlider.Value);
-        _lastRecordingProgressSaveUtc = DateTimeOffset.MinValue;
+        if (_currentRecordingPath is not null) _lastRecordingProgressSaveUtc = DateTimeOffset.MinValue;
+        else QueueMediaPlaybackReport(CurrentMediaCenterPlaybackState(), _playback?.GetSnapshot(), force: true);
     }
 
     private void PlaybackSeekSlider_KeyUp(object sender, KeyEventArgs e)
     {
-        if (_currentRecordingPath is null || e.Key is not (Key.Left or Key.Right or Key.Home or Key.End or Key.PageUp or Key.PageDown)) return;
+        if (!HasSeekableLibraryPlayback || e.Key is not (Key.Left or Key.Right or Key.Home or Key.End or Key.PageUp or Key.PageDown)) return;
         _playback?.SeekTo((long)PlaybackSeekSlider.Value);
-        _lastRecordingProgressSaveUtc = DateTimeOffset.MinValue;
+        if (_currentRecordingPath is not null) _lastRecordingProgressSaveUtc = DateTimeOffset.MinValue;
+        else QueueMediaPlaybackReport(CurrentMediaCenterPlaybackState(), _playback?.GetSnapshot(), force: true);
     }
+
+    private MediaCenterPlaybackState CurrentMediaCenterPlaybackState() =>
+        _mediaPlaybackState == PlaybackState.Paused
+            ? MediaCenterPlaybackState.Paused
+            : MediaCenterPlaybackState.Playing;
+
+    private bool HasSeekableLibraryPlayback =>
+        _currentRecordingPath is not null ||
+        _currentChannel?.IsProtectedMedia == true && _currentChannel.Kind != ChannelKind.Live;
 
     private static string FormatPlaybackTime(long milliseconds)
     {
@@ -3054,8 +3543,14 @@ public partial class MainWindow : Window
 
     private void KindFilter_Checked(object sender, RoutedEventArgs e)
     {
-        if (sender is RadioButton { Tag: string kind }) _kindFilter = kind;
-        if (_windowReady) RefreshFilters();
+        if (sender is RadioButton { Tag: string mode } &&
+            Enum.TryParse<MediaLibraryBrowseMode>(mode, ignoreCase: true, out var parsed))
+            _libraryBrowseMode = parsed;
+        if (_windowReady)
+        {
+            ApplyChannelGrouping();
+            RefreshFilters();
+        }
     }
 
     private void CategoryBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -3072,11 +3567,16 @@ public partial class MainWindow : Window
     {
         if (_channelView is null) return;
         _channelView.GroupDescriptions.Clear();
-        if (_categoryFilter.Length == 0)
+        _channelView.SortDescriptions.Clear();
+        if (_categoryFilter.Length == 0 && !MediaLibraryBrowsePolicy.UsesEditorialOrder(_libraryBrowseMode))
             _channelView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ChannelItem.Group))
             {
                 StringComparison = StringComparison.OrdinalIgnoreCase
             });
+        if (_libraryBrowseMode == MediaLibraryBrowseMode.ContinueWatching)
+            _channelView.SortDescriptions.Add(new SortDescription(nameof(ChannelItem.LastPlayedAtUtc), ListSortDirection.Descending));
+        else if (_libraryBrowseMode == MediaLibraryBrowseMode.RecentlyAdded)
+            _channelView.SortDescriptions.Add(new SortDescription(nameof(ChannelItem.AddedAtUtc), ListSortDirection.Descending));
     }
 
     private void WatchNavigation_Checked(object sender, RoutedEventArgs e)
@@ -3085,7 +3585,7 @@ public partial class MainWindow : Window
         SetMultiviewMode(false);
         SetGuideMode(false);
         _favoritesOnly = false;
-        CatalogHeading.Text = "Channels";
+        CatalogHeading.Text = _libraryBrowseSummary.IsMediaCenterLibrary ? "Library" : "Channels";
         RefreshFilters();
         if (_currentChannel is not null && _playback?.MediaPlayer.Media is null)
             RetuneCurrentPlayback();
@@ -3652,7 +4152,7 @@ public partial class MainWindow : Window
         _favoritesOnly = false;
         SearchBox.Clear();
         CategoryBox.SelectedIndex = 0;
-        _kindFilter = "All";
+        _libraryBrowseMode = MediaLibraryBrowseMode.All;
         AllFilter.IsChecked = true;
         RefreshFilters();
         ChannelList.SelectedItem = channel;
@@ -3949,14 +4449,14 @@ public partial class MainWindow : Window
         ImportStatusText.Text = "Ready to connect";
         ImportDetailText.Text = (_settings.PlaylistSources ?? []).Count > 0
             ? "Choose a saved source, refresh the unified library, or add another provider."
-            : "Nothing is uploaded; StreamVue reads the source directly.";
+            : "Nothing is uploaded; OrbitalVue reads the source directly.";
     }
 
     private void AddPlaylistSource_Click(object sender, RoutedEventArgs e)
     {
         SourceTabs.SelectedItem = FileSourceTab;
         ImportStatusText.Text = "Add another source";
-        ImportDetailText.Text = "Choose an M3U file, M3U URL, or Xtream login above.";
+        ImportDetailText.Text = "Choose M3U, Xtream, Plex, or Emby above.";
     }
 
     private async void SourceEnabled_Click(object sender, RoutedEventArgs e)
@@ -3983,7 +4483,7 @@ public partial class MainWindow : Window
             ? $"{source.Name} will refresh at launch"
             : $"{source.Name} will open its offline copy at launch";
         ImportDetailText.Text = source.RefreshOnStartup
-            ? "StreamVue will check this provider whenever the app opens."
+            ? "OrbitalVue will check this provider whenever the app opens."
             : "Use Refresh enabled whenever you want to contact this provider manually.";
     }
 
@@ -3995,6 +4495,7 @@ public partial class MainWindow : Window
 
     private async Task<bool> UsePlaylistSourceAsync(PlaylistSourceDefinition source)
     {
+        if (source.SourceType is "plex" or "emby" && !EnsureMediaCenterAccess(source.TypeLabel)) return false;
         switch (source.SourceType)
         {
             case "file":
@@ -4037,6 +4538,42 @@ public partial class MainWindow : Window
                     source.SourceType,
                     source.SourceValue,
                     allowCachedFallback: true);
+            case "plex":
+            case "emby":
+            {
+                var hasCredential = await _mediaCenterSource.HasCredentialAsync(source.SourceType, source.SourceValue);
+                if (!hasCredential)
+                {
+                    if (source.SourceType == "plex")
+                    {
+                        PlexServerBox.Text = source.SourceValue;
+                        PlexTokenBox.Clear();
+                        SourceTabs.SelectedItem = PlexSourceTab;
+                    }
+                    else
+                    {
+                        EmbyServerBox.Text = source.SourceValue;
+                        EmbyUsernameBox.Clear();
+                        EmbyPasswordBox.Clear();
+                        SourceTabs.SelectedItem = EmbySourceTab;
+                    }
+                    ImportStatusText.Text = $"Reconnect this {source.TypeLabel} library";
+                    ImportDetailText.Text = "Enter the account details once to restore its Windows-protected playback credential.";
+                    return false;
+                }
+
+                if (source.SourceType == "plex") PlexServerBox.Text = source.SourceValue;
+                else EmbyServerBox.Text = source.SourceValue;
+                return await LoadPlaylistAsync(
+                    (progress, token) => _mediaCenterSource.LoadSavedAsync(
+                        source.SourceType,
+                        source.SourceValue,
+                        progress,
+                        token),
+                    source.SourceType,
+                    source.SourceValue,
+                    allowCachedFallback: true);
+            }
             default:
                 ImportStatusText.Text = "Unsupported saved source";
                 ImportDetailText.Text = "Remove this entry and add it again using a supported source type.";
@@ -4086,7 +4623,7 @@ public partial class MainWindow : Window
         if (sender is not Button { Tag: PlaylistSourceDefinition source }) return;
         var confirmation = MessageBox.Show(
             this,
-            $"Remove {source.Name} from StreamVue?\n\nIts encrypted offline playlist will also be removed. Other sources and the currently playing channel are not affected.",
+            $"Remove {source.Name} from OrbitalVue?\n\nIts encrypted offline playlist will also be removed. Other sources and the currently playing channel are not affected.",
             "Remove playlist source",
             MessageBoxButton.YesNo,
             MessageBoxImage.Question,
@@ -4125,6 +4662,21 @@ public partial class MainWindow : Window
             try
             {
                 await _xtreamCredentialStore.DeleteAsync(source.SourceValue);
+            }
+            catch
+            {
+                cleanupWarning = true;
+            }
+        }
+
+        if (source.SourceType is "plex" or "emby" &&
+            !_settings.PlaylistSources.Any(item =>
+                item.SourceType == source.SourceType &&
+                PlaylistSourcePolicy.Matches(item, source.SourceType, source.SourceValue)))
+        {
+            try
+            {
+                await _mediaCenterSource.DeleteCredentialAsync(source.SourceType, source.SourceValue);
             }
             catch
             {
@@ -4395,6 +4947,291 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void LoadPlex_Click(object sender, RoutedEventArgs e)
+    {
+        if (!EnsureMediaCenterAccess("Plex")) return;
+        if (!TryPrepareMediaCenterConnection(
+                "Plex",
+                PlexServerBox.Text,
+                PlexAllowHttpBox.IsChecked == true,
+                out var server)) return;
+
+        PlexServerBox.Text = server;
+        var accessToken = PlexTokenBox.Password;
+        var displayName = PlexNameBox.Text.Trim();
+        var loaded = await LoadPlaylistAsync(
+            (progress, token) => _mediaCenterSource.ConnectPlexAsync(
+                server,
+                accessToken,
+                displayName,
+                PlexAllowHttpBox.IsChecked == true,
+                progress,
+                token),
+            "plex",
+            server);
+        if (loaded) PlexTokenBox.Clear();
+    }
+
+    private async void StartPlexAccountSignIn_Click(object sender, RoutedEventArgs e)
+    {
+        if (!EnsureMediaCenterAccess("Plex")) return;
+        CancelPlexAccountSignInCore(
+            "Preparing a signed Plex approval request. Your account token will remain outside this screen.");
+        var cancellation = new CancellationTokenSource();
+        _plexAccountCancellation = cancellation;
+        PlexAccountSignInButton.IsEnabled = false;
+        PlexAccountProgress.Visibility = Visibility.Visible;
+        PlexAccountCancelButton.Visibility = Visibility.Visible;
+        try
+        {
+            var challenge = await _mediaCenterSource.StartPlexAccountSignInAsync(cancellation.Token);
+            if (!ReferenceEquals(_plexAccountCancellation, cancellation)) return;
+            _plexAccountChallenge = challenge;
+            PlexAccountStatusText.Text =
+                $"Approval code {challenge.Code} is ready. Complete approval in Plex; OrbitalVue will detect it automatically.";
+            PlexAccountOpenButton.Visibility = Visibility.Visible;
+            OpenPlexAccountApproval(challenge);
+
+            var progress = new Progress<PlaylistProgress>(value =>
+            {
+                PlexAccountStatusText.Text = value.Message;
+                FooterStatusText.Text = value.Message;
+            });
+            var discovery = await _mediaCenterSource.WaitForPlexAccountServersAsync(
+                challenge,
+                progress,
+                cancellation.Token);
+            if (!ReferenceEquals(_plexAccountCancellation, cancellation))
+            {
+                _mediaCenterSource.CancelPlexAccountDiscovery(discovery.SessionId);
+                return;
+            }
+            _plexAccountDiscovery = discovery;
+            PlexAccountServerBox.ItemsSource = discovery.Servers;
+            PlexAccountServerBox.SelectedIndex = 0;
+            PlexAccountPicker.Visibility = Visibility.Visible;
+            PlexAccountStatusText.Text =
+                $"Plex approved OrbitalVue and returned {discovery.Servers.Count:N0} server(s). Choose the connection to keep on this PC.";
+            PlexAccountSignInButton.Content = "Use another Plex account";
+            PlexAccountSignInButton.IsEnabled = true;
+            PlexAccountOpenButton.Visibility = Visibility.Collapsed;
+            PlexAccountCancelButton.Visibility = Visibility.Collapsed;
+            FooterStatusDot.Fill = LiveBrush;
+            FooterStatusText.Text = "Plex account approved • choose a server";
+        }
+        catch (OperationCanceledException)
+        {
+            if (ReferenceEquals(_plexAccountCancellation, cancellation))
+                CancelPlexAccountSignInCore("Plex account sign-in was canceled.");
+        }
+        catch (Exception exception)
+        {
+            if (ReferenceEquals(_plexAccountCancellation, cancellation))
+            {
+                CancelPlexAccountSignInCore(SafeErrorMessage(exception));
+                FooterStatusDot.Fill = ErrorBrush;
+                FooterStatusText.Text = "Plex account sign-in needs attention";
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_plexAccountCancellation, cancellation))
+            {
+                _plexAccountCancellation = null;
+                PlexAccountProgress.Visibility = Visibility.Collapsed;
+                if (_plexAccountDiscovery is null)
+                {
+                    PlexAccountSignInButton.IsEnabled = _premiumAccess.CanUseMediaCenters;
+                    PlexAccountCancelButton.Visibility = Visibility.Collapsed;
+                }
+            }
+            cancellation.Dispose();
+        }
+    }
+
+    private void OpenPlexAccountApproval_Click(object sender, RoutedEventArgs e)
+    {
+        if (_plexAccountChallenge is { } challenge) OpenPlexAccountApproval(challenge);
+    }
+
+    private void OpenPlexAccountApproval(PlexPinChallenge challenge)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(challenge.AuthorizationUrl) { UseShellExecute = true });
+        }
+        catch (Exception exception)
+        {
+            PlexAccountStatusText.Text =
+                $"Windows could not open the browser. Copy this approval address manually: {challenge.AuthorizationUrl}\n{SafeErrorMessage(exception)}";
+        }
+    }
+
+    private void CancelPlexAccountSignIn_Click(object sender, RoutedEventArgs e) =>
+        CancelPlexAccountSignInCore("Plex account sign-in was canceled.");
+
+    private void PlexAccountServer_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (PlexAccountServerBox.SelectedItem is not PlexDiscoveredServer server)
+        {
+            PlexAccountConnectionBox.ItemsSource = null;
+            PlexAccountLocationText.Text = string.Empty;
+            return;
+        }
+        PlexAccountConnectionBox.ItemsSource = server.Connections;
+        PlexAccountConnectionBox.SelectedIndex = 0;
+    }
+
+    private void PlexAccountConnection_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (PlexAccountConnectionBox.SelectedItem is not PlexServerConnectionChoice connection)
+        {
+            PlexAccountLocationText.Text = string.Empty;
+            PlexAccountAllowHttpBox.Visibility = Visibility.Collapsed;
+            return;
+        }
+        PlexAccountLocationText.Text = connection.DisplayLocation;
+        PlexAccountAllowHttpBox.IsChecked = false;
+        PlexAccountAllowHttpBox.Visibility = connection.IsSecure ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private async void ConnectPlexAccount_Click(object sender, RoutedEventArgs e)
+    {
+        if (!EnsureMediaCenterAccess("Plex")) return;
+        if (_plexAccountDiscovery is not { } discovery ||
+            PlexAccountServerBox.SelectedItem is not PlexDiscoveredServer server ||
+            PlexAccountConnectionBox.SelectedItem is not PlexServerConnectionChoice connection)
+        {
+            PlexAccountStatusText.Text = "Choose a discovered Plex server and connection.";
+            return;
+        }
+        if (!connection.IsSecure && PlexAccountAllowHttpBox.IsChecked != true)
+        {
+            PlexAccountStatusText.Text =
+                "This address uses HTTP. Confirm the trusted local-network warning before OrbitalVue can send the server token.";
+            return;
+        }
+
+        PlexAccountConnectButton.IsEnabled = false;
+        PlexAccountProgress.Visibility = Visibility.Visible;
+        PlexAccountStatusText.Text = "Verifying the selected server before saving its protected credential…";
+        var loaded = await LoadPlaylistAsync(
+            (progress, token) => _mediaCenterSource.ConnectDiscoveredPlexServerAsync(
+                discovery.SessionId,
+                server.ServerId,
+                connection.Url,
+                PlexAccountAllowHttpBox.IsChecked == true,
+                progress,
+                token),
+            "plex",
+            connection.Url);
+        PlexAccountConnectButton.IsEnabled = true;
+        PlexAccountProgress.Visibility = Visibility.Collapsed;
+        if (loaded)
+        {
+            PlexServerBox.Text = connection.Url;
+            CancelPlexAccountSignInCore(
+                $"{server.Name} is connected. Its server token is protected for this Windows user.");
+            return;
+        }
+        CancelPlexAccountSignInCore("The server selection could not be activated. Sign in with Plex again to retry.");
+    }
+
+    private void CancelPlexAccountSignInCore(string status)
+    {
+        _plexAccountCancellation?.Cancel();
+        _plexAccountCancellation?.Dispose();
+        _plexAccountCancellation = null;
+        if (_plexAccountDiscovery is { } discovery)
+            _mediaCenterSource.CancelPlexAccountDiscovery(discovery.SessionId);
+        _plexAccountChallenge = null;
+        _plexAccountDiscovery = null;
+        PlexAccountServerBox.ItemsSource = null;
+        PlexAccountConnectionBox.ItemsSource = null;
+        PlexAccountPicker.Visibility = Visibility.Collapsed;
+        PlexAccountProgress.Visibility = Visibility.Collapsed;
+        PlexAccountOpenButton.Visibility = Visibility.Collapsed;
+        PlexAccountCancelButton.Visibility = Visibility.Collapsed;
+        PlexAccountSignInButton.Content = "Sign in with Plex";
+        PlexAccountSignInButton.IsEnabled = _premiumAccess.CanUseMediaCenters;
+        PlexAccountStatusText.Text = status;
+    }
+
+    private async void LoadEmby_Click(object sender, RoutedEventArgs e)
+    {
+        if (!EnsureMediaCenterAccess("Emby")) return;
+        if (!TryPrepareMediaCenterConnection(
+                "Emby",
+                EmbyServerBox.Text,
+                EmbyAllowHttpBox.IsChecked == true,
+                out var server)) return;
+
+        EmbyServerBox.Text = server;
+        var username = EmbyUsernameBox.Text.Trim();
+        var password = EmbyPasswordBox.Password;
+        var displayName = EmbyNameBox.Text.Trim();
+        var loaded = await LoadPlaylistAsync(
+            (progress, token) => _mediaCenterSource.ConnectEmbyAsync(
+                server,
+                username,
+                password,
+                displayName,
+                EmbyAllowHttpBox.IsChecked == true,
+                progress,
+                token),
+            "emby",
+            server);
+        if (loaded) EmbyPasswordBox.Clear();
+    }
+
+    private bool TryPrepareMediaCenterConnection(
+        string provider,
+        string serverAddress,
+        bool allowInsecureHttp,
+        out string normalizedServer)
+    {
+        try
+        {
+            normalizedServer = MediaCenterSecurity.NormalizeBaseUrl(serverAddress);
+            MediaCenterSecurity.RequireAllowedTransport(normalizedServer, allowInsecureHttp);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            normalizedServer = string.Empty;
+            ImportProgress.Visibility = Visibility.Collapsed;
+            ImportStatusText.Text = $"Check the {provider} server address";
+            ImportDetailText.Text = SafeErrorMessage(exception);
+            FooterStatusDot.Fill = ErrorBrush;
+            FooterStatusText.Text = $"{provider} connection needs attention";
+            return false;
+        }
+    }
+
+    private bool EnsureMediaCenterAccess(string provider)
+    {
+        if (_premiumAccess.CanUseMediaCenters) return true;
+        ImportProgress.Visibility = Visibility.Collapsed;
+        ImportStatusText.Text = $"{provider} premium access is unavailable";
+        ImportDetailText.Text = _premiumStore.State.Message ?? _premiumAccess.Explanation;
+        FooterStatusDot.Fill = WarningBrush;
+        FooterStatusText.Text = "A verified one-time store purchase is required";
+        if (!_backgroundLaunch)
+        {
+            SourceTabs.SelectedItem = provider.Contains("Emby", StringComparison.OrdinalIgnoreCase)
+                ? EmbySourceTab
+                : PlexSourceTab;
+            ShowModal(ImportOverlay);
+        }
+        return false;
+    }
+
+    private async void PurchasePremium_Click(object sender, RoutedEventArgs e) =>
+        await _premiumStore.PurchaseAsync();
+
+    private async void RestorePremium_Click(object sender, RoutedEventArgs e) =>
+        await _premiumStore.RestoreAsync();
+
     private void PlayPause_Click(object sender, RoutedEventArgs e)
     {
         if (_currentChannel is null)
@@ -4413,8 +5250,12 @@ public partial class MainWindow : Window
 
     private void Stop_Click(object sender, RoutedEventArgs e)
     {
-        CaptureSignalTelemetry(_playback?.GetSnapshot(), persist: true);
+        var snapshot = _playback?.GetSnapshot();
+        var channel = _currentChannel;
+        CaptureSignalTelemetry(snapshot, persist: true);
         SaveCurrentRecordingProgress(force: true);
+        ObserveMediaPlaybackEndAndRefresh(EndCurrentMediaPlaybackReporting(snapshot), channel, snapshot);
+        CancelMediaPlaybackResolution(clearResume: true);
         _playback?.Stop();
         if (_currentRecordingPath is not null) _recordingResumeApplied = false;
         _displayRefreshRate?.Restore();
@@ -4574,7 +5415,7 @@ public partial class MainWindow : Window
             : string.Empty;
         if (!profile.HasOverrides)
         {
-            CurrentChannelProfileText.Text = $"{_currentChannel.Name} • {snapshot?.TuneStrategy ?? "PC defaults"}{startup}. StreamVue will learn and remember any recovery this channel needs.";
+            CurrentChannelProfileText.Text = $"{_currentChannel.Name} • {snapshot?.TuneStrategy ?? "PC defaults"}{startup}. OrbitalVue will learn and remember any recovery this channel needs.";
             return;
         }
         var parts = new List<string>();
@@ -4743,11 +5584,11 @@ public partial class MainWindow : Window
     {
         var dialog = new SaveFileDialog
         {
-            Title = "Back up StreamVue",
-            FileName = $"StreamVue-backup-{DateTime.Now:yyyy-MM-dd}.streamvue-backup",
-            DefaultExt = ".streamvue-backup",
+            Title = "Back up OrbitalVue",
+            FileName = $"OrbitalVue-backup-{DateTime.Now:yyyy-MM-dd}.orbitalvue-backup",
+            DefaultExt = ".orbitalvue-backup",
             AddExtension = true,
-            Filter = "StreamVue backup (*.streamvue-backup)|*.streamvue-backup"
+            Filter = "OrbitalVue backup (*.orbitalvue-backup)|*.orbitalvue-backup|Legacy StreamVue backup (*.streamvue-backup)|*.streamvue-backup"
         };
         if (dialog.ShowDialog(this) != true) return;
 
@@ -4756,7 +5597,7 @@ public partial class MainWindow : Window
             await _settingsStore.SaveAsync(_settings);
             var fileCount = await _maintenanceService.CreateBackupAsync(dialog.FileName);
             FooterStatusDot.Fill = LiveBrush;
-            FooterStatusText.Text = $"StreamVue backup created • {fileCount} protected data files";
+            FooterStatusText.Text = $"OrbitalVue backup created • {fileCount} protected data files";
         }
         catch (Exception exception)
         {
@@ -4769,16 +5610,16 @@ public partial class MainWindow : Window
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Restore a StreamVue backup",
+            Title = "Restore an OrbitalVue backup",
             CheckFileExists = true,
-            Filter = "StreamVue backup (*.streamvue-backup)|*.streamvue-backup"
+            Filter = "OrbitalVue backup (*.orbitalvue-backup)|*.orbitalvue-backup|Legacy StreamVue backup (*.streamvue-backup)|*.streamvue-backup"
         };
         if (dialog.ShowDialog(this) != true) return;
 
         var confirmation = MessageBox.Show(
             this,
-            "Restoring this backup will replace the playlists, favorites, guide data, settings, and Playback IQ profiles currently saved on this Windows account. StreamVue will restart afterward.\n\nContinue?",
-            "Restore StreamVue backup",
+            "Restoring this backup will replace the playlists, favorites, guide data, settings, and Playback IQ profiles currently saved on this Windows account. OrbitalVue will restart afterward.\n\nContinue?",
+            "Restore OrbitalVue backup",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning,
             MessageBoxResult.No);
@@ -4794,7 +5635,7 @@ public partial class MainWindow : Window
             var fileCount = await _maintenanceService.RestoreBackupAsync(dialog.FileName);
             MessageBox.Show(
                 this,
-                $"Restored {fileCount} StreamVue data files. A recovery copy of the replaced data was kept, and StreamVue will now restart.",
+                $"Restored {fileCount} OrbitalVue data files. A recovery copy of the replaced data was kept, and OrbitalVue will now restart.",
                 "Backup restored",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -4813,8 +5654,8 @@ public partial class MainWindow : Window
     {
         var dialog = new SaveFileDialog
         {
-            Title = "Export StreamVue diagnostics",
-            FileName = $"StreamVue-diagnostics-{DateTime.Now:yyyyMMdd-HHmm}.zip",
+            Title = "Export OrbitalVue diagnostics",
+            FileName = $"OrbitalVue-diagnostics-{DateTime.Now:yyyyMMdd-HHmm}.zip",
             DefaultExt = ".zip",
             AddExtension = true,
             Filter = "ZIP archive (*.zip)|*.zip"
@@ -4861,7 +5702,7 @@ public partial class MainWindow : Window
         FileNotFoundException => "The selected file could not be found.",
         InvalidDataException invalidData => invalidData.Message,
         IOException => "The file is being used or there is not enough available storage.",
-        _ => "StreamVue could not complete that operation."
+        _ => "OrbitalVue could not complete that operation."
     };
 
     private BufferPreset ReadSelectedBufferPreset()
@@ -4990,11 +5831,17 @@ public partial class MainWindow : Window
     private async void OpenUpdate_Click(object sender, RoutedEventArgs e)
     {
         OpenUpdateModal();
+        if (_appUpdateService.IsStoreManaged) return;
         await CheckForUpdatesAsync();
     }
 
     private async Task CheckForUpdatesOnStartupAsync()
     {
+        if (_appUpdateService.IsStoreManaged)
+        {
+            SetUpdateNavigationCurrent();
+            return;
+        }
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(3));
@@ -5004,7 +5851,7 @@ public partial class MainWindow : Window
                 UpdateNavigationText.Text = "UPDATE READY";
                 UpdateNavigationButton.Background = new SolidColorBrush(Color.FromRgb(22, 61, 54));
                 UpdateNavigationButton.BorderBrush = LiveBrush;
-                UpdateNavigationButton.ToolTip = $"StreamVue {result.AvailableVersion} is ready to install";
+                UpdateNavigationButton.ToolTip = $"OrbitalVue {result.AvailableVersion} is ready to install";
             }
         }
         catch
@@ -5015,10 +5862,12 @@ public partial class MainWindow : Window
 
     private void SetUpdateNavigationCurrent()
     {
-        UpdateNavigationText.Text = "UPDATE";
+        UpdateNavigationText.Text = _appUpdateService.IsStoreManaged ? "UPDATES" : "UPDATE";
         UpdateNavigationButton.ClearValue(BackgroundProperty);
         UpdateNavigationButton.ClearValue(BorderBrushProperty);
-        UpdateNavigationButton.ToolTip = "Check for a new StreamVue version";
+        UpdateNavigationButton.ToolTip = _appUpdateService.IsStoreManaged
+            ? "Updates are managed by Microsoft Store"
+            : "Check for a new OrbitalVue version";
     }
 
     private void OpenUpdateModal()
@@ -5028,14 +5877,27 @@ public partial class MainWindow : Window
         CurrentVersionText.Text = _appUpdateService.CurrentVersion;
         UpdateStateBadge.Background = new SolidColorBrush(Color.FromRgb(23, 54, 47));
         UpdateStateBadgeText.Foreground = LiveBrush;
-        UpdateStateBadgeText.Text = "READY";
-        UpdateStatusText.Text = "Ready to check for a new version";
-        UpdateDetailText.Text = $"Checking the {UpdateChannelLabel} channel. Your playlists and settings stay on this PC.";
+        UpdateStateBadgeText.Text = _appUpdateService.IsStoreManaged ? "STORE" : "READY";
+        UpdateStatusText.Text = _appUpdateService.IsStoreManaged
+            ? "Updates are managed by Microsoft Store"
+            : "Ready to check for a new version";
+        UpdateDetailText.Text = _appUpdateService.IsStoreManaged
+            ? "Microsoft Store installs signed OrbitalVue updates automatically according to your Store settings. No separate OrbitalVue download is required."
+            : $"Checking the {UpdateChannelLabel} channel. Your playlists and settings stay on this PC.";
+        UpdateSubtitleText.Text = _appUpdateService.IsStoreManaged
+            ? "Microsoft Store keeps this installation current."
+            : "Install the newest release without uninstalling your current version.";
         UpdateProgress.Visibility = Visibility.Collapsed;
         UpdateProgress.IsIndeterminate = false;
         UpdateProgress.Value = 0;
-        UpdateActionButton.Content = "Check for updates";
-        UpdateActionButton.IsEnabled = true;
+        UpdateOptionsPanel.Visibility = _appUpdateService.IsStoreManaged ? Visibility.Collapsed : Visibility.Visible;
+        UpdateProtectionNote.Text = _appUpdateService.IsStoreManaged
+            ? "Microsoft Store verifies, signs, installs, and updates this package. Your playlists and settings remain private on this PC."
+            : "Every update is verified before installation. Rollback protection keeps one local last-known-good package until the new version proves it can run.";
+        UpdateFooterLabel.Text = _appUpdateService.IsStoreManaged ? "MICROSOFT STORE UPDATE" : "IN-PLACE WINDOWS UPDATE";
+        UpdateActionButton.Visibility = _appUpdateService.IsStoreManaged ? Visibility.Collapsed : Visibility.Visible;
+        UpdateActionButton.Content = _appUpdateService.IsStoreManaged ? "Managed by Store" : "Check for updates";
+        UpdateActionButton.IsEnabled = !_appUpdateService.IsStoreManaged;
         ShowModal(UpdateOverlay);
     }
 
@@ -5058,7 +5920,7 @@ public partial class MainWindow : Window
         SetUpdateBusy(true);
         UpdateStateBadgeText.Text = "CHECKING";
         UpdateStatusText.Text = "Checking for updates…";
-        UpdateDetailText.Text = $"Contacting the StreamVue {UpdateChannelLabel} release service.";
+        UpdateDetailText.Text = $"Contacting the OrbitalVue {UpdateChannelLabel} release service.";
         UpdateProgress.Visibility = Visibility.Visible;
         UpdateProgress.IsIndeterminate = true;
 
@@ -5074,8 +5936,8 @@ public partial class MainWindow : Window
                     UpdateStateBadge.Background = new SolidColorBrush(Color.FromRgb(23, 54, 47));
                     UpdateStateBadgeText.Foreground = LiveBrush;
                     UpdateStateBadgeText.Text = "AVAILABLE";
-                    UpdateStatusText.Text = $"StreamVue {result.AvailableVersion} is ready";
-                    UpdateDetailText.Text = "Download the update now. StreamVue will close, install it in place, and reopen automatically.";
+                    UpdateStatusText.Text = $"OrbitalVue {result.AvailableVersion} is ready";
+                    UpdateDetailText.Text = "Download the update now. OrbitalVue will close, install it in place, and reopen automatically.";
                     UpdateActionButton.Content = "Download & restart";
                     break;
                 case AppUpdateState.Current:
@@ -5084,16 +5946,25 @@ public partial class MainWindow : Window
                     UpdateStateBadgeText.Foreground = new SolidColorBrush(Color.FromRgb(170, 182, 200));
                     UpdateStateBadgeText.Text = "CURRENT";
                     UpdateStatusText.Text = "You’re up to date";
-                    UpdateDetailText.Text = $"StreamVue {result.CurrentVersion} is the newest published {UpdateChannelLabel} version.";
+                    UpdateDetailText.Text = $"OrbitalVue {result.CurrentVersion} is the newest published {UpdateChannelLabel} version.";
                     UpdateActionButton.Content = "Check again";
                     break;
                 case AppUpdateState.DeveloperBuild:
                     UpdateStateBadge.Background = new SolidColorBrush(Color.FromRgb(62, 48, 27));
                     UpdateStateBadgeText.Foreground = WarningBrush;
                     UpdateStateBadgeText.Text = "DEV BUILD";
-                    UpdateStatusText.Text = "Install StreamVue once to enable updates";
+                    UpdateStatusText.Text = "Install OrbitalVue once to enable updates";
                     UpdateDetailText.Text = "This copy is running directly from a build folder. The installed release can update itself from this screen without uninstalling first.";
                     UpdateActionButton.Content = "Check again";
+                    break;
+                case AppUpdateState.StoreManaged:
+                    SetUpdateNavigationCurrent();
+                    UpdateStateBadge.Background = new SolidColorBrush(Color.FromRgb(27, 41, 60));
+                    UpdateStateBadgeText.Foreground = new SolidColorBrush(Color.FromRgb(170, 182, 200));
+                    UpdateStateBadgeText.Text = "STORE";
+                    UpdateStatusText.Text = "Updates are managed by Microsoft Store";
+                    UpdateDetailText.Text = "Microsoft Store installs signed OrbitalVue updates automatically according to your Store settings. No separate OrbitalVue download is required.";
+                    UpdateActionButton.Content = "Managed by Store";
                     break;
             }
         }
@@ -5133,7 +6004,7 @@ public partial class MainWindow : Window
         SetUpdateBusy(true);
         UpdateStateBadgeText.Text = "DOWNLOADING";
         UpdateStatusText.Text = "Downloading the update…";
-        UpdateDetailText.Text = "Keep StreamVue open. It will restart as soon as the verified package is ready.";
+        UpdateDetailText.Text = "Keep OrbitalVue open. It will restart as soon as the verified package is ready.";
         UpdateProgress.Visibility = Visibility.Visible;
         UpdateProgress.IsIndeterminate = false;
         UpdateProgress.Value = 0;
@@ -5173,7 +6044,7 @@ public partial class MainWindow : Window
     private void SetUpdateBusy(bool busy)
     {
         _updateBusy = busy;
-        UpdateActionButton.IsEnabled = !busy;
+        UpdateActionButton.IsEnabled = !busy && !_appUpdateService.IsStoreManaged;
         UpdateCloseButton.IsEnabled = !busy;
         UpdateNavigationButton.IsEnabled = !busy;
     }
@@ -5191,7 +6062,7 @@ public partial class MainWindow : Window
         UpdateStatusText.Text = $"{UpdateChannelLabel} channel selected";
         UpdateDetailText.Text = channel == AppUpdateChannel.Stable
             ? "Stable installs only finished public releases. Choose Check for updates when you’re ready."
-            : "Preview includes the early builds used to review new StreamVue features. Choose Check for updates when you’re ready.";
+            : "Preview includes the early builds used to review new OrbitalVue features. Choose Check for updates when you’re ready.";
         UpdateActionButton.Content = "Check for updates";
     }
 
@@ -5214,7 +6085,7 @@ public partial class MainWindow : Window
                 _settings.Updates.LastRollbackVersion = restored.RestoredVersion;
                 await _settingsStore.SaveAsync(_settings);
                 FooterStatusDot.Fill = WarningBrush;
-                FooterStatusText.Text = $"Update recovery restored StreamVue {restored.RestoredVersion}";
+                FooterStatusText.Text = $"Update recovery restored OrbitalVue {restored.RestoredVersion}";
             }
             return;
         }
@@ -5231,7 +6102,7 @@ public partial class MainWindow : Window
         if (priorNotice is not null)
         {
             FooterStatusDot.Fill = WarningBrush;
-            FooterStatusText.Text = $"Update recovery restored StreamVue {priorNotice.RestoredVersion}";
+            FooterStatusText.Text = $"Update recovery restored OrbitalVue {priorNotice.RestoredVersion}";
         }
     }
 
@@ -5453,7 +6324,7 @@ public partial class MainWindow : Window
             {
                 var result = MessageBox.Show(
                     this,
-                    $"{candidate.ProgramTitle} overlaps {overlap.ProgramTitle}. StreamVue records the higher-priority schedule and uses start time as the tie-breaker.\n\nSchedule it anyway?",
+                    $"{candidate.ProgramTitle} overlaps {overlap.ProgramTitle}. OrbitalVue records the higher-priority schedule and uses start time as the tie-breaker.\n\nSchedule it anyway?",
                     "Recording schedule conflict",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Warning,
@@ -5637,7 +6508,7 @@ public partial class MainWindow : Window
             {
                 if (recording.StopUtc > now)
                 {
-                    ScheduleRecordingRecovery(recording, "Recorder resumed after Windows or StreamVue restarted", now);
+                    ScheduleRecordingRecovery(recording, "Recorder resumed after Windows or OrbitalVue restarted", now);
                 }
                 else
                 {
@@ -5885,11 +6756,11 @@ public partial class MainWindow : Window
         {
             recording.OutputPaths ??= [];
             if (recording.StopUtc > now)
-                ScheduleRecordingRecovery(recording, "Ready to resume after StreamVue restarted", now);
+                ScheduleRecordingRecovery(recording, "Ready to resume after OrbitalVue restarted", now);
             else
             {
                 recording.Status = HasPlayableRecordingSegment(recording) ? "Partial" : "Missed";
-                recording.Detail = HasPlayableRecordingSegment(recording) ? "Playable segment preserved before shutdown" : "StreamVue closed before completion";
+                recording.Detail = HasPlayableRecordingSegment(recording) ? "Playable segment preserved before shutdown" : "OrbitalVue closed before completion";
             }
         }
         foreach (var recording in _settings.ScheduledRecordings)
@@ -6306,7 +7177,7 @@ public partial class MainWindow : Window
     {
         var dialog = new OpenFolderDialog
         {
-            Title = "Choose the StreamVue recordings folder",
+            Title = "Choose the OrbitalVue recordings folder",
             InitialDirectory = ResolveRecordingsFolder(RecordingFolderBox.Text),
             Multiselect = false
         };
@@ -6481,7 +7352,7 @@ public partial class MainWindow : Window
         BroadcastTitle.Visibility = Visibility.Collapsed;
         UpdateNavigationButton.Visibility = Visibility.Collapsed;
         MiniPlayerButtonText.Text = "FULL APP";
-        MiniPlayerButton.ToolTip = "Return to the complete StreamVue workspace (Ctrl+Shift+M)";
+        MiniPlayerButton.ToolTip = "Return to the complete OrbitalVue workspace (Ctrl+Shift+M)";
 
         MinWidth = 480;
         MinHeight = 300;
@@ -7007,7 +7878,7 @@ public partial class MainWindow : Window
         if (_automationRun || _trayIcon is not null) return;
         var menu = new System.Windows.Forms.ContextMenuStrip();
         _trayStatusItem = new System.Windows.Forms.ToolStripMenuItem("Background recorder ready") { Enabled = false };
-        var openItem = new System.Windows.Forms.ToolStripMenuItem("Open StreamVue");
+        var openItem = new System.Windows.Forms.ToolStripMenuItem("Open OrbitalVue");
         openItem.Click += (_, _) => Dispatcher.BeginInvoke(OpenFromBackground);
         var dvrItem = new System.Windows.Forms.ToolStripMenuItem("Open DVR center");
         dvrItem.Click += (_, _) => Dispatcher.BeginInvoke(() =>
@@ -7023,7 +7894,7 @@ public partial class MainWindow : Window
             ApplyDvrScheduleState(snapshot);
             UpdateDvrUi(snapshot);
         });
-        var exitItem = new System.Windows.Forms.ToolStripMenuItem("Exit StreamVue");
+        var exitItem = new System.Windows.Forms.ToolStripMenuItem("Exit OrbitalVue");
         exitItem.Click += (_, _) => Dispatcher.BeginInvoke(ExitFromTray);
         menu.Items.AddRange([
             _trayStatusItem,
@@ -7049,7 +7920,7 @@ public partial class MainWindow : Window
         _trayIcon = new System.Windows.Forms.NotifyIcon
         {
             Icon = icon,
-            Text = "StreamVue • background recorder ready",
+            Text = "OrbitalVue • background recorder ready",
             ContextMenuStrip = menu,
             Visible = true
         };
@@ -7073,8 +7944,8 @@ public partial class MainWindow : Window
             _trayNoticeShown = true;
             _trayIcon.ShowBalloonTip(
                 2500,
-                "StreamVue recorder is still running",
-                "Scheduled recordings and wake timers remain armed. Double-click the tray icon to reopen StreamVue.",
+                "OrbitalVue recorder is still running",
+                "Scheduled recordings and wake timers remain armed. Double-click the tray icon to reopen OrbitalVue.",
                 System.Windows.Forms.ToolTipIcon.Info);
         }
     }
@@ -7113,7 +7984,7 @@ public partial class MainWindow : Window
             OpenFromBackground();
             var result = MessageBox.Show(
                 this,
-                $"{futureSchedules:N0} upcoming recording{(futureSchedules == 1 ? string.Empty : "s")} will not start after StreamVue exits.\n\nExit anyway?",
+                $"{futureSchedules:N0} upcoming recording{(futureSchedules == 1 ? string.Empty : "s")} will not start after OrbitalVue exits.\n\nExit anyway?",
                 "Exit background recorder",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning,
@@ -7213,7 +8084,7 @@ public partial class MainWindow : Window
         {
             var result = MessageBox.Show(
                 this,
-                $"StreamVue is recording {_dvrRecording.Snapshot.ChannelName}. Closing now will stop and save the recording.\n\nStop recording and close StreamVue?",
+                $"OrbitalVue is recording {_dvrRecording.Snapshot.ChannelName}. Closing now will stop and save the recording.\n\nStop recording and close OrbitalVue?",
                 "Recording in progress",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning,
@@ -7224,12 +8095,26 @@ public partial class MainWindow : Window
                 _allowFinalClose = false;
                 return;
             }
-            var snapshot = _dvrRecording.Stop("Recording stopped when StreamVue closed");
+            var snapshot = _dvrRecording.Stop("Recording stopped when OrbitalVue closed");
             ApplyDvrScheduleState(snapshot);
             _ = _settingsStore.SaveAsync(_settings);
         }
 
         if (_isFullscreen) ExitFullscreen();
+        using var mediaStopCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var mediaStop = EndCurrentMediaPlaybackReporting(
+            _playback?.GetSnapshot(),
+            mediaStopCancellation.Token);
+        try
+        {
+            mediaStop.GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // App shutdown must not be held open by an unavailable media server.
+        }
+        _mediaCenterSource.CancelAllPlaybackReportingSessions();
+        ResetArtworkLoading();
         if (!_automationRun)
             _sessionRecoveryService.CompleteAsync(CreateSessionSnapshot()).GetAwaiter().GetResult();
         _telemetryTimer.Stop();
@@ -7238,7 +8123,9 @@ public partial class MainWindow : Window
         Mouse.OverrideCursor = null;
         _loadCancellation?.Cancel();
         _updateCancellation?.Cancel();
+        CancelMediaPlaybackResolution(clearResume: true);
         _guideCancellation?.Cancel();
+        CancelPlexAccountSignInCore("Plex account sign-in was canceled because OrbitalVue is closing.");
         _displayRefreshRate?.Dispose();
         VideoSurface.MediaPlayer = null;
         MultiviewTiles.ItemsSource = null;
@@ -7249,6 +8136,8 @@ public partial class MainWindow : Window
         Application.Current.SessionEnding -= Application_SessionEnding;
         _dvrWakeTimer.Triggered -= DvrWakeTimer_Triggered;
         _dvrWakeTimer.Dispose();
+        _premiumStore.StateChanged -= PremiumStore_StateChanged;
+        _premiumStore.Dispose();
         if (_trayIcon is not null)
         {
             _trayIcon.Visible = false;
@@ -7295,9 +8184,9 @@ public partial class MainWindow : Window
 
     private static string SafeUpdateErrorMessage(Exception exception) => exception switch
     {
-        HttpRequestException => "Check your internet connection and try again. StreamVue could not read the public release feed.",
+        HttpRequestException => "Check your internet connection and try again. OrbitalVue could not read the public release feed.",
         TaskCanceledException => "The update service took too long to respond. Try again in a moment.",
-        UnauthorizedAccessException => "Windows blocked access to the update folder. Restart StreamVue normally and try again.",
+        UnauthorizedAccessException => "Windows blocked access to the update folder. Restart OrbitalVue normally and try again.",
         IOException => "Windows could not save the update package. Check free disk space and try again.",
         _ => "The current installation was left unchanged. Try again, or use the newest installer if the problem continues."
     };

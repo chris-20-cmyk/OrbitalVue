@@ -11,9 +11,14 @@ export interface PlaybackSignal {
   warning: string | null;
 }
 
+export interface PlaybackTimeline {
+  positionMs: number;
+  durationMs?: number;
+}
+
 export interface PlayerAdapter {
   readonly kind: "samsung-avplay" | "html-video";
-  play(channel: CatalogChannel): Promise<void>;
+  play(channel: CatalogChannel, startPositionMs?: number): Promise<void>;
   toggle(): void;
   stop(): void;
   setAspect(mode: AspectMode): void;

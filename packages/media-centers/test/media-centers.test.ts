@@ -1,0 +1,849 @@
+import { describe, expect, it } from "vitest";
+import {
+  MEDIA_CENTER_CONTRACT_VERSION,
+  EmbyClient,
+  PlexAccountClient,
+  PlexClient,
+  assertMediaCenterCredentialBinding,
+  authenticateEmby,
+  createMediaCenterCredentialBinding,
+  createFetchTransport,
+  createMediaCenterCatalog,
+  mediaCenterPlaybackUri,
+  normalizeMediaCenterBaseUrl,
+  parseMediaCenterPlaybackUri,
+  selectPreferredPlexConnection,
+  type MediaCenterConnection,
+  type MediaCenterHttpRequest,
+  type MediaCenterHttpTransport,
+  type MediaCenterItem,
+  type MediaCenterItemKind,
+  type MediaCenterLibrary,
+  type PlexDeviceSigner
+} from "../src/index.js";
+import { resolveServerPath } from "../src/url.js";
+
+function createMockTransport(
+  respond: (request: MediaCenterHttpRequest) => unknown
+): { requests: MediaCenterHttpRequest[]; transport: MediaCenterHttpTransport } {
+  const requests: MediaCenterHttpRequest[] = [];
+  return {
+    requests,
+    transport: async (request) => {
+      requests.push(request);
+      return { status: 200, body: JSON.stringify(respond(request)) };
+    }
+  };
+}
+
+describe("media-center URL boundaries", () => {
+  it("normalizes server addresses and rejects credential-bearing or unsupported URLs", () => {
+    expect(normalizeMediaCenterBaseUrl(" media.home:32400/plex/ "))
+      .toBe("https://media.home:32400/plex");
+    expect(normalizeMediaCenterBaseUrl("http://127.0.0.1:8096/emby/"))
+      .toBe("http://127.0.0.1:8096/emby");
+
+    expect(() => normalizeMediaCenterBaseUrl("ftp://media.home/library"))
+      .toThrow(/HTTP or HTTPS/);
+    expect(() => normalizeMediaCenterBaseUrl("https://user:password@media.home"))
+      .toThrow(/credentials/);
+    expect(() => normalizeMediaCenterBaseUrl("https://media.home?api_key=secret"))
+      .toThrow(/query or fragment/);
+    expect(() => normalizeMediaCenterBaseUrl("https://media.home/#secret"))
+      .toThrow(/query or fragment/);
+  });
+
+  it("keeps provider-returned paths on the configured origin and strips secret query keys", () => {
+    const resolved = resolveServerPath(
+      "https://media.home:32400/plex",
+      "/library/parts/1/file.ts?X-Plex-Token=upstream&API_KEY=wrong&Token=also-secret&quality=original"
+    );
+    const url = new URL(resolved);
+
+    expect(url.origin).toBe("https://media.home:32400");
+    expect(url.pathname).toBe("/plex/library/parts/1/file.ts");
+    expect(url.searchParams.get("quality")).toBe("original");
+    expect(url.search.toLowerCase()).not.toContain("token");
+    expect(url.search.toLowerCase()).not.toContain("api_key");
+    expect(() => resolveServerPath("https://media.home", "https://attacker.example/video"))
+      .toThrow(/cross-origin/);
+    expect(() => resolveServerPath("https://media.home", "\\\\attacker.example\\video"))
+      .toThrow(/cross-origin/);
+  });
+
+  it("stops oversized fetch responses before buffering the full body", async () => {
+    const fetchImplementation = async (): Promise<Response> => new Response("0123456789", {
+      status: 200,
+      headers: { "Content-Length": "10" }
+    });
+    const transport = createFetchTransport(fetchImplementation as typeof fetch, 4);
+
+    await expect(transport({
+      method: "GET",
+      url: "https://media.home/identity",
+      headers: {}
+    })).rejects.toMatchObject({ code: "response-too-large", status: 200 });
+  });
+
+  it("reads bounded text on television engines without ReadableStream support", async () => {
+    const fetchImplementation = async (): Promise<Response> => ({
+      status: 200,
+      headers: new Headers(),
+      body: null,
+      text: async () => "{\"MediaContainer\":{\"machineIdentifier\":\"tv-plex\"}}"
+    }) as Response;
+    const transport = createFetchTransport(fetchImplementation as typeof fetch, 256);
+
+    await expect(transport({
+      method: "GET",
+      url: "https://media.home/identity",
+      headers: {}
+    })).resolves.toMatchObject({
+      status: 200,
+      body: "{\"MediaContainer\":{\"machineIdentifier\":\"tv-plex\"}}"
+    });
+  });
+
+  it("accepts only canonical, credential-free internal playback addresses", () => {
+    const canonical = mediaCenterPlaybackUri({
+      provider: "plex",
+      serverId: "plex-server-1",
+      itemId: "item:100"
+    });
+    expect(canonical).toBe("streamvue-media://plex/plex-server-1/item%3A100");
+    expect(parseMediaCenterPlaybackUri(canonical)).toEqual({
+      provider: "plex",
+      serverId: "plex-server-1",
+      itemId: "item:100"
+    });
+
+    for (const unsafe of [
+      "streamvue-media://user:password@plex/plex-server-1/item-1",
+      "streamvue-media://plex:123/plex-server-1/item-1",
+      "streamvue-media://plex/plex-server-1/item-1?X-Plex-Token=secret",
+      "streamvue-media://plex/plex-server-1/item-1#access-token",
+      "streamvue-media://plex/plex-server-1/item-1/",
+      " streamvue-media://plex/plex-server-1/item-1 "
+    ]) {
+      expect(() => parseMediaCenterPlaybackUri(unsafe)).toThrow();
+    }
+  });
+
+  it("binds protected credentials to one server and requires HTTP consent", () => {
+    const connection: MediaCenterConnection = {
+      contractVersion: MEDIA_CENTER_CONTRACT_VERSION,
+      provider: "plex",
+      serverId: "plex-server-1",
+      displayName: "Plex",
+      baseUrl: "https://plex.home:32400",
+      displayLocation: "plex.home:32400",
+      credentialId: "vault-plex-1"
+    };
+    const binding = createMediaCenterCredentialBinding(connection);
+    expect(() => assertMediaCenterCredentialBinding({
+      ...connection,
+      baseUrl: "https://attacker.example.invalid"
+    }, binding)).toThrow(/does not belong/);
+
+    const cleartextConnection = {
+      ...connection,
+      baseUrl: "http://192.168.1.8:32400"
+    };
+    expect(() => createMediaCenterCredentialBinding(cleartextConnection))
+      .toThrow(/unencrypted HTTP/);
+    expect(createMediaCenterCredentialBinding(cleartextConnection, true).allowInsecureHttp)
+      .toBe(true);
+  });
+});
+
+describe("Plex integration", () => {
+  it("does not send a token when the public Plex identity is wrong", async () => {
+    const connection: MediaCenterConnection = {
+      contractVersion: MEDIA_CENTER_CONTRACT_VERSION,
+      provider: "plex",
+      serverId: "expected-plex-server",
+      displayName: "Plex",
+      baseUrl: "https://plex.home:32400",
+      displayLocation: "plex.home:32400",
+      credentialId: "vault-plex-identity-test"
+    };
+    const token = "must-not-leave-the-vault";
+    const mock = createMockTransport((request) => {
+      expect(new URL(request.url).pathname).toBe("/identity");
+      expect(request.headers["X-Plex-Token"]).toBeUndefined();
+      return { MediaContainer: { machineIdentifier: "different-plex-server" } };
+    });
+    const client = new PlexClient(mock.transport, {
+      connection,
+      token,
+      credentialBinding: createMediaCenterCredentialBinding(connection),
+      clientIdentifier: "streamvue-identity-test"
+    });
+
+    await expect(client.getLibraries()).rejects.toThrow(/identity does not match/i);
+    expect(mock.requests).toHaveLength(1);
+    expect(Object.values(mock.requests[0]!.headers)).not.toContain(token);
+  });
+
+  it("whitelists public JWK fields and rejects private device key material", async () => {
+    const mock = createMockTransport((request) => {
+      expect(JSON.parse(request.body ?? "{}")).toEqual({
+        jwk: {
+          kty: "OKP",
+          crv: "Ed25519",
+          x: "MDEyMzQ1Njc4OUFCQ0RFRkdISUpLTE1OT1BRUlNUVVY",
+          kid: "streamvue-device-key",
+          alg: "EdDSA"
+        },
+        strong: true
+      });
+      return { id: 1, code: "SAFE" };
+    });
+    const client = new PlexAccountClient(mock.transport, {
+      clientIdentifier: "streamvue-test-device"
+    });
+    const publicKeyWithExtraField = {
+      kty: "OKP",
+      crv: "Ed25519",
+      x: "MDEyMzQ1Njc4OUFCQ0RFRkdISUpLTE1OT1BRUlNUVVY",
+      kid: " streamvue-device-key ",
+      alg: "EdDSA",
+      unexpected: "must-not-be-serialized"
+    } as PlexDeviceSigner["publicKey"];
+    await client.createPin({
+      publicKey: publicKeyWithExtraField,
+      sign: async () => "signed-header.signed-payload.signed-signature"
+    });
+
+    const privateKey = {
+      ...publicKeyWithExtraField,
+      d: "PRIVATE-KEY-MATERIAL"
+    } as PlexDeviceSigner["publicKey"];
+    await expect(client.createPin({
+      publicKey: privateKey,
+      sign: async () => "signed-header.signed-payload.signed-signature"
+    })).rejects.toThrow(/private key material/i);
+    expect(mock.requests).toHaveLength(1);
+  });
+
+  it("completes signed PIN auth and prefers a local discovered server connection", async () => {
+    const accountToken = "plex-account-jwt-never-in-url";
+    const serverToken = "plex-server-token-never-in-catalog";
+    const signedPayloads: Readonly<Record<string, string | number>>[] = [];
+    const signer: PlexDeviceSigner = {
+      publicKey: {
+        kty: "OKP",
+        crv: "Ed25519",
+        x: "MDEyMzQ1Njc4OUFCQ0RFRkdISUpLTE1OT1BRUlNUVVY",
+        kid: "streamvue-device-key",
+        alg: "EdDSA"
+      },
+      sign: async (payload) => {
+        signedPayloads.push(payload);
+        return "signed-header.signed-payload.signed-signature";
+      }
+    };
+    const mock = createMockTransport((request) => {
+      const url = new URL(request.url);
+      expect(url.searchParams.get("X-Plex-Token")).toBeNull();
+      if (url.pathname === "/api/v2/pins" && request.method === "POST") {
+        expect(JSON.parse(request.body ?? "{}")).toMatchObject({ strong: true });
+        return { id: 42, code: "ABCD", expiresIn: 300 };
+      }
+      if (url.pathname === "/api/v2/pins/42") {
+        expect(url.searchParams.get("deviceJWT")).toBe(
+          "signed-header.signed-payload.signed-signature"
+        );
+        return { authToken: accountToken, expiresIn: 604_800 };
+      }
+      if (url.pathname === "/api/v2/auth/nonce") {
+        return { nonce: "refresh-nonce" };
+      }
+      if (url.pathname === "/api/v2/auth/token") {
+        expect(JSON.parse(request.body ?? "{}")).toEqual({
+          jwt: "signed-header.signed-payload.signed-signature"
+        });
+        return { auth_token: accountToken, expires_in: 604_800 };
+      }
+      if (url.hostname === "plex.tv" && url.pathname === "/api/v2/user") {
+        expect(request.headers["X-Plex-Token"]).toBe(accountToken);
+        return { id: 1 };
+      }
+      if (url.pathname === "/api/v2/resources") {
+        expect(request.headers["X-Plex-Token"]).toBe(accountToken);
+        return [
+          {
+            name: "Home Plex",
+            clientIdentifier: "plex-server-1",
+            provides: "server",
+            owned: true,
+            accessToken: serverToken,
+            connections: [
+              {
+                uri: "https://relay.example.invalid:443",
+                local: false,
+                relay: true,
+                IPv6: false
+              },
+              {
+                uri: "http://192.168.1.8:32400",
+                local: true,
+                relay: false,
+                IPv6: false
+              },
+              {
+                uri: "https://192-168-1-8.example.plex.direct:32400",
+                local: true,
+                relay: false,
+                IPv6: false
+              }
+            ]
+          },
+          {
+            name: "Living Room Player",
+            clientIdentifier: "plex-player-1",
+            provides: "player",
+            accessToken: "ignored",
+            connections: [{ uri: "https://player.example.invalid" }]
+          }
+        ];
+      }
+      throw new Error(`Unexpected Plex account request: ${request.method} ${request.url}`);
+    });
+    const now = new Date("2026-08-26T12:00:00.000Z");
+    const client = new PlexAccountClient(mock.transport, {
+      clientIdentifier: "streamvue-test-device",
+      product: "OrbitalVue\r\nX-Injected: blocked",
+      version: "5.1-test",
+      now: () => now
+    });
+
+    const pin = await client.createPin(signer);
+    const claimed = await client.claimPin(pin, signer);
+    const refreshed = await client.refreshToken(signer);
+    await client.verifyToken(accountToken);
+    const servers = await client.getServers(accountToken);
+
+    expect(pin).toMatchObject({ id: 42, code: "ABCD" });
+    expect(pin.authorizationUrl).toContain("clientID=streamvue-test-device");
+    expect(pin.authorizationUrl).toContain("code=ABCD");
+    expect(claimed?.token).toBe(accountToken);
+    expect(refreshed.token).toBe(accountToken);
+    expect(signedPayloads[0]).toMatchObject({ aud: "plex.tv", iss: "streamvue-test-device" });
+    expect(signedPayloads[1]).toMatchObject({ nonce: "refresh-nonce" });
+    expect(servers).toHaveLength(1);
+    expect(servers[0]).toMatchObject({
+      serverId: "plex-server-1",
+      accessToken: serverToken,
+      owned: true
+    });
+    expect(selectPreferredPlexConnection(servers[0]!.connections)?.uri)
+      .toBe("https://192-168-1-8.example.plex.direct:32400");
+    expect(mock.requests.every((request) => !request.url.includes(accountToken))).toBe(true);
+    expect(mock.requests.every((request) => !request.url.includes(serverToken))).toBe(true);
+    expect(mock.requests.every((request) => !request.headers["X-Plex-Product"]?.includes("\r")))
+      .toBe(true);
+  });
+
+  it("maps mocked libraries and items without persisting access tokens", async () => {
+    const plexToken = "plex-client-token-never-persist";
+    const upstreamToken = "plex-upstream-query-token";
+    const connection: MediaCenterConnection = {
+      contractVersion: MEDIA_CENTER_CONTRACT_VERSION,
+      provider: "plex",
+      serverId: "plex-server-1",
+      displayName: "Living Room Plex",
+      baseUrl: "https://plex.home:32400",
+      displayLocation: `must-not-be-trusted?X-Plex-Token=${plexToken}`,
+      credentialId: "vault-plex-1"
+    };
+    const mock = createMockTransport((request) => {
+      const url = new URL(request.url);
+      expect(url.search).not.toContain(plexToken);
+      if (url.pathname === "/identity") {
+        expect(request.headers["X-Plex-Token"]).toBeUndefined();
+        return { MediaContainer: { machineIdentifier: "plex-server-1", friendlyName: "Plex" } };
+      }
+      if (url.pathname === "/library/sections") {
+        return {
+          MediaContainer: {
+            Directory: [{ key: "1", title: "Movies", type: "movie", totalSize: 1 }]
+          }
+        };
+      }
+      if (url.pathname === "/library/sections/1/all") {
+        return {
+          MediaContainer: {
+            offset: 0,
+            totalSize: 1,
+            Metadata: [{
+              ratingKey: "100",
+              title: "A Test Movie",
+              type: "movie",
+              year: 2026,
+              duration: 7_200_000,
+              viewOffset: 600_000,
+              addedAt: 1_777_593_600,
+              lastViewedAt: 1_778_457_600,
+              thumb: `/library/metadata/100/thumb?x-plex-token=${upstreamToken}`,
+              Media: [{
+                id: "media-100",
+                container: "mkv",
+                videoCodec: "hevc",
+                audioCodec: "eac3",
+                width: 3840,
+                height: 2160,
+                Part: [{
+                  id: "part-100",
+                  key: `/library/parts/100/file.mkv?X-Plex-Token=${upstreamToken}`,
+                  Stream: [
+                    { index: 0, streamType: 1, codec: "hevc", selected: true },
+                    { index: 1, streamType: 2, codec: "eac3", languageCode: "eng", channels: 6 }
+                  ]
+                }]
+              }]
+            }]
+          }
+        };
+      }
+      if (url.pathname === "/:/timeline") {
+        expect(request.method).toBe("POST");
+        expect(request.headers["X-Plex-Token"]).toBe(plexToken);
+        expect(request.headers["X-Plex-Session-Identifier"]).toBeTruthy();
+        expect(url.searchParams.get("key")).toBe("/library/metadata/100");
+        expect(url.searchParams.get("ratingKey")).toBe("100");
+        return { MediaContainer: { size: 0 } };
+      }
+      throw new Error(`Unexpected Plex request: ${request.url}`);
+    });
+    const client = new PlexClient(mock.transport, {
+      connection,
+      token: plexToken,
+      credentialBinding: createMediaCenterCredentialBinding(connection),
+      clientIdentifier: "streamvue-test-device",
+      product: "OrbitalVue\r\nX-Injected: no",
+      version: "5.1-test"
+    });
+
+    await expect(client.getIdentity()).resolves.toMatchObject({ serverId: "plex-server-1" });
+    const libraries = await client.getLibraries();
+    const page = await client.getItems(libraries[0]!, 0, 50);
+    const item = page.items[0]!;
+    const playback = client.getPlaybackPlan(item);
+    const artwork = client.artworkRequest(item)!;
+    await client.reportPlayback(playback, {
+      kind: "started",
+      state: "playing",
+      positionMs: 600_000,
+      durationMs: 7_200_000
+    });
+    await client.reportPlayback(playback, {
+      kind: "progress",
+      state: "paused",
+      positionMs: Number.POSITIVE_INFINITY,
+      durationMs: 7_200_000,
+      event: "pause"
+    });
+    await client.reportPlayback(playback, {
+      kind: "stopped",
+      state: "playing",
+      positionMs: 7_500_000,
+      durationMs: 7_200_000
+    });
+    const requestCountBeforeArtworkReport = mock.requests.length;
+    await client.reportPlayback(artwork, {
+      kind: "progress",
+      state: "playing",
+      positionMs: 1_000
+    });
+    const catalog = createMediaCenterCatalog(connection, libraries, page.items, "2026-08-26T12:00:00Z");
+    const serializedCatalog = JSON.stringify(catalog);
+
+    expect(playback.requestHeaders["X-Plex-Token"]).toBe(plexToken);
+    expect(playback.sensitiveHeaderNames).toEqual(["X-Plex-Token"]);
+    const timelineRequests = mock.requests.filter((request) =>
+      new URL(request.url).pathname === "/:/timeline"
+    );
+    expect(timelineRequests).toHaveLength(3);
+    expect(new URL(timelineRequests[0]!.url).searchParams.get("state")).toBe("playing");
+    expect(new URL(timelineRequests[1]!.url).searchParams.get("state")).toBe("paused");
+    expect(new URL(timelineRequests[1]!.url).searchParams.get("time")).toBe("0");
+    expect(new URL(timelineRequests[2]!.url).searchParams.get("state")).toBe("stopped");
+    expect(new URL(timelineRequests[2]!.url).searchParams.get("time")).toBe("7200000");
+    expect(mock.requests).toHaveLength(requestCountBeforeArtworkReport);
+    expect(playback.url).not.toContain(plexToken);
+    expect(playback.url).not.toContain(upstreamToken);
+    expect(artwork.url).not.toContain(upstreamToken);
+    expect(mock.requests.every((request) => !request.headers["X-Plex-Product"]?.includes("\r")))
+      .toBe(true);
+    expect(catalog.sources[0]?.displayLocation).toBe("plex.home:32400");
+    expect(catalog.channels[0]?.stream.requestHeaders).toEqual({});
+    expect(catalog.channels[0]?.stream.uri).toBe("streamvue-media://plex/plex-server-1/100");
+    expect(item).toMatchObject({
+      year: 2026,
+      resumePositionMs: 600_000,
+      addedAt: "2026-05-01T00:00:00.000Z",
+      lastPlayedAt: "2026-05-11T00:00:00.000Z"
+    });
+    expect(catalog.channels[0]?.media).toMatchObject({
+      libraryId: "1",
+      libraryTitle: "Movies",
+      year: 2026,
+      durationMs: 7_200_000,
+      resumePositionMs: 600_000,
+      addedAt: "2026-05-01T00:00:00.000Z",
+      lastPlayedAt: "2026-05-11T00:00:00.000Z"
+    });
+    expect(parseMediaCenterPlaybackUri(catalog.channels[0]!.stream.uri)).toEqual({
+      provider: "plex",
+      serverId: "plex-server-1",
+      itemId: "100"
+    });
+    expect(serializedCatalog).not.toContain(plexToken);
+    expect(serializedCatalog).not.toContain(upstreamToken);
+    expect(serializedCatalog).not.toContain("X-Plex-Token");
+  });
+});
+
+describe("Emby integration", () => {
+  it("does not send a token when the public Emby identity is wrong", async () => {
+    const connection: MediaCenterConnection = {
+      contractVersion: MEDIA_CENTER_CONTRACT_VERSION,
+      provider: "emby",
+      serverId: "expected-emby-server",
+      displayName: "Emby",
+      baseUrl: "https://emby.home",
+      displayLocation: "emby.home",
+      credentialId: "vault-emby-identity-test",
+      userId: "user-1"
+    };
+    const token = "must-not-leave-the-vault";
+    const mock = createMockTransport((request) => {
+      expect(new URL(request.url).pathname).toBe("/emby/System/Info/Public");
+      expect(request.headers["X-Emby-Token"]).toBeUndefined();
+      return { Id: "different-emby-server", ServerName: "Wrong Emby" };
+    });
+    const client = new EmbyClient(mock.transport, {
+      connection,
+      token,
+      credentialBinding: createMediaCenterCredentialBinding(connection),
+      device: {
+        client: "OrbitalVue",
+        device: "Vitest",
+        deviceId: "streamvue-identity-test",
+        version: "5.1-test"
+      }
+    });
+
+    await expect(client.getLibraries()).rejects.toThrow(/identity does not match/i);
+    expect(mock.requests).toHaveLength(1);
+    expect(Object.values(mock.requests[0]!.headers)).not.toContain(token);
+  });
+
+  it("authenticates and maps playback while keeping passwords and tokens out of the catalog", async () => {
+    const password = "emby-password-never-persist";
+    const embyToken = "emby-access-token-never-persist";
+    const upstreamToken = "emby-upstream-query-token";
+    const mock = createMockTransport((request) => {
+      const url = new URL(request.url);
+      expect(url.search).not.toContain(password);
+      expect(url.search).not.toContain(embyToken);
+      if (url.pathname === "/emby/System/Info/Public") {
+        expect(request.headers["X-Emby-Token"]).toBeUndefined();
+        expect(Object.values(request.headers)).not.toContain(embyToken);
+        return { Id: "emby-server-1", ServerName: "Home Emby", Version: "4.9" };
+      }
+      if (url.pathname === "/emby/Users/AuthenticateByName") {
+        expect(request.method).toBe("POST");
+        expect(JSON.parse(request.body ?? "{}")).toEqual({
+          Username: "chris",
+          Pw: password
+        });
+        return {
+          AccessToken: embyToken,
+          ServerId: "emby-server-1",
+          User: { Id: "user-1", Name: "Chris" }
+        };
+      }
+      if (url.pathname === "/emby/Users/user-1/Views") {
+        return { Items: [{ Id: "lib-1", Name: "Movies", CollectionType: "movies", ChildCount: 1 }] };
+      }
+      if (url.pathname === "/emby/Users/user-1/Items") {
+        return {
+          TotalRecordCount: 1,
+          Items: [{
+            Id: "item-1",
+            Name: "Another Test Movie",
+            Type: "Movie",
+            ProductionYear: 2025,
+            DateCreated: "2026-08-20T12:00:00Z",
+            RunTimeTicks: 36_000_000_000,
+            UserData: {
+              PlaybackPositionTicks: 12_000_000,
+              Played: false,
+              LastPlayedDate: "2026-08-30T12:00:00Z"
+            },
+            ImageTags: { Primary: "image-tag-1" },
+            MediaSources: [{
+              Id: "source-1",
+              Container: "mkv",
+              SupportsDirectPlay: true,
+              SupportsDirectStream: true,
+              SupportsTranscoding: true,
+              MediaStreams: [
+                { Index: 0, Type: "Video", Codec: "h264", Width: 1920, Height: 1080 },
+                { Index: 1, Type: "Audio", Codec: "aac", Language: "eng", Channels: 6 }
+              ]
+            }]
+          }]
+        };
+      }
+      if (url.pathname === "/emby/Items/item-1/PlaybackInfo") {
+        return {
+          PlaySessionId: "play-session-1",
+          MediaSources: [{
+            Id: "source-1",
+            Container: "mkv",
+            SupportsDirectPlay: true,
+            SupportsDirectStream: true,
+            SupportsTranscoding: true,
+            DirectStreamUrl: `/Videos/item-1/stream.mkv?API_KEY=${upstreamToken}&quality=original`,
+            RequiredHttpHeaders: {
+              Referer: "https://emby.home/player\r\nX-Injected: blocked",
+              "X-Playback-Mode": "direct",
+              Host: "attacker.example",
+              Authorization: "Bearer server-controlled",
+              Cookie: "server-cookie",
+              "X-Emby-Token": "server-controlled-token"
+            }
+          }]
+        };
+      }
+      if (url.pathname.startsWith("/emby/Sessions/Playing")) {
+        expect(request.method).toBe("POST");
+        expect(request.headers["X-Emby-Token"]).toBe(embyToken);
+        expect(request.headers["Content-Type"]).toBe("application/json");
+        return {};
+      }
+      throw new Error(`Unexpected Emby request: ${request.url}`);
+    });
+    const device = {
+      client: "OrbitalVue",
+      device: "Vitest",
+      deviceId: "streamvue-test-device",
+      version: "5.1-test"
+    };
+    const session = await authenticateEmby(mock.transport, {
+      baseUrl: "https://emby.home",
+      username: " chris ",
+      password,
+      device
+    });
+    const connection: MediaCenterConnection = {
+      contractVersion: MEDIA_CENTER_CONTRACT_VERSION,
+      provider: "emby",
+      serverId: session.serverId,
+      displayName: "Home Emby",
+      baseUrl: "https://emby.home",
+      displayLocation: `do-not-trust?api_key=${embyToken}`,
+      credentialId: "vault-emby-1",
+      userId: session.userId
+    };
+    const client = new EmbyClient(mock.transport, {
+      connection,
+      token: session.accessToken,
+      credentialBinding: createMediaCenterCredentialBinding(connection),
+      device
+    });
+    const libraries = await client.getLibraries();
+    const page = await client.getItems(libraries[0]!, Number.NaN, Number.POSITIVE_INFINITY);
+    const item = page.items[0]!;
+    const playback = await client.getPlaybackPlan(item);
+    await client.reportPlayback(playback, {
+      kind: "started",
+      state: "playing",
+      positionMs: 1_200,
+      durationMs: 3_600_000,
+      volumePercent: 45
+    });
+    await client.reportPlayback(playback, {
+      kind: "progress",
+      state: "paused",
+      positionMs: 3_700_000,
+      durationMs: 3_600_000,
+      event: "pause"
+    });
+    await client.reportPlayback(playback, {
+      kind: "stopped",
+      state: "playing",
+      positionMs: Number.NaN,
+      durationMs: 3_600_000
+    });
+    const artwork = client.artworkRequest(item)!;
+    const requestCountBeforeArtworkReport = mock.requests.length;
+    await client.reportPlayback(artwork, {
+      kind: "progress",
+      state: "playing",
+      positionMs: 1_000
+    });
+    const catalog = createMediaCenterCatalog(connection, libraries, page.items, "2026-08-26T12:00:00Z");
+    const serializedCatalog = JSON.stringify(catalog);
+
+    expect(session).toMatchObject({ accessToken: embyToken, userId: "user-1" });
+    expect(page.start).toBe(0);
+    expect(new URL(mock.requests.find((request) => request.url.includes("/Items?"))!.url)
+      .searchParams.get("Limit")).toBe("200");
+    expect(playback.url).not.toContain(embyToken);
+    expect(playback.url).not.toContain(upstreamToken);
+    expect(playback.requestHeaders["X-Emby-Token"]).toBe(embyToken);
+    expect(playback.requestHeaders["X-Emby-Authorization"]).toContain(embyToken);
+    expect(playback.requestHeaders["X-Playback-Mode"]).toBe("direct");
+    expect(playback.requestHeaders.Referer).not.toContain("\r");
+    expect(playback.requestHeaders.Host).toBeUndefined();
+    expect(playback.requestHeaders.Authorization).toBeUndefined();
+    expect(playback.requestHeaders.Cookie).toBeUndefined();
+    expect(playback.sensitiveHeaderNames).toEqual(["X-Emby-Token", "X-Emby-Authorization"]);
+    const playbackReports = mock.requests.filter((request) =>
+      new URL(request.url).pathname.startsWith("/emby/Sessions/Playing")
+    );
+    expect(playbackReports.map((request) => new URL(request.url).pathname)).toEqual([
+      "/emby/Sessions/Playing",
+      "/emby/Sessions/Playing/Progress",
+      "/emby/Sessions/Playing/Stopped"
+    ]);
+    expect(JSON.parse(playbackReports[0]!.body ?? "{}")).toMatchObject({
+      ItemId: "item-1",
+      MediaSourceId: "source-1",
+      PositionTicks: 12_000_000,
+      RunTimeTicks: 36_000_000_000,
+      PlayMethod: "DirectPlay",
+      PlaySessionId: "play-session-1",
+      IsPaused: false,
+      VolumeLevel: 45
+    });
+    expect(JSON.parse(playbackReports[1]!.body ?? "{}")).toMatchObject({
+      PositionTicks: 36_000_000_000,
+      EventName: "Pause",
+      IsPaused: true
+    });
+    expect(JSON.parse(playbackReports[2]!.body ?? "{}")).toMatchObject({
+      PositionTicks: 0,
+      IsPaused: false
+    });
+    expect(mock.requests).toHaveLength(requestCountBeforeArtworkReport);
+    expect(catalog.sources[0]?.displayLocation).toBe("emby.home");
+    expect(catalog.channels[0]?.stream.requestHeaders).toEqual({});
+    expect(catalog.channels[0]?.stream.uri).toBe("streamvue-media://emby/emby-server-1/item-1");
+    expect(item).toMatchObject({
+      year: 2025,
+      addedAt: "2026-08-20T12:00:00.000Z",
+      lastPlayedAt: "2026-08-30T12:00:00.000Z"
+    });
+    expect(catalog.channels[0]?.media).toMatchObject({
+      libraryId: "lib-1",
+      libraryTitle: "Movies",
+      year: 2025,
+      addedAt: "2026-08-20T12:00:00.000Z",
+      lastPlayedAt: "2026-08-30T12:00:00.000Z"
+    });
+    expect(serializedCatalog).not.toContain(password);
+    expect(serializedCatalog).not.toContain(embyToken);
+    expect(serializedCatalog).not.toContain(upstreamToken);
+    expect(serializedCatalog).not.toContain("X-Emby-Token");
+    expect(serializedCatalog).not.toContain("X-Emby-Authorization");
+    expect(mock.requests.filter((request) =>
+      new URL(request.url).pathname === "/emby/System/Info/Public"
+    )).toHaveLength(2);
+  });
+});
+
+describe("plex library item types", () => {
+  const connection: MediaCenterConnection = {
+    contractVersion: MEDIA_CENTER_CONTRACT_VERSION,
+    provider: "plex",
+    serverId: "plex-server-1",
+    displayName: "Plex",
+    baseUrl: "https://plex.home:32400",
+    displayLocation: "plex.home:32400",
+    credentialId: "vault-plex-1"
+  };
+
+  async function queryFor(kind: MediaCenterLibrary["kind"]): Promise<string> {
+    const mock = createMockTransport((request) => {
+      if (new URL(request.url).pathname === "/identity") {
+        return { MediaContainer: { machineIdentifier: "plex-server-1", friendlyName: "Plex" } };
+      }
+      return { MediaContainer: { offset: 0, totalSize: 0, Metadata: [] } };
+    });
+    const client = new PlexClient(mock.transport, {
+      connection,
+      token: "plex-token",
+      credentialBinding: createMediaCenterCredentialBinding(connection),
+      clientIdentifier: "streamvue-library-type-test"
+    });
+    await client.getItems({ id: "1", title: "Library", kind });
+    const itemsRequest = mock.requests.find((request) =>
+      new URL(request.url).pathname === "/library/sections/1/all");
+    return new URL(itemsRequest!.url).search;
+  }
+
+  // `/all` returns a library's own top-level entries -- shows for a show library, artists for a
+  // music one. Those are containers, not playable media, so without a type the catalog builder
+  // has nothing it can present and the library browses as empty.
+  it("asks a show library for episodes", async () => {
+    expect(await queryFor("shows")).toBe("?type=4");
+  });
+
+  it("asks a music library for tracks", async () => {
+    expect(await queryFor("music")).toBe("?type=10");
+  });
+
+  it("leaves a movie library unfiltered, since it already lists playable items", async () => {
+    expect(await queryFor("movies")).toBe("");
+  });
+});
+
+describe("media-center catalog item kinds", () => {
+  const connection: MediaCenterConnection = {
+    contractVersion: MEDIA_CENTER_CONTRACT_VERSION,
+    provider: "plex",
+    serverId: "plex-server-1",
+    displayName: "Plex",
+    baseUrl: "https://plex.home:32400",
+    displayLocation: "plex.home:32400",
+    credentialId: "vault-plex-1"
+  };
+  const kinds: MediaCenterItemKind[] = ["movie", "episode", "video", "recording", "live-tv", "audio"];
+  const items: MediaCenterItem[] = kinds.map((kind, index) => ({
+    id: `item-${index}`,
+    provider: "plex",
+    serverId: "plex-server-1",
+    libraryId: "library-1",
+    libraryTitle: "Library",
+    kind,
+    title: `Item ${index}`,
+    played: false,
+    mediaSources: []
+  }));
+
+  it("gives every item kind a catalog presentation", () => {
+    const catalog = createMediaCenterCatalog(connection, [], items);
+    // A kind with no presentation is silently discarded, which is how a Plex or Emby music
+    // library used to browse as empty. Nothing may drop out.
+    expect(catalog.channels).toHaveLength(items.length);
+  });
+
+  it("presents audio tracks as music rather than dropping them", () => {
+    const catalog = createMediaCenterCatalog(connection, [], items);
+    const audioIndex = kinds.indexOf("audio");
+    expect(catalog.channels[audioIndex]?.kind).toBe("music");
+  });
+
+  it("numbers channels contiguously", () => {
+    const catalog = createMediaCenterCatalog(connection, [], items);
+    // Channel numbers come from the pre-filter index, so any future kind that maps to
+    // undefined would leave a gap here rather than shifting the numbers down.
+    expect(catalog.channels.map((channel) => channel.number))
+      .toEqual(items.map((_, index) => index + 1));
+  });
+});

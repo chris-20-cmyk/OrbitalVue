@@ -1,0 +1,94 @@
+name: Windows MSIX foundation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "feature/**"
+    paths:
+      - "src/StreamVue.Player/**"
+      - "tools/StreamVue.FeatureProbe/**"
+      - "tools/build-windows-msix.ps1"
+      - "tools/verify-windows-msix.ps1"
+      - "tools/verify-windows-plex-account-foundation.mjs"
+      - "tools/verify-windows-media-center-progress.mjs"
+      - "tools/verify-windows-media-center-artwork.mjs"
+      - "packaging/windows-msix/**"
+      - "store/**"
+      - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-cross-platform-release-contract.mjs"
+      - ".github/workflows/windows-msix-foundation.yml"
+  pull_request:
+    paths:
+      - "src/StreamVue.Player/**"
+      - "tools/StreamVue.FeatureProbe/**"
+      - "tools/build-windows-msix.ps1"
+      - "tools/verify-windows-msix.ps1"
+      - "tools/verify-windows-plex-account-foundation.mjs"
+      - "tools/verify-windows-media-center-progress.mjs"
+      - "tools/verify-windows-media-center-artwork.mjs"
+      - "packaging/windows-msix/**"
+      - "store/**"
+      - "tools/verify-premium-store-readiness.mjs"
+      - "tools/verify-cross-platform-release-contract.mjs"
+      - ".github/workflows/windows-msix-foundation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  package-contract:
+    name: Synthetic non-publishable MSIX
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out OrbitalVue
+        uses: actions/checkout@v7
+
+      - name: Install .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Validate the locked premium and release contracts
+        run: |
+          node tools/verify-premium-store-readiness.mjs
+          node tools/verify-windows-plex-account-foundation.mjs
+          node tools/verify-windows-media-center-progress.mjs
+          node tools/verify-windows-media-center-artwork.mjs
+          node tools/verify-cross-platform-release-contract.mjs
+
+      - name: Restore the isolated Store dependency graph
+        shell: pwsh
+        run: >-
+          dotnet restore src/StreamVue.Player/StreamVue.Player.csproj
+          -p:StreamVueDistributionMode=Store
+          -p:StreamVuePremiumProductId=streamvue-test-premium
+
+      - name: Build and inspect a synthetic MSIX
+        shell: pwsh
+        run: >-
+          ./tools/build-windows-msix.ps1
+          -IdentityName StreamVue.Test.Package
+          -Publisher 'CN=00000000-0000-0000-0000-000000000000'
+          -PublisherDisplayName 'OrbitalVue Test'
+          -Version 5.7.0.0
+          -PremiumProductId streamvue-test-premium
+          -SkipRestore
+
+      - name: Rebuild and test the personal updater lane
+        shell: pwsh
+        run: |
+          dotnet restore StreamVue.Native.slnx
+          dotnet build StreamVue.Native.slnx -c Release --no-restore
+          dotnet run --project tools/StreamVue.FeatureProbe/StreamVue.FeatureProbe.csproj -c Release --no-build
+
+      - name: Upload the package-layout proof
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: streamvue-windows-msix-layout-test-not-for-installation
+          if-no-files-found: error
+          retention-days: 14
+          path: artifacts/windows-msix/OrbitalVue-5.7.0.0-win-x64-microsoft-store-unsigned.msix

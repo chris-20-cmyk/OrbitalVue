@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamvue.app/contracts/google-play-verifier/v1/schema.json",
+  "title": "OrbitalVue Google Play Purchase Verifier Exchange",
+  "description": "The transient purchase-token request and secret-free entitlement response exchanged between OrbitalVue for Android and its Google Play backend verifier.",
+  "oneOf": [
+    { "$ref": "#/$defs/verificationRequest" },
+    { "$ref": "#/$defs/verificationResponse" }
+  ],
+  "$defs": {
+    "productId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "verificationRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "platform", "packageName", "productId", "purchaseToken"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "platform": { "const": "google-play" },
+        "packageName": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_]*)+$"
+        },
+        "productId": { "$ref": "#/$defs/productId" },
+        "purchaseToken": {
+          "description": "Transient Google Play purchase token. The verifier must not log it or return it to the client.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+        }
+      }
+    },
+    "verificationResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "verified", "productId"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "verified": { "type": "boolean" },
+        "productId": { "$ref": "#/$defs/productId" }
+      }
+    }
+  }
+}

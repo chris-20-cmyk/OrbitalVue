@@ -1,0 +1,611 @@
+import { requestJson, type MediaCenterHttpTransport } from "./http.js";
+import {
+  assertMediaCenterCredentialBinding,
+  requireAllowedTransport,
+  type MediaCenterCredentialBinding
+} from "./credential.js";
+import { asArray, asBoolean, asNumber, asRecord, asString, clampPage } from "./parse.js";
+import { createSessionId } from "./random.js";
+import type {
+  MediaCenterConnection,
+  MediaCenterDeviceIdentity,
+  MediaCenterItem,
+  MediaCenterItemKind,
+  MediaCenterLibrary,
+  MediaCenterLibraryKind,
+  MediaCenterMediaSource,
+  MediaCenterPage,
+  MediaCenterPlaybackPlan,
+  MediaCenterPlaybackReport,
+  MediaCenterTrack,
+  PlaybackMethod
+} from "./types.js";
+import {
+  normalizeMediaCenterBaseUrl,
+  requireIdentifier,
+  resolveServerPath,
+  sanitizeServerPathForStorage,
+  withQuery
+} from "./url.js";
+
+export interface EmbyAuthenticationRequest {
+  baseUrl: string;
+  username: string;
+  password: string;
+  device: MediaCenterDeviceIdentity;
+  allowInsecureHttp?: boolean;
+}
+
+export interface EmbyAuthenticationResult {
+  accessToken: string;
+  userId: string;
+  serverId: string;
+  userName: string;
+}
+
+interface EmbyServerIdentity {
+  serverId: string;
+  name: string;
+  version?: string;
+}
+
+export interface EmbyClientConfiguration {
+  connection: MediaCenterConnection;
+  token: string;
+  credentialBinding: MediaCenterCredentialBinding;
+  device: MediaCenterDeviceIdentity;
+}
+
+export async function authenticateEmby(
+  transport: MediaCenterHttpTransport,
+  request: EmbyAuthenticationRequest
+): Promise<EmbyAuthenticationResult> {
+  const username = request.username.trim();
+  if (!username) throw new TypeError("Enter an Emby user name.");
+  if (!request.password) throw new TypeError("Enter the Emby password.");
+  requireAllowedTransport(request.baseUrl, request.allowInsecureHttp ?? false);
+  const apiBaseUrl = embyApiBaseUrl(request.baseUrl);
+  const publicIdentity = await getEmbyPublicIdentity(transport, apiBaseUrl);
+  const payload = await requestJson<unknown>(transport, {
+    method: "POST",
+    url: resolveServerPath(apiBaseUrl, "/Users/AuthenticateByName"),
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-Emby-Authorization": embyAuthorization(request.device)
+    },
+    body: JSON.stringify({ Username: username, Pw: request.password })
+  });
+  const result = asRecord(payload);
+  const token = asString(result.AccessToken);
+  const serverId = asString(result.ServerId);
+  const rawUser = Array.isArray(result.User) ? result.User[0] : result.User;
+  const user = asRecord(rawUser);
+  const userId = asString(user.Id);
+  const userName = asString(user.Name) ?? username;
+  if (!token || !serverId || !userId) {
+    throw new TypeError("Emby authenticated but returned an incomplete session.");
+  }
+  if (/\r|\n/.test(token) || token.length > 16_384) {
+    throw new TypeError("Emby returned an invalid access token.");
+  }
+  const safeServerId = requireIdentifier(serverId, "Emby server identifier");
+  if (safeServerId !== publicIdentity.serverId) {
+    throw new TypeError("The Emby server identity changed during authentication.");
+  }
+  return {
+    accessToken: token,
+    userId: requireIdentifier(userId, "Emby user identifier"),
+    serverId: safeServerId,
+    userName
+  };
+}
+
+export class EmbyClient {
+  private readonly apiBaseUrl: string;
+  private readonly headers: Record<string, string>;
+  private readonly userId: string;
+  private identityVerified = false;
+
+  constructor(
+    private readonly transport: MediaCenterHttpTransport,
+    private readonly configuration: EmbyClientConfiguration
+  ) {
+    if (configuration.connection.provider !== "emby") {
+      throw new TypeError("An Emby client requires an Emby connection.");
+    }
+    assertMediaCenterCredentialBinding(
+      configuration.connection,
+      configuration.credentialBinding
+    );
+    const token = configuration.token.trim();
+    if (!token || /[\r\n]/.test(token) || token.length > 16_384) {
+      throw new TypeError("A valid Emby access token is required.");
+    }
+    this.userId = requireIdentifier(
+      configuration.connection.userId ?? "",
+      "Emby user identifier"
+    );
+    this.apiBaseUrl = embyApiBaseUrl(configuration.connection.baseUrl);
+    this.headers = {
+      Accept: "application/json",
+      "X-Emby-Token": token,
+      "X-Emby-Authorization": embyAuthorization(configuration.device, this.userId, token)
+    };
+  }
+
+  async getLibraries(): Promise<MediaCenterLibrary[]> {
+    const payload = await this.get(`/Users/${encodeURIComponent(this.userId)}/Views`);
+    return asArray(asRecord(payload).Items).flatMap((value) => {
+      const item = asRecord(value);
+      const id = asString(item.Id);
+      const title = asString(item.Name);
+      if (!id || !title) return [];
+      const itemCount = asNumber(item.ChildCount);
+      return [{
+        id: requireIdentifier(id, "Emby library identifier"),
+        title,
+        kind: embyLibraryKind(asString(item.CollectionType ?? item.Type)),
+        ...(itemCount === undefined ? {} : { itemCount })
+      }];
+    });
+  }
+
+  async getItems(
+    library: MediaCenterLibrary,
+    start = 0,
+    size = 200
+  ): Promise<MediaCenterPage<MediaCenterItem>> {
+    const page = clampPage(start, size);
+    const libraryId = requireIdentifier(library.id, "Emby library identifier");
+    const url = withQuery(
+      resolveServerPath(
+        this.apiBaseUrl,
+        `/Users/${encodeURIComponent(this.userId)}/Items`
+      ),
+      {
+        ParentId: libraryId,
+        Recursive: true,
+        IncludeItemTypes: "Movie,Episode,Video,MusicVideo,Recording,LiveTvChannel,Audio",
+        Fields: "MediaSources,MediaStreams,Path,PrimaryImageAspectRatio,SortName,Overview,DateCreated",
+        EnableImages: true,
+        EnableUserData: true,
+        StartIndex: page.start,
+        Limit: page.size
+      }
+    );
+    const payload = await this.getAbsolute(url);
+    const result = asRecord(payload);
+    const items = asArray(result.Items).flatMap((value) => {
+      const parsed = this.parseItem(asRecord(value), library);
+      return parsed === undefined ? [] : [parsed];
+    });
+    return {
+      items,
+      start: page.start,
+      size: items.length,
+      total: asNumber(result.TotalRecordCount) ?? items.length
+    };
+  }
+
+  async getPlaybackPlan(
+    item: MediaCenterItem,
+    mediaSourceId?: string,
+    startPositionMs = item.resumePositionMs ?? 0
+  ): Promise<MediaCenterPlaybackPlan> {
+    if (item.provider !== "emby" || item.serverId !== this.configuration.connection.serverId) {
+      throw new TypeError("The Emby item does not belong to this server connection.");
+    }
+    const itemId = requireIdentifier(item.id, "Emby item identifier");
+    const infoUrl = withQuery(
+      resolveServerPath(this.apiBaseUrl, `/Items/${encodeURIComponent(itemId)}/PlaybackInfo`),
+      {
+        UserId: this.userId,
+        StartTimeTicks: Math.max(0, Math.floor(startPositionMs * 10_000))
+      }
+    );
+    const payload = asRecord(await this.getAbsolute(infoUrl));
+    const playSessionId = asString(payload.PlaySessionId) ?? createSessionId();
+    const candidates = asArray(payload.MediaSources).map(asRecord);
+    const source = mediaSourceId === undefined
+      ? candidates[0]
+      : candidates.find((candidate) => asString(candidate.Id) === mediaSourceId);
+    if (!source) throw new TypeError("Emby returned no playable media source.");
+
+    const sourceId = requireIdentifier(
+      asString(source.Id) ?? item.mediaSources[0]?.id ?? "default",
+      "Emby media source identifier"
+    );
+    const directStreamPath = asString(source.DirectStreamUrl);
+    const transcodePath = asString(source.TranscodingUrl);
+    const supportsDirectPlay = asBoolean(source.SupportsDirectPlay);
+    const supportsDirectStream = asBoolean(source.SupportsDirectStream);
+    const supportsTranscode = asBoolean(source.SupportsTranscoding);
+    let method: PlaybackMethod;
+    let url: string;
+    if (supportsDirectPlay || supportsDirectStream) {
+      method = supportsDirectPlay ? "direct-play" : "direct-stream";
+      if (directStreamPath) {
+        url = resolveServerPath(this.apiBaseUrl, directStreamPath);
+      } else {
+        const container = safeContainer(asString(source.Container));
+        url = withQuery(
+          resolveServerPath(
+            this.apiBaseUrl,
+            `/Videos/${encodeURIComponent(itemId)}/stream.${container}`
+          ),
+          {
+            MediaSourceId: sourceId,
+            PlaySessionId: playSessionId,
+            Static: true
+          }
+        );
+      }
+    } else if (supportsTranscode && transcodePath) {
+      method = "transcode";
+      url = resolveServerPath(this.apiBaseUrl, transcodePath);
+    } else {
+      throw new TypeError("Emby did not provide a supported direct-play or transcode path.");
+    }
+
+    const requiredHeaders = safeHeaderRecord(asRecord(source.RequiredHttpHeaders));
+    const liveStreamId = asString(source.LiveStreamId);
+    return {
+      itemId,
+      mediaSourceId: sourceId,
+      method,
+      url,
+      requestHeaders: { ...requiredHeaders, ...this.headers },
+      sensitiveHeaderNames: ["X-Emby-Token", "X-Emby-Authorization"],
+      playSessionId,
+      ...(liveStreamId === undefined ? {} : { liveStreamId }),
+      requiresPlaybackReporting: true
+    };
+  }
+
+  artworkRequest(item: MediaCenterItem, maxWidth = 640): MediaCenterPlaybackPlan | undefined {
+    this.requireVerifiedIdentity();
+    if (!item.artworkPath) return undefined;
+    const url = withQuery(resolveServerPath(this.apiBaseUrl, item.artworkPath), {
+      MaxWidth: Math.min(2_000, Math.max(64, Math.floor(maxWidth)))
+    });
+    return {
+      itemId: item.id,
+      mediaSourceId: "artwork",
+      method: "direct-play",
+      url,
+      requestHeaders: { ...this.headers },
+      sensitiveHeaderNames: ["X-Emby-Token", "X-Emby-Authorization"],
+      requiresPlaybackReporting: false
+    };
+  }
+
+  async reportPlayback(
+    plan: MediaCenterPlaybackPlan,
+    report: MediaCenterPlaybackReport
+  ): Promise<void> {
+    if (!plan.requiresPlaybackReporting) return;
+    this.requireVerifiedIdentity();
+    const itemId = requireIdentifier(plan.itemId, "Emby item identifier");
+    const sourceId = requireIdentifier(plan.mediaSourceId, "Emby media source identifier");
+    const normalized = normalizePlaybackReport(report);
+    const endpoint = report.kind === "started"
+      ? "/Sessions/Playing"
+      : report.kind === "stopped"
+        ? "/Sessions/Playing/Stopped"
+        : "/Sessions/Playing/Progress";
+    const body = {
+      QueueableMediaTypes: ["Video"],
+      CanSeek: report.canSeek ?? true,
+      ItemId: itemId,
+      MediaSourceId: sourceId,
+      IsPaused: normalized.state === "paused",
+      IsMuted: report.isMuted ?? false,
+      PositionTicks: normalized.positionMs * 10_000,
+      ...(normalized.durationMs === undefined
+        ? {}
+        : { RunTimeTicks: normalized.durationMs * 10_000 }),
+      ...(report.volumePercent === undefined
+        ? {}
+        : { VolumeLevel: clampPercent(report.volumePercent) }),
+      PlayMethod: embyPlayMethod(plan.method),
+      ...(plan.playSessionId === undefined ? {} : { PlaySessionId: plan.playSessionId }),
+      ...(plan.liveStreamId === undefined ? {} : { LiveStreamId: plan.liveStreamId }),
+      ...(report.kind !== "progress"
+        ? {}
+        : { EventName: embyEventName(report.event, normalized.state) })
+    };
+    const response = await this.transport({
+      method: "POST",
+      url: resolveServerPath(this.apiBaseUrl, endpoint),
+      headers: { ...this.headers, "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    requireSuccessfulReport(response.status, "Emby");
+  }
+
+  private async get(path: string): Promise<unknown> {
+    return this.getAbsolute(resolveServerPath(this.apiBaseUrl, path));
+  }
+
+  private async getAbsolute(url: string): Promise<unknown> {
+    if (!this.identityVerified) {
+      const identity = await getEmbyPublicIdentity(this.transport, this.apiBaseUrl);
+      if (identity.serverId !== this.configuration.connection.serverId) {
+        throw new TypeError("The Emby server identity does not match this credential.");
+      }
+      this.identityVerified = true;
+    }
+    return requestJson(this.transport, { method: "GET", url, headers: this.headers });
+  }
+
+  private requireVerifiedIdentity(): void {
+    if (!this.identityVerified) {
+      throw new TypeError("Verify the Emby server identity before resolving protected media.");
+    }
+  }
+
+  private parseItem(
+    raw: Record<string, unknown>,
+    library: MediaCenterLibrary
+  ): MediaCenterItem | undefined {
+    const id = asString(raw.Id);
+    const title = asString(raw.Name);
+    const kind = embyItemKind(asString(raw.Type));
+    if (!id || !title || !kind) return undefined;
+    const userData = asRecord(raw.UserData);
+    const sortTitle = asString(raw.SortName);
+    const seriesTitle = asString(raw.SeriesName);
+    const seasonNumber = asNumber(raw.ParentIndexNumber);
+    const episodeNumber = asNumber(raw.IndexNumber);
+    const year = asNumber(raw.ProductionYear);
+    const durationTicks = asNumber(raw.RunTimeTicks);
+    const resumeTicks = asNumber(userData.PlaybackPositionTicks);
+    const addedAt = isoTimestamp(asString(raw.DateCreated));
+    const lastPlayedAt = isoTimestamp(asString(userData.LastPlayedDate));
+    const imageTags = asRecord(raw.ImageTags);
+    const primaryTag = asString(imageTags.Primary ?? raw.PrimaryImageTag);
+    const artworkPath = primaryTag
+      ? `/Items/${encodeURIComponent(id)}/Images/Primary?Tag=${encodeURIComponent(primaryTag)}`
+      : undefined;
+    return {
+      id: requireIdentifier(id, "Emby item identifier"),
+      provider: "emby",
+      serverId: this.configuration.connection.serverId,
+      libraryId: library.id,
+      libraryTitle: library.title,
+      kind,
+      title,
+      ...(sortTitle === undefined ? {} : { sortTitle }),
+      ...(seriesTitle === undefined ? {} : { seriesTitle }),
+      ...(seasonNumber === undefined ? {} : { seasonNumber }),
+      ...(episodeNumber === undefined ? {} : { episodeNumber }),
+      ...(year === undefined ? {} : { year }),
+      ...(durationTicks === undefined ? {} : { durationMs: Math.floor(durationTicks / 10_000) }),
+      ...(resumeTicks === undefined ? {} : { resumePositionMs: Math.floor(resumeTicks / 10_000) }),
+      played: asBoolean(userData.Played),
+      ...(addedAt === undefined ? {} : { addedAt }),
+      ...(lastPlayedAt === undefined ? {} : { lastPlayedAt }),
+      ...(artworkPath === undefined ? {} : { artworkPath }),
+      mediaSources: asArray(raw.MediaSources).map((value, index) =>
+        parseEmbyMediaSource(asRecord(value), index, this.apiBaseUrl)
+      )
+    };
+  }
+}
+
+function isoTimestamp(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) || date.getUTCFullYear() > 3000
+    ? undefined
+    : date.toISOString();
+}
+
+function embyApiBaseUrl(input: string): string {
+  const base = normalizeMediaCenterBaseUrl(input);
+  return new URL(base).pathname.toLowerCase().endsWith("/emby") ? base : `${base}/emby`;
+}
+
+async function getEmbyPublicIdentity(
+  transport: MediaCenterHttpTransport,
+  apiBaseUrl: string
+): Promise<EmbyServerIdentity> {
+  const payload = asRecord(await requestJson(transport, {
+    method: "GET",
+    url: resolveServerPath(apiBaseUrl, "/System/Info/Public"),
+    headers: { Accept: "application/json" }
+  }));
+  const rawServerId = asString(payload.Id ?? payload.ServerId);
+  if (!rawServerId) throw new TypeError("Emby did not return a public server identity.");
+  const name = asString(payload.ServerName) ?? "Emby";
+  const version = asString(payload.Version);
+  return {
+    serverId: requireIdentifier(rawServerId, "Emby server identifier"),
+    name,
+    ...(version === undefined ? {} : { version })
+  };
+}
+
+function embyAuthorization(
+  device: MediaCenterDeviceIdentity,
+  userId?: string,
+  token?: string
+): string {
+  const fields = [
+    ["Client", device.client],
+    ["Device", device.device],
+    ["DeviceId", device.deviceId],
+    ["Version", device.version],
+    ...(userId ? [["UserId", userId]] : []),
+    ...(token ? [["Token", token]] : [])
+  ];
+  return `Emby ${fields.map(([key, value]) => `${key}="${safeHeaderValue(value ?? "")}"`).join(", ")}`;
+}
+
+function safeHeaderValue(value: string): string {
+  return value.replace(/["\r\n]/g, "").slice(0, 512);
+}
+
+function safeHeaderRecord(value: Record<string, unknown>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [key, rawValue] of Object.entries(value)) {
+    const text = asString(rawValue);
+    if (/^[A-Za-z0-9-]{1,64}$/.test(key) && text && !isReservedPlaybackHeader(key)) {
+      result[key] = safeHeaderValue(text);
+    }
+  }
+  return result;
+}
+
+function isReservedPlaybackHeader(key: string): boolean {
+  return new Set([
+    "authorization",
+    "connection",
+    "content-length",
+    "cookie",
+    "host",
+    "proxy-authorization",
+    "proxy-connection",
+    "set-cookie",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+    "x-emby-authorization",
+    "x-emby-token",
+    "x-plex-token"
+  ]).has(key.toLowerCase());
+}
+
+function embyLibraryKind(value: string | undefined): MediaCenterLibraryKind {
+  switch (value?.toLowerCase()) {
+  case "movies": return "movies";
+  case "tvshows": return "shows";
+  case "livetv": return "live-tv";
+  case "music": return "music";
+  case "recordings": return "recordings";
+  default: return "other";
+  }
+}
+
+function embyItemKind(value: string | undefined): MediaCenterItemKind | undefined {
+  switch (value?.toLowerCase()) {
+  case "movie": return "movie";
+  case "episode": return "episode";
+  case "video":
+  case "musicvideo": return "video";
+  case "recording": return "recording";
+  case "livetvchannel": return "live-tv";
+  case "audio": return "audio";
+  default: return undefined;
+  }
+}
+
+function parseEmbyMediaSource(
+  source: Record<string, unknown>,
+  index: number,
+  apiBaseUrl: string
+): MediaCenterMediaSource {
+  const id = asString(source.Id) ?? `source-${index}`;
+  const rawPlaybackPath = asString(source.DirectStreamUrl);
+  const playbackPath = rawPlaybackPath === undefined
+    ? undefined
+    : sanitizeServerPathForStorage(apiBaseUrl, rawPlaybackPath);
+  const container = asString(source.Container);
+  const bitrate = asNumber(source.Bitrate);
+  const tracks = asArray(source.MediaStreams).flatMap(parseEmbyTrack);
+  const video = tracks.find((track) => track.type === "video");
+  const audio = tracks.find((track) => track.type === "audio");
+  const rawVideo = asArray(source.MediaStreams)
+    .map(asRecord)
+    .find((track) => asString(track.Type)?.toLowerCase() === "video");
+  const width = rawVideo === undefined ? undefined : asNumber(rawVideo.Width);
+  const height = rawVideo === undefined ? undefined : asNumber(rawVideo.Height);
+  return {
+    id: requireIdentifier(id, "Emby media source identifier"),
+    ...(playbackPath === undefined ? {} : { playbackPath }),
+    ...(container === undefined ? {} : { container }),
+    ...(video?.codec === undefined ? {} : { videoCodec: video.codec }),
+    ...(audio?.codec === undefined ? {} : { audioCodec: audio.codec }),
+    ...(width === undefined ? {} : { width }),
+    ...(height === undefined ? {} : { height }),
+    ...(bitrate === undefined ? {} : { bitrate }),
+    supportsDirectPlay: asBoolean(source.SupportsDirectPlay),
+    supportsDirectStream: asBoolean(source.SupportsDirectStream),
+    supportsTranscode: asBoolean(source.SupportsTranscoding),
+    tracks
+  };
+}
+
+function parseEmbyTrack(value: unknown): MediaCenterTrack[] {
+  const stream = asRecord(value);
+  const index = asNumber(stream.Index);
+  const rawType = asString(stream.Type)?.toLowerCase();
+  if (index === undefined || !rawType || !["video", "audio", "subtitle"].includes(rawType)) return [];
+  const type = rawType as MediaCenterTrack["type"];
+  const codec = asString(stream.Codec);
+  const language = asString(stream.Language);
+  const title = asString(stream.DisplayTitle ?? stream.Title);
+  const channels = asNumber(stream.Channels);
+  return [{
+    index,
+    type,
+    ...(codec === undefined ? {} : { codec }),
+    ...(language === undefined ? {} : { language }),
+    ...(title === undefined ? {} : { title }),
+    isDefault: asBoolean(stream.IsDefault),
+    isForced: asBoolean(stream.IsForced),
+    ...(channels === undefined ? {} : { channels })
+  }];
+}
+
+function safeContainer(value: string | undefined): string {
+  const candidate = value?.split(",")[0]?.trim().toLowerCase();
+  return candidate && /^[a-z0-9]{1,12}$/.test(candidate) ? candidate : "mkv";
+}
+
+function normalizePlaybackReport(report: MediaCenterPlaybackReport): {
+  state: MediaCenterPlaybackReport["state"];
+  positionMs: number;
+  durationMs?: number;
+} {
+  const durationMs = Number.isFinite(report.durationMs) && (report.durationMs ?? 0) > 0
+    ? Math.floor(report.durationMs!)
+    : undefined;
+  const rawPosition = Number.isFinite(report.positionMs) ? Math.floor(report.positionMs) : 0;
+  const positionMs = Math.min(durationMs ?? Number.MAX_SAFE_INTEGER, Math.max(0, rawPosition));
+  return {
+    state: report.state,
+    positionMs,
+    ...(durationMs === undefined ? {} : { durationMs })
+  };
+}
+
+function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+function embyPlayMethod(method: PlaybackMethod): "DirectPlay" | "DirectStream" | "Transcode" {
+  switch (method) {
+  case "direct-play": return "DirectPlay";
+  case "direct-stream": return "DirectStream";
+  case "transcode": return "Transcode";
+  }
+}
+
+function embyEventName(
+  event: MediaCenterPlaybackReport["event"],
+  state: MediaCenterPlaybackReport["state"]
+): "TimeUpdate" | "Pause" | "Unpause" {
+  if (event === "pause" || state === "paused") return "Pause";
+  if (event === "unpause") return "Unpause";
+  return "TimeUpdate";
+}
+
+function requireSuccessfulReport(status: number, provider: string): void {
+  if (status < 200 || status >= 300) {
+    throw new TypeError(`${provider} rejected the playback report with HTTP ${status}.`);
+  }
+}

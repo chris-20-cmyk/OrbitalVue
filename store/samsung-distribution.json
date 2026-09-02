@@ -1,0 +1,14 @@
+{
+  "contractVersion": "1.0",
+  "widgetId": "https://orbitalvue.app/tv",
+  "packageId": "OvTvPlayer",
+  "applicationId": "OvTvPlayer.OrbitalVue",
+  "checkoutApplicationId": null,
+  "verifierUrl": null,
+  "authorCertificateSha256": null,
+  "partnerDistributorCertificateReady": false,
+  "sellerTermsReviewed": false,
+  "dpiProductConfigured": false,
+  "realTvCheckoutTested": false,
+  "ready": false
+}
