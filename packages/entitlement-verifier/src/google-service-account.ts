@@ -96,7 +96,9 @@ export function createGoogleServiceAccountTokenProvider(
 }
 
 function parsePkcs8Pem(value: string): ArrayBuffer {
-  const match = value.trim().match(/^-----BEGIN PRIVATE KEY-----\s+([A-Za-z0-9+/=\s]+)\s+-----END PRIVATE KEY-----$/);
+  // The body class already covers whitespace, so it must not be wrapped in further \s+ quantifiers:
+  // the overlap makes the match ambiguous and lets a malformed key backtrack in polynomial time.
+  const match = value.trim().match(/^-----BEGIN PRIVATE KEY-----([A-Za-z0-9+/=\s]*)-----END PRIVATE KEY-----$/);
   if (!match?.[1]) throw new Error("Google service-account private key must be PKCS#8 PEM.");
   const compact = match[1].replace(/\s+/g, "");
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(compact)) throw new Error("Google service-account private key is invalid.");
