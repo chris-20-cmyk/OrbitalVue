@@ -1,0 +1,68 @@
+# Advanced CodeQL setup.
+#
+# This replaces the repository's default setup, which cannot analyse the Android
+# sources: default setup runs Autobuild for java-kotlin, and Autobuild fails here
+# because it has no provisioned Android SDK. Advanced setup can request
+# `build-mode: none`, which extracts Kotlin and Java from source without building.
+#
+# Default setup must be disabled before this workflow can upload results —
+# GitHub rejects advanced-configuration uploads while default setup is enabled.
+#
+# Swift is not listed yet: the Apple sources live on feature/5.1-apple-foundation
+# and later, so they are not on the default branch. Add
+#   - language: swift
+#     build-mode: manual   # or none, once supported for Swift in the CodeQL version in use
+# to the matrix after the Apple platform work merges to main.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Keeps the weekly cadence the previous default setup used.
+    - cron: "31 4 * * 1"
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: csharp
+            build-mode: none
+          - language: java-kotlin
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
