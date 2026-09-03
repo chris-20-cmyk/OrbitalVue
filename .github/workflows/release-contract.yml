@@ -139,6 +139,7 @@ jobs:
           node tools/verify-premium-verifier-readiness.mjs
           node tools/verify-privacy-readiness.mjs
           node tools/verify-orbitalvue-brand.mjs
+          node tools/verify-xaml-binding-modes.mjs
           node tools/verify-store-listing-readiness.mjs
           node tools/verify-accessibility-readiness.mjs
           node tools/verify-public-site-readiness.mjs

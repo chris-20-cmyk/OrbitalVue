@@ -2,6 +2,23 @@
 
 OrbitalVue 5.8 makes Plex and Emby music libraries playable on every platform, and completes the rename from StreamVue down to the Windows binary, data directory, and update identity.
 
+## Fixed in alpha.2: crash when a playlist loaded
+
+alpha.1 crashed as soon as a playlist produced channels, and kept crashing on every
+launch afterwards because the cached playlist re-rendered the same rows.
+
+The channel row binds a ProgressBar to `WatchProgressPercent`. WPF registers
+`RangeBase.Value` with `BindsTwoWayByDefault`, so `{Binding WatchProgressPercent}`
+became a TwoWay binding onto a getter-only property, and WPF threw
+`XamlParseException` while applying the item template. Because templates are applied
+during list virtualisation, the failure landed in the middle of rendering rather than
+at startup.
+
+The binding is now explicitly `Mode=OneWay`. This was not new in 5.8 -- the same line
+shipped in 5.6 and 5.7. A new check, `tools/verify-xaml-binding-modes.mjs`, now fails
+the build if any binding onto a two-way-by-default property omits an explicit `Mode`,
+or points a `Mode=TwoWay` at a property with no setter.
+
 ## This build does not update in place
 
 The Windows update identity changed from `Chris.StreamVue` to `Chris.OrbitalVue`, so an existing personal installation will **not** offer this as an update.

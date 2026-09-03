@@ -1,4 +1,4 @@
-<Window x:Class="OrbitalVue.Player.MainWindow"
+﻿<Window x:Class="OrbitalVue.Player.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -286,7 +286,7 @@
                                             <TextBlock x:Name="GroupLine" Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" Text="{Binding Group}" TextTrimming="CharacterEllipsis" />
                                             <TextBlock x:Name="LibraryMetadataLine" Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" Text="{Binding LibraryMetadataLine}" TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
                                             <TextBlock x:Name="WatchProgressText" Margin="0,4,0,0" Foreground="#62CFC4" FontSize="9" FontWeight="SemiBold" Text="{Binding WatchProgressLabel}" TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
-                                            <ProgressBar x:Name="WatchProgressBar" Margin="0,5,0,0" Height="3" Minimum="0" Maximum="100" Value="{Binding WatchProgressPercent}" Foreground="{StaticResource AccentBrush}" Background="#223044" BorderThickness="0" Visibility="Collapsed" />
+                                            <ProgressBar x:Name="WatchProgressBar" Margin="0,5,0,0" Height="3" Minimum="0" Maximum="100" Value="{Binding WatchProgressPercent, Mode=OneWay}" Foreground="{StaticResource AccentBrush}" Background="#223044" BorderThickness="0" Visibility="Collapsed" />
                                             <TextBlock x:Name="GuideLineText" Margin="0,4,0,0" Foreground="#62CFC4" FontSize="9" Text="{Binding GuideLine}" TextTrimming="CharacterEllipsis">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
@@ -934,7 +934,7 @@
                                         <Grid>
                                             <Grid.ColumnDefinitions><ColumnDefinition Width="245" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="88" /></Grid.ColumnDefinitions>
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Border Width="38" Height="38" CornerRadius="9" Background="#192433" BorderBrush="#2B3A50" BorderThickness="1"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#B8C5D8" FontSize="10" FontWeight="Bold" Text="{Binding Initials}" /></Border><StackPanel Margin="11,0,8,0" VerticalAlignment="Center"><TextBlock Foreground="{StaticResource TextBrush}" FontSize="11.5" FontWeight="SemiBold" Text="{Binding ChannelName}" TextTrimming="CharacterEllipsis" /><TextBlock Margin="0,3,0,0" Foreground="#718096" FontSize="9" Text="{Binding Group}" TextTrimming="CharacterEllipsis" /></StackPanel></StackPanel>
-                                            <StackPanel Grid.Column="1" Margin="0,0,22,0" VerticalAlignment="Center"><TextBlock Foreground="#E3EBF6" FontSize="11.5" FontWeight="SemiBold" Text="{Binding CurrentTitle}" TextTrimming="CharacterEllipsis" /><TextBlock Margin="0,4,0,5" Foreground="{StaticResource AccentBrush}" FontSize="9" Text="{Binding CurrentTime}" /><ProgressBar Height="3" Maximum="100" Value="{Binding CurrentProgress}" Foreground="{StaticResource AccentBrush}" Background="#263246" /></StackPanel>
+                                            <StackPanel Grid.Column="1" Margin="0,0,22,0" VerticalAlignment="Center"><TextBlock Foreground="#E3EBF6" FontSize="11.5" FontWeight="SemiBold" Text="{Binding CurrentTitle}" TextTrimming="CharacterEllipsis" /><TextBlock Margin="0,4,0,5" Foreground="{StaticResource AccentBrush}" FontSize="9" Text="{Binding CurrentTime}" /><ProgressBar Height="3" Maximum="100" Value="{Binding CurrentProgress, Mode=OneWay}" Foreground="{StaticResource AccentBrush}" Background="#263246" /></StackPanel>
                                             <StackPanel Grid.Column="2" Margin="0,0,22,0" VerticalAlignment="Center"><TextBlock Foreground="#AEBACC" FontSize="11" FontWeight="SemiBold" Text="{Binding NextTitle}" TextTrimming="CharacterEllipsis" /><TextBlock Margin="0,4,0,0" Foreground="#718096" FontSize="9" Text="{Binding NextTime}" /></StackPanel>
                                             <Button Grid.Column="3" HorizontalAlignment="Right" Style="{StaticResource SecondaryButton}" Padding="12,7" Click="GuideWatch_Click" Content="Watch" />
                                         </Grid>
