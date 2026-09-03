@@ -2,6 +2,27 @@
 
 OrbitalVue 5.8 makes Plex and Emby music libraries playable on every platform, and completes the rename from StreamVue down to the Windows binary, data directory, and update identity.
 
+## Fixed in alpha.5: shutdown could hang while a recording was open
+
+`DvrRecordingService.Dispose` held its lock across `MediaPlayer.Stop()`, which blocks
+until VLC's event thread drains. `EndReached` and `EncounteredError` run on that thread
+and took the same lock, so a callback already in flight when the app closed deadlocked
+the two threads and left the process alive with no window until it was killed. Detaching
+the handlers first does not help, because it cannot recall a callback already entered,
+and those two events fire exactly when a live stream drops.
+
+The three VLC event handlers no longer wait on the lock. `_terminalError` is written
+without it, and the cosmetic state label is skipped rather than blocked for.
+
+Note that closing the window while **Background recording** is enabled hides OrbitalVue
+to the tray on purpose, so scheduled recordings and wake timers stay armed. That is not
+the hang above. Use **Exit OrbitalVue** in the tray menu to quit, or turn Background
+recording off in Smart DVR settings.
+
+`SafeErrorMessage` also now names every exception type the app throws. `TimeoutException`
+was still missing after alpha.4, so a Plex sign-in that never received a token -- the one
+failure alpha.4 was meant to make legible -- continued to report the playlist wording.
+
 ## Fixed in alpha.4: Plex sign-in reported the wrong reason
 
 Connecting a discovered Plex server could fail with *The source could not be read.

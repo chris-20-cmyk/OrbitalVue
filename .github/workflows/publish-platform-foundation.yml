@@ -6,7 +6,7 @@ on:
       release_tag:
         description: Prerelease tag to create or update
         required: true
-        default: v5.8.0-alpha.4
+        default: v5.8.0-alpha.5
       release_title:
         description: Public release title
         required: true

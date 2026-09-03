@@ -8159,6 +8159,16 @@ public partial class MainWindow : Window
         // Without this the message became "The source could not be read. Verify the address or
         // file", which sends the user to check a URL when the real answer is "sign in again".
         InvalidOperationException invalidOperation => invalidOperation.Message,
+        // Plex sign-in gives up with TimeoutException when the approval never yields a token.
+        // Without this it fell through to the playlist wording below, which is what alpha.4
+        // still showed for the one failure it was supposed to have made legible.
+        TimeoutException timeout => timeout.Message,
+        System.Security.Cryptography.CryptographicException => "Windows could not decrypt the saved data for this source. Sign in again to replace it.",
+        PlatformNotSupportedException platform => platform.Message,
+        IOException => "The file could not be read. Check that it is not open in another program.",
+        // Every exception type this app throws is now named above. Adding a new one without a
+        // case here sends the user the playlist wording below, whatever actually went wrong --
+        // which is how a Plex sign-in timeout came to read as a bad playlist address.
         _ => "The source could not be read. Verify the address or file and try again."
     };
 
