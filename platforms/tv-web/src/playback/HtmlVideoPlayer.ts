@@ -1,4 +1,4 @@
-import type { CatalogChannel } from "@streamvue/catalog";
+import type { CatalogChannel } from "@orbitalvue/catalog";
 import type { AspectMode, PlaybackSignal, PlaybackTimeline, PlayerAdapter } from "./PlayerAdapter.js";
 
 export class HtmlVideoPlayer implements PlayerAdapter {

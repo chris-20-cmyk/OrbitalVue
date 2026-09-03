@@ -2,15 +2,15 @@ import { describe, expect, it } from "vitest";
 import { SELF } from "cloudflare:test";
 import { handleEntitlementVerifierWorkerRequest } from "../src/index.js";
 
-const TEST_HOST = "entitlements.streamvue.test";
+const TEST_HOST = "entitlements.orbitalvue.test";
 
-describe("StreamVue entitlement verifier Worker boundary", () => {
+describe("OrbitalVue entitlement verifier Worker boundary", () => {
   it("runs the deployed entry point inside the Workers runtime", async () => {
     const response = await SELF.fetch(`https://${TEST_HOST}/healthz`);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      service: "streamvue-entitlement-verifier",
+      service: "orbitalvue-entitlement-verifier",
       status: "available"
     });
   });
@@ -24,7 +24,7 @@ describe("StreamVue entitlement verifier Worker boundary", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       schemaVersion: 1,
-      service: "streamvue-entitlement-verifier",
+      service: "orbitalvue-entitlement-verifier",
       status: "available"
     });
     expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
@@ -35,7 +35,7 @@ describe("StreamVue entitlement verifier Worker boundary", () => {
 
   it("rejects requests for a different deployment host", async () => {
     const response = await handleEntitlementVerifierWorkerRequest(
-      new Request("https://wrong-host.streamvue.test/healthz"),
+      new Request("https://wrong-host.orbitalvue.test/healthz"),
       workerEnv()
     );
 
@@ -44,7 +44,7 @@ describe("StreamVue entitlement verifier Worker boundary", () => {
   });
 
   it("reflects only an exact configured browser origin", async () => {
-    const allowed = "https://operations.streamvue.test";
+    const allowed = "https://operations.orbitalvue.test";
     const accepted = await handleEntitlementVerifierWorkerRequest(
       new Request(`https://${TEST_HOST}/healthz`, { headers: { Origin: allowed } }),
       workerEnv({ ALLOWED_BROWSER_ORIGINS: JSON.stringify([allowed]) })
@@ -54,10 +54,10 @@ describe("StreamVue entitlement verifier Worker boundary", () => {
       workerEnv({ ALLOWED_BROWSER_ORIGINS: JSON.stringify([allowed]) })
     );
     const insecureProductionOrigin = await handleEntitlementVerifierWorkerRequest(
-      new Request(`https://${TEST_HOST}/healthz`, { headers: { Origin: "http://operations.streamvue.test" } }),
+      new Request(`https://${TEST_HOST}/healthz`, { headers: { Origin: "http://operations.orbitalvue.test" } }),
       workerEnv({
         DEPLOYMENT_ENVIRONMENT: "production",
-        ALLOWED_BROWSER_ORIGINS: JSON.stringify(["http://operations.streamvue.test"])
+        ALLOWED_BROWSER_ORIGINS: JSON.stringify(["http://operations.orbitalvue.test"])
       })
     );
 
@@ -70,7 +70,7 @@ describe("StreamVue entitlement verifier Worker boundary", () => {
   });
 
   it("answers only an allowed browser preflight", async () => {
-    const allowed = "https://operations.streamvue.test";
+    const allowed = "https://operations.orbitalvue.test";
     const response = await handleEntitlementVerifierWorkerRequest(
       new Request(`https://${TEST_HOST}/samsung/status`, {
         method: "OPTIONS",
@@ -101,7 +101,7 @@ describe("StreamVue entitlement verifier Worker boundary", () => {
     expect(keys).toHaveLength(1);
     expect(keys[0]).toMatch(/^samsung:[0-9a-f]{64}$/);
     expect(keys[0]).not.toContain("account-user-123");
-    expect(keys[0]).not.toContain("streamvue_premium");
+    expect(keys[0]).not.toContain("orbitalvue_premium");
   });
 
   it("stops provider-wide bursts before parsing or purchaser verification", async () => {
@@ -194,10 +194,10 @@ function workerEnv(overrides: Partial<Env> = {}): Env {
     EXPECTED_HOSTNAME: TEST_HOST,
     ALLOWED_BROWSER_ORIGINS: "[]",
     GOOGLE_PLAY_PACKAGE_NAME: "com.orbitalvue.player",
-    GOOGLE_PLAY_PRODUCT_ID: "streamvue_premium_once",
+    GOOGLE_PLAY_PRODUCT_ID: "orbitalvue_premium_once",
     GOOGLE_PLAY_ALLOW_TEST_PURCHASES: "false",
-    SAMSUNG_CHECKOUT_APP_ID: "StreamVueCheckout",
-    SAMSUNG_PREMIUM_PRODUCT_ID: "streamvue_premium",
+    SAMSUNG_CHECKOUT_APP_ID: "OrbitalVueCheckout",
+    SAMSUNG_PREMIUM_PRODUCT_ID: "orbitalvue_premium",
     GOOGLE_SERVICE_ACCOUNT_EMAIL: "service-account@example.invalid",
     GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: "LOCAL_TEST_KEY_ONLY",
     SAMSUNG_DPI_SECURITY_KEY: "LOCAL_TEST_KEY_ONLY",
@@ -220,8 +220,8 @@ function samsungRequest(customId: string): Request {
     schemaVersion: 1,
     platform: "samsung",
     action: "status",
-    appId: "StreamVueCheckout",
-    productId: "streamvue_premium",
+    appId: "OrbitalVueCheckout",
+    productId: "orbitalvue_premium",
     customId,
     countryCode: "US"
   });
@@ -232,7 +232,7 @@ function googleRequest(): Request {
     schemaVersion: 1,
     platform: "google-play",
     packageName: "com.orbitalvue.player",
-    productId: "streamvue_premium_once",
+    productId: "orbitalvue_premium_once",
     purchaseToken: "transient-purchase-token"
   });
 }

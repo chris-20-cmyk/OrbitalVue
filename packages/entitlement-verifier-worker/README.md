@@ -1,6 +1,6 @@
-# StreamVue entitlement verifier Worker
+# OrbitalVue entitlement verifier Worker
 
-This package is the reviewed HTTPS hosting adapter for `@streamvue/entitlement-verifier`. It is intentionally safe to build but impossible to mistake for a production deployment:
+This package is the reviewed HTTPS hosting adapter for `@orbitalvue/entitlement-verifier`. It is intentionally safe to build but impossible to mistake for a production deployment:
 
 - `workers.dev` and preview URLs are disabled.
 - No route or custom domain is committed.
@@ -28,7 +28,7 @@ To run `wrangler dev`, copy `.dev.vars.example` to `.dev.vars` and replace every
 
 ## Deliberate staging setup
 
-Do not deploy until the StreamVue owner has created the exact Play Console and Samsung Seller Office/DPI records.
+Do not deploy until the OrbitalVue owner has created the exact Play Console and Samsung Seller Office/DPI records.
 
 1. Replace the staging `.invalid` hostname, Google product ID, Samsung Checkout application ID, and Samsung product ID in `wrangler.jsonc`. Keep Google test purchases disabled unless the staging environment is isolated for licensed test buyers.
 2. Choose both rate-limit `namespace_id` values so they are unique within the Cloudflare account. The 30/minute purchaser binding and 600/minute provider-wide binding are layered abuse controls and are deliberately not used as purchase accounting.

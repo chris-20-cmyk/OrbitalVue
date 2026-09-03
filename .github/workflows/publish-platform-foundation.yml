@@ -54,8 +54,8 @@ jobs:
 
       - name: Build the fail-closed Google Play bundle
         run: |
-          bash platforms/android/gradlew -p platforms/android bundleRelease -PstreamVueDistributionMode=store --stacktrace
-          grep -F 'DISTRIBUTION_MODE = "store"' platforms/android/app/build/generated/source/buildConfig/release/com/streamvue/player/BuildConfig.java
+          bash platforms/android/gradlew -p platforms/android bundleRelease -PorbitalVueDistributionMode=store --stacktrace
+          grep -F 'DISTRIBUTION_MODE = "store"' platforms/android/app/build/generated/source/buildConfig/release/com/orbitalvue/player/BuildConfig.java
           verification="$(jarsigner -verify platforms/android/app/build/outputs/bundle/release/app-release.aab 2>&1)"
           if grep -Fq 'jar verified.' <<< "$verification"; then
             echo 'Foundation Store bundle unexpectedly contains a release signature.' >&2
@@ -95,7 +95,7 @@ jobs:
           pnpm tv:check
           pnpm tv:test
           pnpm tv:build
-          VITE_STREAMVUE_DISTRIBUTION_MODE=store pnpm tv:build
+          VITE_ORBITALVUE_DISTRIBUTION_MODE=store pnpm tv:build
 
       - name: Assemble public foundation assets
         shell: bash

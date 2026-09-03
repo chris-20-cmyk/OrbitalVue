@@ -1,0 +1,256 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://orbitalvue.app/contracts/catalog/v1/schema.json",
+  "title": "OrbitalVue Portable Catalog",
+  "description": "The platform-neutral playlist catalog exchanged by OrbitalVue clients and conformance tests.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "catalogId",
+    "displayName",
+    "loadedAt",
+    "sources",
+    "guideSources",
+    "channels"
+  ],
+  "properties": {
+    "contractVersion": {
+      "const": "1.0"
+    },
+    "catalogId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "loadedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "guideSources": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      },
+      "uniqueItems": true
+    },
+    "channels": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/channel"
+      }
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "type", "displayLocation", "refreshOnLaunch"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "type": {
+          "enum": ["m3u-file", "m3u-url", "xtream", "plex", "emby", "generated"]
+        },
+        "displayLocation": {
+          "description": "A safe display label. It must not contain credentials or tokens.",
+          "type": "string",
+          "maxLength": 512
+        },
+        "refreshOnLaunch": {
+          "type": "boolean"
+        }
+      }
+    },
+    "channel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "number", "name", "group", "kind", "sourceId", "stream"],
+      "properties": {
+        "id": {
+          "description": "Uppercase SHA-256 stable identity, compatible with the Windows catalog.",
+          "type": "string",
+          "pattern": "^[A-F0-9]{64}$"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "group": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "kind": {
+          "enum": ["live", "movie", "series", "recording", "replay", "music"]
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "stream": {
+          "$ref": "#/$defs/stream"
+        },
+        "guide": {
+          "$ref": "#/$defs/guide"
+        },
+        "catchup": {
+          "$ref": "#/$defs/catchup"
+        },
+        "media": {
+          "$ref": "#/$defs/media"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "media": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "libraryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "libraryTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "seriesTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "seasonNumber": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "episodeNumber": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "year": {
+          "type": "integer",
+          "minimum": 1888,
+          "maximum": 3000
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "resumePositionMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "played": {
+          "type": "boolean"
+        },
+        "addedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastPlayedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "stream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uri", "requestHeaders"],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "format": "uri"
+        },
+        "requestHeaders": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "guide": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tvgId": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "tvgName": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "logoUri": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "catchup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "source", "days", "correctionMinutes"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "days": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 365
+        },
+        "correctionMinutes": {
+          "type": "integer",
+          "minimum": -1440,
+          "maximum": 1440
+        }
+      }
+    }
+  }
+}

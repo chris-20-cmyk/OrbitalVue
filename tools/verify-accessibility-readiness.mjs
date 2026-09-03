@@ -101,8 +101,8 @@ for (const platform of expectedPlatforms) {
   if (entry.ready) readyPlatforms.push(platform);
 }
 
-const windowsApp = await source("src/StreamVue.Player/App.xaml");
-const windowsMain = await source("src/StreamVue.Player/MainWindow.xaml");
+const windowsApp = await source("src/OrbitalVue.Player/App.xaml");
+const windowsMain = await source("src/OrbitalVue.Player/MainWindow.xaml");
 includesAll(windowsApp, [
   'Property="AutomationProperties.Name"',
   'Property="IsKeyboardFocused" Value="True"',
@@ -119,7 +119,7 @@ if (windowsMain.includes('FocusVisualStyle="{x:Null}"') || windowsMain.includes(
   fail("Windows UI must not suppress keyboard focus visuals");
 }
 
-const android = await source("platforms/android/app/src/main/java/com/streamvue/player/ui/StreamVueApp.kt");
+const android = await source("platforms/android/app/src/main/java/com/orbitalvue/player/ui/OrbitalVueApp.kt");
 includesAll(android, [
   "LiveRegionMode.Polite",
   ".semantics { heading() }",
@@ -127,9 +127,9 @@ includesAll(android, [
   'stateDescription = "Current ratio ${mode.label}"'
 ], "Android Compose UI");
 
-const appleShared = await source("platforms/apple/Sources/StreamVueUI/Views/SharedComponents.swift");
-const applePlayer = await source("platforms/apple/Sources/StreamVueUI/Views/PlayerPanel.swift");
-const appleTv = await source("platforms/apple/Sources/StreamVueUI/Views/AppleTVRootView.swift");
+const appleShared = await source("platforms/apple/Sources/OrbitalVueUI/Views/SharedComponents.swift");
+const applePlayer = await source("platforms/apple/Sources/OrbitalVueUI/Views/PlayerPanel.swift");
+const appleTv = await source("platforms/apple/Sources/OrbitalVueUI/Views/AppleTVRootView.swift");
 includesAll(appleShared, [
   ".accessibilityLabel(channel.name)",
   "accessibilityAddTraits(isSelected ? .isSelected : [])",
@@ -146,7 +146,7 @@ includesAll(appleTv, [
   ".accessibilityHint(\"Starts playback\")"
 ], "Apple TV UI");
 
-const televisionUi = await source("platforms/tv-web/src/ui/StreamVueTvApp.ts");
+const televisionUi = await source("platforms/tv-web/src/ui/OrbitalVueTvApp.ts");
 const televisionNav = await source("platforms/tv-web/src/navigation/SpatialNavigator.ts");
 const televisionCss = await source("platforms/tv-web/src/styles.css");
 includesAll(televisionUi, [

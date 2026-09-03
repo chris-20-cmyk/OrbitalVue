@@ -21,9 +21,9 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
     env:
-      APPLE_BUNDLE_ID: ${{ vars.STREAMVUE_APPLE_BUNDLE_ID }}
-      APPLE_TEAM_ID: ${{ vars.STREAMVUE_APPLE_TEAM_ID }}
-      APPLE_PREMIUM_PRODUCT_ID: ${{ vars.STREAMVUE_APPLE_PREMIUM_PRODUCT_ID }}
+      APPLE_BUNDLE_ID: ${{ vars.ORBITALVUE_APPLE_BUNDLE_ID }}
+      APPLE_TEAM_ID: ${{ vars.ORBITALVUE_APPLE_TEAM_ID }}
+      APPLE_PREMIUM_PRODUCT_ID: ${{ vars.ORBITALVUE_APPLE_PREMIUM_PRODUCT_ID }}
       APPLE_MARKETING_VERSION: ${{ inputs.marketing_version }}
       APPLE_BUILD_NUMBER: ${{ inputs.build_number }}
     steps:
@@ -43,7 +43,7 @@ jobs:
             exit 1
           fi
           if [[ ! "$APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]]; then
-            echo 'STREAMVUE_APPLE_TEAM_ID must be the exact 10-character Apple Team ID.' >&2
+            echo 'ORBITALVUE_APPLE_TEAM_ID must be the exact 10-character Apple Team ID.' >&2
             exit 1
           fi
           if [[ ! "$APPLE_MARKETING_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ || ${#APPLE_MARKETING_VERSION} -gt 18 ]]; then
@@ -103,10 +103,10 @@ jobs:
           plutil -lint Resources/PrivacyInfo.xcprivacy
           xcodebuild \
             -resolvePackageDependencies \
-            -project StreamVueApple.xcodeproj \
-            -scheme StreamVue \
+            -project OrbitalVueApple.xcodeproj \
+            -scheme OrbitalVue \
             -clonedSourcePackagesDirPath ../../artifacts/apple-source-packages
-          resolved='StreamVueApple.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved'
+          resolved='OrbitalVueApple.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved'
           test -f "$resolved"
           PACKAGE_RESOLVED_PATH="$resolved" node - <<'NODE'
           const fs = require('node:fs');
@@ -124,10 +124,10 @@ jobs:
       - name: Import protected distribution signing material
         shell: bash
         env:
-          APPLE_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.STREAMVUE_APPLE_DISTRIBUTION_CERTIFICATE_BASE64 }}
-          APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.STREAMVUE_APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}
-          APPLE_IOS_PROFILE_BASE64: ${{ secrets.STREAMVUE_APPLE_IOS_APP_STORE_PROFILE_BASE64 }}
-          APPLE_TVOS_PROFILE_BASE64: ${{ secrets.STREAMVUE_APPLE_TVOS_APP_STORE_PROFILE_BASE64 }}
+          APPLE_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.ORBITALVUE_APPLE_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.ORBITALVUE_APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          APPLE_IOS_PROFILE_BASE64: ${{ secrets.ORBITALVUE_APPLE_IOS_APP_STORE_PROFILE_BASE64 }}
+          APPLE_TVOS_PROFILE_BASE64: ${{ secrets.ORBITALVUE_APPLE_TVOS_APP_STORE_PROFILE_BASE64 }}
         run: |
           required=(
             APPLE_DISTRIBUTION_CERTIFICATE_BASE64
@@ -145,15 +145,15 @@ jobs:
           fi
 
           umask 077
-          certificate="$RUNNER_TEMP/streamvue-apple-distribution.p12"
-          ios_profile="$RUNNER_TEMP/streamvue-ios.mobileprovision"
-          tvos_profile="$RUNNER_TEMP/streamvue-tvos.mobileprovision"
+          certificate="$RUNNER_TEMP/orbitalvue-apple-distribution.p12"
+          ios_profile="$RUNNER_TEMP/orbitalvue-ios.mobileprovision"
+          tvos_profile="$RUNNER_TEMP/orbitalvue-tvos.mobileprovision"
           printf '%s' "$APPLE_DISTRIBUTION_CERTIFICATE_BASE64" | base64 -D > "$certificate"
           printf '%s' "$APPLE_IOS_PROFILE_BASE64" | base64 -D > "$ios_profile"
           printf '%s' "$APPLE_TVOS_PROFILE_BASE64" | base64 -D > "$tvos_profile"
           test -s "$certificate" && test -s "$ios_profile" && test -s "$tvos_profile"
 
-          keychain="$RUNNER_TEMP/streamvue-signing.keychain-db"
+          keychain="$RUNNER_TEMP/orbitalvue-signing.keychain-db"
           keychain_password="$(openssl rand -hex 32)"
           security create-keychain -p "$keychain_password" "$keychain"
           security set-keychain-settings -lut 21600 "$keychain"
@@ -179,7 +179,7 @@ jobs:
           for platform in ios tvos; do
             profile_var="${platform}_profile"
             profile="${!profile_var}"
-            decoded="$RUNNER_TEMP/streamvue-${platform}-profile.plist"
+            decoded="$RUNNER_TEMP/orbitalvue-${platform}-profile.plist"
             security cms -D -i "$profile" > "$decoded"
             uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$decoded")"
             name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$decoded")"
@@ -201,7 +201,7 @@ jobs:
             fi
             destination="$profiles_dir/$uuid.mobileprovision"
             cp "$profile" "$destination"
-            printf '%s\n' "$destination" >> "$RUNNER_TEMP/streamvue-installed-profiles.txt"
+            printf '%s\n' "$destination" >> "$RUNNER_TEMP/orbitalvue-installed-profiles.txt"
             upper_platform="$(tr '[:lower:]' '[:upper:]' <<< "$platform")"
             echo "APPLE_${upper_platform}_PROFILE_NAME=$name" >> "$GITHUB_ENV"
             echo "APPLE_${upper_platform}_PROFILE_PATH=$destination" >> "$GITHUB_ENV"
@@ -213,18 +213,18 @@ jobs:
         run: |
           mkdir -p artifacts/apple-store/archives
           xcodebuild \
-            -project platforms/apple/StreamVueApple.xcodeproj \
-            -scheme StreamVue \
+            -project platforms/apple/OrbitalVueApple.xcodeproj \
+            -scheme OrbitalVue \
             -configuration Store \
             -destination 'generic/platform=iOS' \
-            -archivePath artifacts/apple-store/archives/StreamVue-iOS.xcarchive \
+            -archivePath artifacts/apple-store/archives/OrbitalVue-iOS.xcarchive \
             -clonedSourcePackagesDirPath artifacts/apple-source-packages \
             -disableAutomaticPackageResolution \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             PRODUCT_BUNDLE_IDENTIFIER="$APPLE_BUNDLE_ID" \
             MARKETING_VERSION="$APPLE_MARKETING_VERSION" \
             CURRENT_PROJECT_VERSION="$APPLE_BUILD_NUMBER" \
-            STREAMVUE_PREMIUM_PRODUCT_ID="$APPLE_PREMIUM_PRODUCT_ID" \
+            ORBITALVUE_PREMIUM_PRODUCT_ID="$APPLE_PREMIUM_PRODUCT_ID" \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY='Apple Distribution' \
             PROVISIONING_PROFILE_SPECIFIER="$APPLE_IOS_PROFILE_NAME" \
@@ -235,18 +235,18 @@ jobs:
         shell: bash
         run: |
           xcodebuild \
-            -project platforms/apple/StreamVueApple.xcodeproj \
-            -scheme StreamVueTV \
+            -project platforms/apple/OrbitalVueApple.xcodeproj \
+            -scheme OrbitalVueTV \
             -configuration Store \
             -destination 'generic/platform=tvOS' \
-            -archivePath artifacts/apple-store/archives/StreamVue-tvOS.xcarchive \
+            -archivePath artifacts/apple-store/archives/OrbitalVue-tvOS.xcarchive \
             -clonedSourcePackagesDirPath artifacts/apple-source-packages \
             -disableAutomaticPackageResolution \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             PRODUCT_BUNDLE_IDENTIFIER="$APPLE_BUNDLE_ID" \
             MARKETING_VERSION="$APPLE_MARKETING_VERSION" \
             CURRENT_PROJECT_VERSION="$APPLE_BUILD_NUMBER" \
-            STREAMVUE_PREMIUM_PRODUCT_ID="$APPLE_PREMIUM_PRODUCT_ID" \
+            ORBITALVUE_PREMIUM_PRODUCT_ID="$APPLE_PREMIUM_PRODUCT_ID" \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY='Apple Distribution' \
             PROVISIONING_PROFILE_SPECIFIER="$APPLE_TVOS_PROFILE_NAME" \
@@ -256,8 +256,8 @@ jobs:
       - name: Verify signed Store archives
         shell: bash
         run: |
-          ios_app='artifacts/apple-store/archives/StreamVue-iOS.xcarchive/Products/Applications/OrbitalVue.app'
-          tvos_app='artifacts/apple-store/archives/StreamVue-tvOS.xcarchive/Products/Applications/OrbitalVueTV.app'
+          ios_app='artifacts/apple-store/archives/OrbitalVue-iOS.xcarchive/Products/Applications/OrbitalVue.app'
+          tvos_app='artifacts/apple-store/archives/OrbitalVue-tvOS.xcarchive/Products/Applications/OrbitalVueTV.app'
           test -f "$tvos_app/Assets.car"
           for app in "$ios_app" "$tvos_app"; do
             test -d "$app"
@@ -265,8 +265,8 @@ jobs:
             test "$(plutil -extract CFBundleIdentifier raw -o - "$info")" = "$APPLE_BUNDLE_ID"
             test "$(plutil -extract CFBundleShortVersionString raw -o - "$info")" = "$APPLE_MARKETING_VERSION"
             test "$(plutil -extract CFBundleVersion raw -o - "$info")" = "$APPLE_BUILD_NUMBER"
-            test "$(plutil -extract StreamVueDistributionMode raw -o - "$info")" = "store"
-            test "$(plutil -extract StreamVuePremiumProductID raw -o - "$info")" = "$APPLE_PREMIUM_PRODUCT_ID"
+            test "$(plutil -extract OrbitalVueDistributionMode raw -o - "$info")" = "store"
+            test "$(plutil -extract OrbitalVuePremiumProductID raw -o - "$info")" = "$APPLE_PREMIUM_PRODUCT_ID"
             test -f "$app/PrivacyInfo.xcprivacy"
             codesign --verify --deep --strict --verbose=2 "$app"
             codesign -dv --verbose=4 "$app" 2>&1 | grep -F "TeamIdentifier=$APPLE_TEAM_ID"
@@ -276,8 +276,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts/apple-store/ios artifacts/apple-store/tvos
-          ios_options="$RUNNER_TEMP/streamvue-ios-export-options.plist"
-          tvos_options="$RUNNER_TEMP/streamvue-tvos-export-options.plist"
+          ios_options="$RUNNER_TEMP/orbitalvue-ios-export-options.plist"
+          tvos_options="$RUNNER_TEMP/orbitalvue-tvos-export-options.plist"
           for platform in ios tvos; do
             upper_platform="$(printf '%s' "$platform" | tr '[:lower:]' '[:upper:]')"
             profile_name_var="APPLE_${upper_platform}_PROFILE_NAME"
@@ -318,12 +318,12 @@ jobs:
           done
           xcodebuild \
             -exportArchive \
-            -archivePath artifacts/apple-store/archives/StreamVue-iOS.xcarchive \
+            -archivePath artifacts/apple-store/archives/OrbitalVue-iOS.xcarchive \
             -exportPath artifacts/apple-store/ios \
             -exportOptionsPlist "$ios_options"
           xcodebuild \
             -exportArchive \
-            -archivePath artifacts/apple-store/archives/StreamVue-tvOS.xcarchive \
+            -archivePath artifacts/apple-store/archives/OrbitalVue-tvOS.xcarchive \
             -exportPath artifacts/apple-store/tvos \
             -exportOptionsPlist "$tvos_options"
 
@@ -335,10 +335,10 @@ jobs:
           tvos_ipas=(artifacts/apple-store/tvos/*.ipa)
           test "${#ios_ipas[@]}" = "1" && test -s "${ios_ipas[0]}"
           test "${#tvos_ipas[@]}" = "1" && test -s "${tvos_ipas[0]}"
-          test -d artifacts/apple-store/archives/StreamVue-iOS.xcarchive/dSYMs
-          test -d artifacts/apple-store/archives/StreamVue-tvOS.xcarchive/dSYMs
+          test -d artifacts/apple-store/archives/OrbitalVue-iOS.xcarchive/dSYMs
+          test -d artifacts/apple-store/archives/OrbitalVue-tvOS.xcarchive/dSYMs
           for ipa in "${ios_ipas[0]}" "${tvos_ipas[0]}"; do
-            inspection="$(mktemp -d "$RUNNER_TEMP/streamvue-ipa.XXXXXX")"
+            inspection="$(mktemp -d "$RUNNER_TEMP/orbitalvue-ipa.XXXXXX")"
             ditto -x -k "$ipa" "$inspection"
             apps=("$inspection/Payload/"*.app)
             test "${#apps[@]}" = "1"
@@ -346,8 +346,8 @@ jobs:
             test "$(plutil -extract CFBundleIdentifier raw -o - "$info")" = "$APPLE_BUNDLE_ID"
             test "$(plutil -extract CFBundleShortVersionString raw -o - "$info")" = "$APPLE_MARKETING_VERSION"
             test "$(plutil -extract CFBundleVersion raw -o - "$info")" = "$APPLE_BUILD_NUMBER"
-            test "$(plutil -extract StreamVueDistributionMode raw -o - "$info")" = "store"
-            test "$(plutil -extract StreamVuePremiumProductID raw -o - "$info")" = "$APPLE_PREMIUM_PRODUCT_ID"
+            test "$(plutil -extract OrbitalVueDistributionMode raw -o - "$info")" = "store"
+            test "$(plutil -extract OrbitalVuePremiumProductID raw -o - "$info")" = "$APPLE_PREMIUM_PRODUCT_ID"
             codesign --verify --deep --strict --verbose=2 "${apps[0]}"
             codesign -dv --verbose=4 "${apps[0]}" 2>&1 | grep -F "TeamIdentifier=$APPLE_TEAM_ID"
             rm -rf -- "$inspection"
@@ -357,10 +357,10 @@ jobs:
           test -f "$APPLE_PACKAGE_RESOLVED"
           cp "$APPLE_PACKAGE_RESOLVED" artifacts/apple-store/APPLE-PACKAGE-RESOLVED.json
           ditto -c -k --sequesterRsrc --keepParent \
-            artifacts/apple-store/archives/StreamVue-iOS.xcarchive/dSYMs \
+            artifacts/apple-store/archives/OrbitalVue-iOS.xcarchive/dSYMs \
             "artifacts/apple-store/OrbitalVue-$APPLE_MARKETING_VERSION-$APPLE_BUILD_NUMBER-iOS-dSYMs.zip"
           ditto -c -k --sequesterRsrc --keepParent \
-            artifacts/apple-store/archives/StreamVue-tvOS.xcarchive/dSYMs \
+            artifacts/apple-store/archives/OrbitalVue-tvOS.xcarchive/dSYMs \
             "artifacts/apple-store/OrbitalVue-$APPLE_MARKETING_VERSION-$APPLE_BUILD_NUMBER-tvOS-dSYMs.zip"
           node - <<'NODE'
           const fs = require('node:fs');
@@ -391,7 +391,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          profile_ledger="$RUNNER_TEMP/streamvue-installed-profiles.txt"
+          profile_ledger="$RUNNER_TEMP/orbitalvue-installed-profiles.txt"
           if [[ -f "$profile_ledger" ]]; then
             while IFS= read -r profile_path; do
               if [[ "$profile_path" == "$HOME/Library/MobileDevice/Provisioning Profiles/"* ]]; then
@@ -408,19 +408,19 @@ jobs:
           if [[ -n "${APPLE_SIGNING_KEYCHAIN:-}" && "$APPLE_SIGNING_KEYCHAIN" == "$RUNNER_TEMP/"* ]]; then
             security delete-keychain "$APPLE_SIGNING_KEYCHAIN" || true
           fi
-          security delete-keychain "$RUNNER_TEMP/streamvue-signing.keychain-db" 2>/dev/null || true
+          security delete-keychain "$RUNNER_TEMP/orbitalvue-signing.keychain-db" 2>/dev/null || true
           rm -f -- \
-            "$RUNNER_TEMP/streamvue-apple-distribution.p12" \
-            "$RUNNER_TEMP/streamvue-ios.mobileprovision" \
-            "$RUNNER_TEMP/streamvue-tvos.mobileprovision" \
-            "$RUNNER_TEMP/streamvue-ios-profile.plist" \
-            "$RUNNER_TEMP/streamvue-tvos-profile.plist" \
+            "$RUNNER_TEMP/orbitalvue-apple-distribution.p12" \
+            "$RUNNER_TEMP/orbitalvue-ios.mobileprovision" \
+            "$RUNNER_TEMP/orbitalvue-tvos.mobileprovision" \
+            "$RUNNER_TEMP/orbitalvue-ios-profile.plist" \
+            "$RUNNER_TEMP/orbitalvue-tvos-profile.plist" \
             "$profile_ledger"
 
       - name: Upload manual App Store Connect candidates
         uses: actions/upload-artifact@v7
         with:
-          name: streamvue-apple-${{ inputs.marketing_version }}-${{ inputs.build_number }}
+          name: orbitalvue-apple-${{ inputs.marketing_version }}-${{ inputs.build_number }}
           if-no-files-found: error
           retention-days: 30
           path: |

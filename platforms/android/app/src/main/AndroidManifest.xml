@@ -13,7 +13,7 @@
 
     <application
         android:allowBackup="false"
-        android:banner="@drawable/streamvue_tv_banner"
+        android:banner="@drawable/orbitalvue_tv_banner"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
@@ -21,12 +21,12 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.StreamVue"
+        android:theme="@style/Theme.OrbitalVue"
         android:usesCleartextTraffic="true">
 
         <activity
             android:name=".MainActivity"
-            android:banner="@drawable/streamvue_tv_banner"
+            android:banner="@drawable/orbitalvue_tv_banner"
             android:configChanges="keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
             android:exported="true">
             <intent-filter>

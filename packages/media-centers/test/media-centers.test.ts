@@ -110,7 +110,7 @@ describe("media-center URL boundaries", () => {
       serverId: "plex-server-1",
       itemId: "item:100"
     });
-    expect(canonical).toBe("streamvue-media://plex/plex-server-1/item%3A100");
+    expect(canonical).toBe("orbitalvue-media://plex/plex-server-1/item%3A100");
     expect(parseMediaCenterPlaybackUri(canonical)).toEqual({
       provider: "plex",
       serverId: "plex-server-1",
@@ -118,12 +118,12 @@ describe("media-center URL boundaries", () => {
     });
 
     for (const unsafe of [
-      "streamvue-media://user:password@plex/plex-server-1/item-1",
-      "streamvue-media://plex:123/plex-server-1/item-1",
-      "streamvue-media://plex/plex-server-1/item-1?X-Plex-Token=secret",
-      "streamvue-media://plex/plex-server-1/item-1#access-token",
-      "streamvue-media://plex/plex-server-1/item-1/",
-      " streamvue-media://plex/plex-server-1/item-1 "
+      "orbitalvue-media://user:password@plex/plex-server-1/item-1",
+      "orbitalvue-media://plex:123/plex-server-1/item-1",
+      "orbitalvue-media://plex/plex-server-1/item-1?X-Plex-Token=secret",
+      "orbitalvue-media://plex/plex-server-1/item-1#access-token",
+      "orbitalvue-media://plex/plex-server-1/item-1/",
+      " orbitalvue-media://plex/plex-server-1/item-1 "
     ]) {
       expect(() => parseMediaCenterPlaybackUri(unsafe)).toThrow();
     }
@@ -177,7 +177,7 @@ describe("Plex integration", () => {
       connection,
       token,
       credentialBinding: createMediaCenterCredentialBinding(connection),
-      clientIdentifier: "streamvue-identity-test"
+      clientIdentifier: "orbitalvue-identity-test"
     });
 
     await expect(client.getLibraries()).rejects.toThrow(/identity does not match/i);
@@ -192,7 +192,7 @@ describe("Plex integration", () => {
           kty: "OKP",
           crv: "Ed25519",
           x: "MDEyMzQ1Njc4OUFCQ0RFRkdISUpLTE1OT1BRUlNUVVY",
-          kid: "streamvue-device-key",
+          kid: "orbitalvue-device-key",
           alg: "EdDSA"
         },
         strong: true
@@ -200,13 +200,13 @@ describe("Plex integration", () => {
       return { id: 1, code: "SAFE" };
     });
     const client = new PlexAccountClient(mock.transport, {
-      clientIdentifier: "streamvue-test-device"
+      clientIdentifier: "orbitalvue-test-device"
     });
     const publicKeyWithExtraField = {
       kty: "OKP",
       crv: "Ed25519",
       x: "MDEyMzQ1Njc4OUFCQ0RFRkdISUpLTE1OT1BRUlNUVVY",
-      kid: " streamvue-device-key ",
+      kid: " orbitalvue-device-key ",
       alg: "EdDSA",
       unexpected: "must-not-be-serialized"
     } as PlexDeviceSigner["publicKey"];
@@ -235,7 +235,7 @@ describe("Plex integration", () => {
         kty: "OKP",
         crv: "Ed25519",
         x: "MDEyMzQ1Njc4OUFCQ0RFRkdISUpLTE1OT1BRUlNUVVY",
-        kid: "streamvue-device-key",
+        kid: "orbitalvue-device-key",
         alg: "EdDSA"
       },
       sign: async (payload) => {
@@ -312,7 +312,7 @@ describe("Plex integration", () => {
     });
     const now = new Date("2026-08-26T12:00:00.000Z");
     const client = new PlexAccountClient(mock.transport, {
-      clientIdentifier: "streamvue-test-device",
+      clientIdentifier: "orbitalvue-test-device",
       product: "OrbitalVue\r\nX-Injected: blocked",
       version: "5.1-test",
       now: () => now
@@ -325,11 +325,11 @@ describe("Plex integration", () => {
     const servers = await client.getServers(accountToken);
 
     expect(pin).toMatchObject({ id: 42, code: "ABCD" });
-    expect(pin.authorizationUrl).toContain("clientID=streamvue-test-device");
+    expect(pin.authorizationUrl).toContain("clientID=orbitalvue-test-device");
     expect(pin.authorizationUrl).toContain("code=ABCD");
     expect(claimed?.token).toBe(accountToken);
     expect(refreshed.token).toBe(accountToken);
-    expect(signedPayloads[0]).toMatchObject({ aud: "plex.tv", iss: "streamvue-test-device" });
+    expect(signedPayloads[0]).toMatchObject({ aud: "plex.tv", iss: "orbitalvue-test-device" });
     expect(signedPayloads[1]).toMatchObject({ nonce: "refresh-nonce" });
     expect(servers).toHaveLength(1);
     expect(servers[0]).toMatchObject({
@@ -420,7 +420,7 @@ describe("Plex integration", () => {
       connection,
       token: plexToken,
       credentialBinding: createMediaCenterCredentialBinding(connection),
-      clientIdentifier: "streamvue-test-device",
+      clientIdentifier: "orbitalvue-test-device",
       product: "OrbitalVue\r\nX-Injected: no",
       version: "5.1-test"
     });
@@ -478,7 +478,7 @@ describe("Plex integration", () => {
       .toBe(true);
     expect(catalog.sources[0]?.displayLocation).toBe("plex.home:32400");
     expect(catalog.channels[0]?.stream.requestHeaders).toEqual({});
-    expect(catalog.channels[0]?.stream.uri).toBe("streamvue-media://plex/plex-server-1/100");
+    expect(catalog.channels[0]?.stream.uri).toBe("orbitalvue-media://plex/plex-server-1/100");
     expect(item).toMatchObject({
       year: 2026,
       resumePositionMs: 600_000,
@@ -530,7 +530,7 @@ describe("Emby integration", () => {
       device: {
         client: "OrbitalVue",
         device: "Vitest",
-        deviceId: "streamvue-identity-test",
+        deviceId: "orbitalvue-identity-test",
         version: "5.1-test"
       }
     });
@@ -630,7 +630,7 @@ describe("Emby integration", () => {
     const device = {
       client: "OrbitalVue",
       device: "Vitest",
-      deviceId: "streamvue-test-device",
+      deviceId: "orbitalvue-test-device",
       version: "5.1-test"
     };
     const session = await authenticateEmby(mock.transport, {
@@ -733,7 +733,7 @@ describe("Emby integration", () => {
     expect(mock.requests).toHaveLength(requestCountBeforeArtworkReport);
     expect(catalog.sources[0]?.displayLocation).toBe("emby.home");
     expect(catalog.channels[0]?.stream.requestHeaders).toEqual({});
-    expect(catalog.channels[0]?.stream.uri).toBe("streamvue-media://emby/emby-server-1/item-1");
+    expect(catalog.channels[0]?.stream.uri).toBe("orbitalvue-media://emby/emby-server-1/item-1");
     expect(item).toMatchObject({
       year: 2025,
       addedAt: "2026-08-20T12:00:00.000Z",
@@ -779,7 +779,7 @@ describe("plex library item types", () => {
       connection,
       token: "plex-token",
       credentialBinding: createMediaCenterCredentialBinding(connection),
-      clientIdentifier: "streamvue-library-type-test"
+      clientIdentifier: "orbitalvue-library-type-test"
     });
     await client.getItems({ id: "1", title: "Library", kind });
     const itemsRequest = mock.requests.find((request) =>

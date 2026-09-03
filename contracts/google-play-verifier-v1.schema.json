@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://streamvue.app/contracts/google-play-verifier/v1/schema.json",
+  "$id": "https://orbitalvue.app/contracts/google-play-verifier/v1/schema.json",
   "title": "OrbitalVue Google Play Purchase Verifier Exchange",
   "description": "The transient purchase-token request and secret-free entitlement response exchanged between OrbitalVue for Android and its Google Play backend verifier.",
   "oneOf": [

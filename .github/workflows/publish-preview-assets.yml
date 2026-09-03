@@ -46,7 +46,7 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore dependencies
-        run: dotnet restore StreamVue.Native.slnx
+        run: dotnet restore OrbitalVue.Native.slnx
 
       - name: Verify the release
         shell: pwsh
@@ -55,16 +55,16 @@ jobs:
           node tools/verify-windows-plex-account-foundation.mjs
           node tools/verify-windows-media-center-progress.mjs
           node tools/verify-windows-media-center-artwork.mjs
-          dotnet build StreamVue.Native.slnx -c Release --no-restore
-          dotnet restore src/StreamVue.Player/StreamVue.Player.csproj -p:StreamVueDistributionMode=Store
-          dotnet build src/StreamVue.Player/StreamVue.Player.csproj -c Release --no-restore -p:StreamVueDistributionMode=Store
-          dotnet restore src/StreamVue.Player/StreamVue.Player.csproj -p:StreamVueDistributionMode=Personal
-          dotnet build src/StreamVue.Player/StreamVue.Player.csproj -c Release --no-restore -p:StreamVueDistributionMode=Personal
-          dotnet run --project tools/StreamVue.FeatureProbe/StreamVue.FeatureProbe.csproj -c Release --no-build
-          dotnet run --project tools/StreamVue.PlaylistProbe/StreamVue.PlaylistProbe.csproj -c Release --no-build -- --routing-scale 70000
+          dotnet build OrbitalVue.Native.slnx -c Release --no-restore
+          dotnet restore src/OrbitalVue.Player/OrbitalVue.Player.csproj -p:OrbitalVueDistributionMode=Store
+          dotnet build src/OrbitalVue.Player/OrbitalVue.Player.csproj -c Release --no-restore -p:OrbitalVueDistributionMode=Store
+          dotnet restore src/OrbitalVue.Player/OrbitalVue.Player.csproj -p:OrbitalVueDistributionMode=Personal
+          dotnet build src/OrbitalVue.Player/OrbitalVue.Player.csproj -c Release --no-restore -p:OrbitalVueDistributionMode=Personal
+          dotnet run --project tools/OrbitalVue.FeatureProbe/OrbitalVue.FeatureProbe.csproj -c Release --no-build
+          dotnet run --project tools/OrbitalVue.PlaylistProbe/OrbitalVue.PlaylistProbe.csproj -c Release --no-build -- --routing-scale 70000
 
       - name: Publish the Windows application
-        run: dotnet publish src/StreamVue.Player/StreamVue.Player.csproj -c Release -r win-x64 --self-contained true --no-restore -o artifacts/streamvue-publish
+        run: dotnet publish src/OrbitalVue.Player/OrbitalVue.Player.csproj -c Release -r win-x64 --self-contained true --no-restore -o artifacts/orbitalvue-publish
 
       - name: Install Velopack
         run: dotnet tool install vpk --version 1.2.0 --tool-path .tools
@@ -72,17 +72,17 @@ jobs:
       - name: Build installer and update packages
         shell: pwsh
         run: |
-          $releaseDirectory = Join-Path $PWD 'artifacts/streamvue-releases'
+          $releaseDirectory = Join-Path $PWD 'artifacts/orbitalvue-releases'
           New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
           gh release download $env:BASE_RELEASE_TAG --repo $env:GITHUB_REPOSITORY --pattern $env:BASE_PACKAGE_NAME --dir $releaseDirectory
           .\.tools\vpk.exe pack `
             --packId Chris.StreamVue `
             --packVersion $env:PACKAGE_VERSION `
-            --packDir artifacts/streamvue-publish `
+            --packDir artifacts/orbitalvue-publish `
             --mainExe StreamVue.exe `
             --packTitle OrbitalVue `
             --packAuthors Chris `
-            --icon src/StreamVue.Player/Assets/streamvue.ico `
+            --icon src/OrbitalVue.Player/Assets/orbitalvue.ico `
             --releaseNotes RELEASE_NOTES.md `
             --outputDir $releaseDirectory `
             --runtime win-x64
@@ -90,7 +90,7 @@ jobs:
       - name: Prove the incremental update reconstructs the full package
         shell: pwsh
         run: |
-          $releaseDirectory = Join-Path $PWD 'artifacts/streamvue-releases'
+          $releaseDirectory = Join-Path $PWD 'artifacts/orbitalvue-releases'
           $basePackage = Join-Path $releaseDirectory $env:BASE_PACKAGE_NAME
           $deltaPackage = Join-Path $releaseDirectory "Chris.StreamVue-$($env:PACKAGE_VERSION)-delta.nupkg"
           $fullPackage = Join-Path $releaseDirectory "Chris.StreamVue-$($env:PACKAGE_VERSION)-full.nupkg"
@@ -105,5 +105,5 @@ jobs:
       - name: Upload every release asset to the existing draft
         shell: pwsh
         run: |
-          $assets = Get-ChildItem -LiteralPath artifacts/streamvue-releases -File | Select-Object -ExpandProperty FullName
+          $assets = Get-ChildItem -LiteralPath artifacts/orbitalvue-releases -File | Select-Object -ExpandProperty FullName
           gh release upload $env:RELEASE_TAG $assets --repo $env:GITHUB_REPOSITORY --clobber

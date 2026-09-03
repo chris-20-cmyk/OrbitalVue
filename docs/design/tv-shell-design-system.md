@@ -1,12 +1,12 @@
-# StreamVue television design system
+# OrbitalVue television design system
 
-The Samsung/LG shell evolves StreamVue's established dark broadcast interface into a ten-foot, remote-first surface. The generated concept established the three-column composition and the implementation was verified at both vendor-supported graphics sizes.
+The Samsung/LG shell evolves OrbitalVue's established dark broadcast interface into a ten-foot, remote-first surface. The generated concept established the three-column composition and the implementation was verified at both vendor-supported graphics sizes.
 
 ## Reference artifacts
 
-- Generated concept: `streamvue-tv-shell-concept-v2.png`
-- Final production 1920×1080 render: `streamvue-tv-shell-production-1920x1080.png`
-- Final 1280×720 render: `streamvue-tv-shell-render-1280x720-v2.png`
+- Generated concept: `orbitalvue-tv-shell-concept-v2.png`
+- Final production 1920×1080 render: `orbitalvue-tv-shell-production-1920x1080.png`
+- Final 1280×720 render: `orbitalvue-tv-shell-render-1280x720-v2.png`
 - Standalone broadcast preview: `../../platforms/tv-web/public/assets/broadcast-preview.png`
 
 ## Locked visual system

@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "verified": false,
   "checkoutAvailable": true,
-  "productId": "streamvue-premium",
+  "productId": "orbitalvue-premium",
   "product": {
-    "productId": "streamvue-premium",
+    "productId": "orbitalvue-premium",
     "title": "OrbitalVue Personal Media Centers",
     "localizedPrice": "$9.99",
     "orderTotal": "9.99",

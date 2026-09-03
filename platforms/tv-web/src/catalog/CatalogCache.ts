@@ -1,22 +1,22 @@
-import type { StreamVueCatalog } from "@streamvue/catalog";
-import type { MediaCenterSnapshot } from "@streamvue/media-centers";
+import type { OrbitalVueCatalog } from "@orbitalvue/catalog";
+import type { MediaCenterSnapshot } from "@orbitalvue/media-centers";
 
 export interface SavedCatalogRecord {
   key: "active";
   sourceUrl: string | null;
-  catalog: StreamVueCatalog;
+  catalog: OrbitalVueCatalog;
   savedAt: string;
   sourceKind?: "playlist-url" | "playlist-file" | "media-center";
   mediaCenterSnapshot?: MediaCenterSnapshot;
 }
 
-const DATABASE_NAME = "streamvue-tv-catalog-v1";
+const DATABASE_NAME = "orbitalvue-tv-catalog-v1";
 const STORE_NAME = "catalogs";
 
 export interface CatalogStore {
   read(): Promise<SavedCatalogRecord | null>;
-  write(sourceUrl: string | null, catalog: StreamVueCatalog): Promise<void>;
-  writeMediaCenter(snapshot: MediaCenterSnapshot, catalog: StreamVueCatalog): Promise<void>;
+  write(sourceUrl: string | null, catalog: OrbitalVueCatalog): Promise<void>;
+  writeMediaCenter(snapshot: MediaCenterSnapshot, catalog: OrbitalVueCatalog): Promise<void>;
   clear(): Promise<void>;
 }
 
@@ -34,7 +34,7 @@ export class CatalogCache implements CatalogStore {
     });
   }
 
-  async write(sourceUrl: string | null, catalog: StreamVueCatalog): Promise<void> {
+  async write(sourceUrl: string | null, catalog: OrbitalVueCatalog): Promise<void> {
     await this.writeRecord({
       key: "active",
       sourceUrl,
@@ -46,7 +46,7 @@ export class CatalogCache implements CatalogStore {
 
   async writeMediaCenter(
     snapshot: MediaCenterSnapshot,
-    catalog: StreamVueCatalog
+    catalog: OrbitalVueCatalog
   ): Promise<void> {
     await this.writeRecord({
       key: "active",

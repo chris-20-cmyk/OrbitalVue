@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="streamvue_black">#05080F</color>
-    <color name="streamvue_navy">#0B1220</color>
-    <color name="streamvue_teal">#35E7D3</color>
+    <color name="orbitalvue_black">#05080F</color>
+    <color name="orbitalvue_navy">#0B1220</color>
+    <color name="orbitalvue_teal">#35E7D3</color>
 </resources>

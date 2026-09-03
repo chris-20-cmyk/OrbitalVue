@@ -1,6 +1,6 @@
 # OrbitalVue for Android and Google TV
 
-This is the native Kotlin/Compose StreamVue 5.2 foundation for Android phones, tablets, Android TV, and Google TV. It uses AndroidX Media3 instead of embedding the Windows player or a browser playback engine.
+This is the native Kotlin/Compose OrbitalVue 5.2 foundation for Android phones, tablets, Android TV, and Google TV. It uses AndroidX Media3 instead of embedding the Windows player or a browser playback engine.
 
 ## Build
 
@@ -9,7 +9,7 @@ Requirements:
 - JDK 17
 - Android SDK Platform 37.1 and Build Tools 37.0.0
 
-StreamVue compiles against the 37.1 API surface required by its AndroidX dependencies while keeping `targetSdk = 36` for the current stable platform behavior.
+OrbitalVue compiles against the 37.1 API surface required by its AndroidX dependencies while keeping `targetSdk = 36` for the current stable platform behavior.
 
 From the repository root on Windows:
 
@@ -17,62 +17,62 @@ From the repository root on Windows:
 .\platforms\android\gradlew.bat -p platforms\android testDebugUnitTest lintDebug assembleDebug bundleRelease
 ```
 
-The default `personal` distribution includes Plex and Emby. To verify the fail-closed store surface before Google Play Billing is connected, append `-PstreamVueDistributionMode=store`; that build will not collect media-server credentials or contact a saved media center. The foundation workflow deliberately leaves this locked AAB unsigned. See [premium access and store readiness](../../docs/premium-entitlements.md).
+The default `personal` distribution includes Plex and Emby. To verify the fail-closed store surface before Google Play Billing is connected, append `-PorbitalVueDistributionMode=store`; that build will not collect media-server credentials or contact a saved media center. The foundation workflow deliberately leaves this locked AAB unsigned. See [premium access and store readiness](../../docs/premium-entitlements.md).
 
 The Android/Google TV client includes Google Play Billing Library 9.1.0 for a one-time non-consumable unlock. A charge can be offered only when a real Play Console product and secure purchase verifier are both supplied:
 
 ```text
--PstreamVueDistributionMode=store
--PstreamVuePremiumProductId=<exact Play Console product ID>
--PstreamVuePremiumVerificationUrl=https://<your verifier>/google-play/verify
+-PorbitalVueDistributionMode=store
+-PorbitalVuePremiumProductId=<exact Play Console product ID>
+-PorbitalVuePremiumVerificationUrl=https://<your verifier>/google-play/verify
 ```
 
 The verifier must validate the purchase token with the Google Play Developer API. With either value missing, purchase and restore controls remain unavailable and Plex/Emby stay locked.
 
 ## Plex account connection
 
-Personal builds offer **Sign in with Plex** as the recommended connection path. StreamVue creates a strong signed PIN, shows a QR code and browser action, discovers the Plex Media Servers authorized for that account, and lets the user choose a verified secure/local endpoint. Manual server-token entry remains available under the advanced option.
+Personal builds offer **Sign in with Plex** as the recommended connection path. OrbitalVue creates a strong signed PIN, shows a QR code and browser action, discovers the Plex Media Servers authorized for that account, and lets the user choose a verified secure/local endpoint. Manual server-token entry remains available under the advanced option.
 
-The account token exists only during the short discovery operation and never enters Compose UI state or the saved catalog. A selected server token is saved only after StreamVue rechecks the server identity and selected origin. The stable Ed25519 device identity is stored only as a Tink encrypted keyset whose wrapping key is created and tested in Android Keystore; the feature fails closed instead of falling back to a cleartext keyset. Android backup and device-to-device transfer remain disabled for this state.
+The account token exists only during the short discovery operation and never enters Compose UI state or the saved catalog. A selected server token is saved only after OrbitalVue rechecks the server identity and selected origin. The stable Ed25519 device identity is stored only as a Tink encrypted keyset whose wrapping key is created and tested in Android Keystore; the feature fails closed instead of falling back to a cleartext keyset. Android backup and device-to-device transfer remain disabled for this state.
 
 ## Google Play upload signing
 
-Google Play App Signing uses two keys: Google protects the app-signing key used on delivered APKs, while StreamVue signs each uploaded AAB with a separate upload key. The upload key is self-generated and free; it is not a purchased public certificate. Keep its keystore and passwords outside the repository and back them up securely.
+Google Play App Signing uses two keys: Google protects the app-signing key used on delivered APKs, while OrbitalVue signs each uploaded AAB with a separate upload key. The upload key is self-generated and free; it is not a purchased public certificate. Keep its keystore and passwords outside the repository and back them up securely.
 
 Create a long-lived RSA upload key once (4096 bits is used here; the workflow rejects keys below 2048 bits):
 
 ```powershell
 keytool -genkeypair -v `
-  -keystore streamvue-google-play-upload.jks `
-  -alias streamvue-upload `
+  -keystore orbitalvue-google-play-upload.jks `
+  -alias orbitalvue-upload `
   -keyalg RSA `
   -keysize 4096 `
   -validity 10000
 
 keytool -export -rfc `
-  -keystore streamvue-google-play-upload.jks `
-  -alias streamvue-upload `
-  -file streamvue-google-play-upload-certificate.pem
+  -keystore orbitalvue-google-play-upload.jks `
+  -alias orbitalvue-upload `
+  -file orbitalvue-google-play-upload-certificate.pem
 ```
 
 Register the public certificate during Play App Signing setup. Never upload the `.jks` file anywhere except the protected GitHub secret used by this repository's candidate workflow. Configure these repository variables:
 
-- `STREAMVUE_ANDROID_PREMIUM_PRODUCT_ID` — exact one-time product ID from Play Console.
-- `STREAMVUE_ANDROID_PREMIUM_VERIFICATION_URL` — production HTTPS purchase verifier.
-- `STREAMVUE_ANDROID_UPLOAD_CERT_SHA256` — SHA-256 fingerprint of the registered upload certificate, with or without colons.
+- `ORBITALVUE_ANDROID_PREMIUM_PRODUCT_ID` — exact one-time product ID from Play Console.
+- `ORBITALVUE_ANDROID_PREMIUM_VERIFICATION_URL` — production HTTPS purchase verifier.
+- `ORBITALVUE_ANDROID_UPLOAD_CERT_SHA256` — SHA-256 fingerprint of the registered upload certificate, with or without colons.
 
 Configure these GitHub Actions secrets:
 
-- `STREAMVUE_ANDROID_UPLOAD_KEYSTORE_BASE64` — Base64 contents of the upload `.jks`.
-- `STREAMVUE_ANDROID_UPLOAD_STORE_PASSWORD`
-- `STREAMVUE_ANDROID_UPLOAD_KEY_ALIAS`
-- `STREAMVUE_ANDROID_UPLOAD_KEY_PASSWORD`
+- `ORBITALVUE_ANDROID_UPLOAD_KEYSTORE_BASE64` — Base64 contents of the upload `.jks`.
+- `ORBITALVUE_ANDROID_UPLOAD_STORE_PASSWORD`
+- `ORBITALVUE_ANDROID_UPLOAD_KEY_ALIAS`
+- `ORBITALVUE_ANDROID_UPLOAD_KEY_PASSWORD`
 
 PowerShell can prepare the Base64 value without altering the keystore:
 
 ```powershell
 [Convert]::ToBase64String(
-  [IO.File]::ReadAllBytes((Resolve-Path .\streamvue-google-play-upload.jks))
+  [IO.File]::ReadAllBytes((Resolve-Path .\orbitalvue-google-play-upload.jks))
 )
 ```
 
@@ -111,4 +111,4 @@ RTMP entries remain in the portable catalog for compatibility but are not claime
 
 ## Source privacy
 
-Raw URL sources and cached playlists stay in app-private storage. Android cloud backup and device-to-device transfer are disabled for all StreamVue state because IPTV URLs can contain private account tokens. Displayed source locations show only the provider host and optional port. Plex account discovery retains no account token; the chosen server token uses the existing Android Keystore-backed credential vault.
+Raw URL sources and cached playlists stay in app-private storage. Android cloud backup and device-to-device transfer are disabled for all OrbitalVue state because IPTV URLs can contain private account tokens. Displayed source locations show only the provider host and optional port. Plex account discovery retains no account token; the chosen server token uses the existing Android Keystore-backed credential vault.

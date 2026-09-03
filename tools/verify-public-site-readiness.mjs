@@ -141,8 +141,8 @@ for (const [name, html] of Object.entries(pageSources)) {
 for (const forbidden of [
   /\blorem ipsum\b/i,
   /\bTODO\b/,
-  /support@streamvue\.app/i,
-  /privacy@streamvue\.app/i,
+  /support@orbitalvue\.app/i,
+  /privacy@orbitalvue\.app/i,
   /\bAIza[0-9A-Za-z_-]{30,}\b/,
   /\b(?:password|access[_-]?token)\s*[=:]\s*["'][^"']+["']/i
 ]) {

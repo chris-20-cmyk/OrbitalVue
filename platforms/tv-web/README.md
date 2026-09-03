@@ -22,15 +22,15 @@ Raw playlist locations never appear in normal browsing; only the provider host a
 
 Plex and Emby credentials are kept outside the catalog database. Samsung builds use Tizen KeyManager. LG webOS 24 and newer use Key Manager 3 backed by the television's trusted execution environment; older or unsupported televisions intentionally keep the credential for the current app session only and ask the user to reconnect after a restart. Public server identity is verified before a protected request is sent, and cached media snapshots contain only opaque OrbitalVue locators.
 
-Personal builds include media-center access. Setting `VITE_STREAMVUE_DISTRIBUTION_MODE=store` produces the fail-closed store surface: it shows the locked premium state, renders no credential inputs, and blocks refresh and playback before the credential vault or media-server network is touched. Samsung packages can unlock after an exact Seller Office/DPI non-consumable and HTTPS entitlement verifier are configured; the DPI security key must remain on that backend. LG packages stay locked until a reviewed third-party billing provider is contracted and server-side verification is implemented. See [premium access and store readiness](../../docs/premium-entitlements.md).
+Personal builds include media-center access. Setting `VITE_ORBITALVUE_DISTRIBUTION_MODE=store` produces the fail-closed store surface: it shows the locked premium state, renders no credential inputs, and blocks refresh and playback before the credential vault or media-server network is touched. Samsung packages can unlock after an exact Seller Office/DPI non-consumable and HTTPS entitlement verifier are configured; the DPI security key must remain on that backend. LG packages stay locked until a reviewed third-party billing provider is contracted and server-side verification is implemented. See [premium access and store readiness](../../docs/premium-entitlements.md).
 
 For a Samsung store-candidate build, provide the three non-secret seller/verifier values with the store mode:
 
 ```powershell
-$env:VITE_STREAMVUE_DISTRIBUTION_MODE = "store"
-$env:VITE_STREAMVUE_SAMSUNG_APP_ID = "<Seller Office Checkout app ID>"
-$env:VITE_STREAMVUE_SAMSUNG_PRODUCT_ID = "<DPI non-consumable product ID>"
-$env:VITE_STREAMVUE_SAMSUNG_VERIFICATION_URL = "https://<verifier>/samsung/status"
+$env:VITE_ORBITALVUE_DISTRIBUTION_MODE = "store"
+$env:VITE_ORBITALVUE_SAMSUNG_APP_ID = "<Seller Office Checkout app ID>"
+$env:VITE_ORBITALVUE_SAMSUNG_PRODUCT_ID = "<DPI non-consumable product ID>"
+$env:VITE_ORBITALVUE_SAMSUNG_VERIFICATION_URL = "https://<verifier>/samsung/status"
 pnpm tv:build
 ```
 
@@ -85,19 +85,19 @@ The manual **Build Samsung TV Store candidate** workflow first proves every publ
 The workflow remains locked until `store/premium-products.json` and `store/samsung-distribution.json` contain the real reviewed values. Add these non-secret repository variables:
 
 ```text
-STREAMVUE_SAMSUNG_APP_ID
-STREAMVUE_SAMSUNG_PREMIUM_PRODUCT_ID
-STREAMVUE_SAMSUNG_VERIFICATION_URL
-STREAMVUE_SAMSUNG_AUTHOR_CERT_SHA256
+ORBITALVUE_SAMSUNG_APP_ID
+ORBITALVUE_SAMSUNG_PREMIUM_PRODUCT_ID
+ORBITALVUE_SAMSUNG_VERIFICATION_URL
+ORBITALVUE_SAMSUNG_AUTHOR_CERT_SHA256
 ```
 
 Create a protected GitHub environment named `samsung-store-signing` (ideally with a required reviewer), then add these environment secrets:
 
 ```text
-STREAMVUE_SAMSUNG_AUTHOR_CERTIFICATE_BASE64
-STREAMVUE_SAMSUNG_AUTHOR_CERTIFICATE_PASSWORD
-STREAMVUE_SAMSUNG_DISTRIBUTOR_CERTIFICATE_BASE64
-STREAMVUE_SAMSUNG_DISTRIBUTOR_CERTIFICATE_PASSWORD
+ORBITALVUE_SAMSUNG_AUTHOR_CERTIFICATE_BASE64
+ORBITALVUE_SAMSUNG_AUTHOR_CERTIFICATE_PASSWORD
+ORBITALVUE_SAMSUNG_DISTRIBUTOR_CERTIFICATE_BASE64
+ORBITALVUE_SAMSUNG_DISTRIBUTOR_CERTIFICATE_PASSWORD
 ```
 
 The distributor certificate must have the Partner privilege level because `sso.partner` is used. For personal sideloading it must also contain the target television's DUID. Back up the original author `.p12` and password outside GitHub; every future update must preserve that author identity.

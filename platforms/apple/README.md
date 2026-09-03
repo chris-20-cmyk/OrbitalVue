@@ -2,8 +2,8 @@
 
 This directory contains the native SwiftUI OrbitalVue 5.6 foundation. It is one Swift package with pinned KSPlayer 2.3.4 and AVFoundation/AVKit playback plus two generated application targets:
 
-- `StreamVue` for iPhone and iPad
-- `StreamVueTV` for Apple TV
+- `OrbitalVue` for iPhone and iPad
+- `OrbitalVueTV` for Apple TV
 
 The minimum deployment target is iOS, iPadOS, and tvOS 17. Store builds use Xcode 26.6 and the iOS/tvOS 26.5 SDKs. The shared parser also supports macOS 14 so its contract and privacy tests can run directly with Swift Package Manager.
 
@@ -19,8 +19,8 @@ Requirements:
 cd platforms/apple
 xcodegen generate --spec project.yml
 swift test
-xcodebuild -project StreamVueApple.xcodeproj -scheme StreamVue -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
-xcodebuild -project StreamVueApple.xcodeproj -scheme StreamVueTV -destination 'generic/platform=tvOS Simulator' CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project OrbitalVueApple.xcodeproj -scheme OrbitalVue -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project OrbitalVueApple.xcodeproj -scheme OrbitalVueTV -destination 'generic/platform=tvOS Simulator' CODE_SIGNING_ALLOWED=NO build
 ```
 
 The Xcode project is generated and ignored. `project.yml`, the Swift package, and the locked CI workflow remain the authoritative build inputs.
@@ -35,9 +35,9 @@ The AVKit path uses `AVURLAsset`, `AVPlayerItem`, `AVPlayer`, and `AVPlayerViewC
 
 KSPlayer's public package is GPL-3.0. OrbitalVue pins version 2.3.4 for reproducible personal source builds. `Package.store.swift` is a second, dependency-free package graph: CI copies it over `Package.swift` only for the Store configuration, compiles the same UI through `canImport(KSPlayer)`, exposes AVKit as the only engine, and verifies that the resolved Store graph and app bundles contain no KSPlayer artifact. Including KSPlayer in a public binary still requires either a GPL-compatible OrbitalVue release or KSPlayer's separately licensed LGPL/commercial package. See [the licensing gate](../../docs/ksplayer-licensing.md).
 
-The normal Debug and Release configurations are personal builds and include Plex/Emby. The `Store` Xcode configuration injects `StreamVueDistributionMode=store` into each app's Info.plist so the shared Swift package reads the correct runtime mode; until StoreKit 2 verifies a real one-time product, that configuration hides credential entry and blocks saved refresh, artwork, and playback at the repository boundary. This purchase gate is separate from both Apple code signing and the KSPlayer distribution license. See [premium access and store readiness](../../docs/premium-entitlements.md).
+The normal Debug and Release configurations are personal builds and include Plex/Emby. The `Store` Xcode configuration injects `OrbitalVueDistributionMode=store` into each app's Info.plist so the shared Swift package reads the correct runtime mode; until StoreKit 2 verifies a real one-time product, that configuration hides credential entry and blocks saved refresh, artwork, and playback at the repository boundary. This purchase gate is separate from both Apple code signing and the KSPlayer distribution license. See [premium access and store readiness](../../docs/premium-entitlements.md).
 
-The iOS and tvOS clients now include a StoreKit 2 purchase controller. Set the exact App Store Connect non-consumable identifier as the `STREAMVUE_PREMIUM_PRODUCT_ID` Xcode build setting for a Store build. The controller loads localized product information, listens for transaction changes, accepts only StoreKit-verified current entitlements, and exposes explicit **Buy once** and **Restore purchase** actions. `AppStore.sync()` is called only from the user's restore action.
+The iOS and tvOS clients now include a StoreKit 2 purchase controller. Set the exact App Store Connect non-consumable identifier as the `ORBITALVUE_PREMIUM_PRODUCT_ID` Xcode build setting for a Store build. The controller loads localized product information, listens for transaction changes, accepts only StoreKit-verified current entitlements, and exposes explicit **Buy once** and **Restore purchase** actions. `AppStore.sync()` is called only from the user's restore action.
 
 Plex onboarding uses Plex's strong signed-PIN flow. OrbitalVue creates a stable device-registration Ed25519 signing key and client identifier in Keychain, presents the Plex authorization page as both a QR code and an external link, polls only while the connection screen is alive, and discovers the account's available Plex Media Servers. Keychain records can survive app deletion when the operating system retains them, so this identity is not described as an install-lifetime value. Account tokens and server-scoped tokens never enter SwiftUI or a cached catalog: the core actor returns an expiring opaque discovery lease plus sanitized server choices, then moves only the selected server token into an origin-bound Keychain credential after a public `/identity` check that must match the selected server ID. HTTPS/local connections are preferred, relay is deprioritized, and a discovered HTTP connection still requires an explicit cleartext warning. Direct address/token entry remains available as an advanced fallback.
 
@@ -67,8 +67,8 @@ CI compiles and analyzes unsigned personal simulator products with KSPlayer and 
 
 The manual **Build Apple Store candidates** workflow is the only signed Store archive lane. It remains fail-closed until both `store/premium-products.json` and `store/apple-distribution.json` are explicitly ready. Before running it, create the shared iOS/tvOS app record and non-consumable in App Store Connect, create an Apple Distribution certificate plus separate App Store provisioning profiles for iOS and tvOS, then configure these GitHub repository values:
 
-- Variables: `STREAMVUE_APPLE_BUNDLE_ID`, `STREAMVUE_APPLE_TEAM_ID`, and `STREAMVUE_APPLE_PREMIUM_PRODUCT_ID`
-- Secrets: `STREAMVUE_APPLE_DISTRIBUTION_CERTIFICATE_BASE64`, `STREAMVUE_APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD`, `STREAMVUE_APPLE_IOS_APP_STORE_PROFILE_BASE64`, and `STREAMVUE_APPLE_TVOS_APP_STORE_PROFILE_BASE64`
+- Variables: `ORBITALVUE_APPLE_BUNDLE_ID`, `ORBITALVUE_APPLE_TEAM_ID`, and `ORBITALVUE_APPLE_PREMIUM_PRODUCT_ID`
+- Secrets: `ORBITALVUE_APPLE_DISTRIBUTION_CERTIFICATE_BASE64`, `ORBITALVUE_APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD`, `ORBITALVUE_APPLE_IOS_APP_STORE_PROFILE_BASE64`, and `ORBITALVUE_APPLE_TVOS_APP_STORE_PROFILE_BASE64`
 
 The workflow resolves and tests dependencies before importing signing material, records the exact Swift package graph, validates both profiles and the distribution identity, builds two signed Store archives with the same bundle/product/version, exports audited IPAs, removes the temporary keychain and profiles, and uploads only a 30-day workflow artifact. It never uploads to App Store Connect automatically. Apple requires a new build number for every upload; the operator must confirm that history in App Store Connect.
 

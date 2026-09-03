@@ -5,95 +5,95 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-val streamVueDistributionMode = providers.gradleProperty("streamVueDistributionMode")
+val orbitalVueDistributionMode = providers.gradleProperty("orbitalVueDistributionMode")
     .orElse("personal")
     .get()
     .trim()
     .lowercase()
-require(streamVueDistributionMode == "personal" || streamVueDistributionMode == "store") {
-    "streamVueDistributionMode must be personal or store."
+require(orbitalVueDistributionMode == "personal" || orbitalVueDistributionMode == "store") {
+    "orbitalVueDistributionMode must be personal or store."
 }
-val streamVuePremiumProductId = providers.gradleProperty("streamVuePremiumProductId")
+val orbitalVuePremiumProductId = providers.gradleProperty("orbitalVuePremiumProductId")
     .orElse("")
     .get()
     .trim()
-require(streamVuePremiumProductId.isEmpty() || Regex("^[A-Za-z0-9._-]{3,256}$").matches(streamVuePremiumProductId)) {
-    "streamVuePremiumProductId must be empty or a valid seller-console product identifier."
+require(orbitalVuePremiumProductId.isEmpty() || Regex("^[A-Za-z0-9._-]{3,256}$").matches(orbitalVuePremiumProductId)) {
+    "orbitalVuePremiumProductId must be empty or a valid seller-console product identifier."
 }
-val streamVuePremiumVerificationUrl = providers.gradleProperty("streamVuePremiumVerificationUrl")
+val orbitalVuePremiumVerificationUrl = providers.gradleProperty("orbitalVuePremiumVerificationUrl")
     .orElse("")
     .get()
     .trim()
-if (streamVuePremiumVerificationUrl.isNotEmpty()) {
-    val endpoint = URI(streamVuePremiumVerificationUrl)
+if (orbitalVuePremiumVerificationUrl.isNotEmpty()) {
+    val endpoint = URI(orbitalVuePremiumVerificationUrl)
     require(endpoint.scheme.equals("https", ignoreCase = true) &&
         !endpoint.host.isNullOrBlank() && endpoint.userInfo == null &&
         endpoint.query == null && endpoint.fragment == null) {
-        "streamVuePremiumVerificationUrl must be an HTTPS origin/path without credentials, query, or fragment."
+        "orbitalVuePremiumVerificationUrl must be an HTTPS origin/path without credentials, query, or fragment."
     }
 }
 
-val streamVueVersionCodeText = providers.gradleProperty("streamVueVersionCode")
+val orbitalVueVersionCodeText = providers.gradleProperty("orbitalVueVersionCode")
     .orElse("5700001")
     .get()
     .trim()
-val streamVueVersionCode = streamVueVersionCodeText.toIntOrNull()
-require(streamVueVersionCode != null && streamVueVersionCode in 1..2_100_000_000) {
-    "streamVueVersionCode must be a positive integer no greater than Google Play's 2100000000 limit."
+val orbitalVueVersionCode = orbitalVueVersionCodeText.toIntOrNull()
+require(orbitalVueVersionCode != null && orbitalVueVersionCode in 1..2_100_000_000) {
+    "orbitalVueVersionCode must be a positive integer no greater than Google Play's 2100000000 limit."
 }
-val streamVueVersionName = providers.gradleProperty("streamVueVersionName")
+val orbitalVueVersionName = providers.gradleProperty("orbitalVueVersionName")
     .orElse("5.7.0-alpha.1")
     .get()
     .trim()
-require(Regex("^[0-9A-Za-z][0-9A-Za-z._+-]{0,99}$").matches(streamVueVersionName)) {
-    "streamVueVersionName must be a non-empty release label using letters, digits, dot, underscore, plus, or hyphen."
+require(Regex("^[0-9A-Za-z][0-9A-Za-z._+-]{0,99}$").matches(orbitalVueVersionName)) {
+    "orbitalVueVersionName must be a non-empty release label using letters, digits, dot, underscore, plus, or hyphen."
 }
 
-val streamVueRequireStoreSigningText = providers.gradleProperty("streamVueRequireStoreSigning")
+val orbitalVueRequireStoreSigningText = providers.gradleProperty("orbitalVueRequireStoreSigning")
     .orElse("false")
     .get()
     .trim()
     .lowercase()
-require(streamVueRequireStoreSigningText == "true" || streamVueRequireStoreSigningText == "false") {
-    "streamVueRequireStoreSigning must be true or false."
+require(orbitalVueRequireStoreSigningText == "true" || orbitalVueRequireStoreSigningText == "false") {
+    "orbitalVueRequireStoreSigning must be true or false."
 }
-val streamVueRequireStoreSigning = streamVueRequireStoreSigningText == "true"
-val streamVueUploadKeystorePath = System.getenv("STREAMVUE_ANDROID_KEYSTORE_PATH")?.trim().orEmpty()
-val streamVueUploadStorePassword = System.getenv("STREAMVUE_ANDROID_KEYSTORE_PASSWORD").orEmpty()
-val streamVueUploadKeyAlias = System.getenv("STREAMVUE_ANDROID_KEY_ALIAS")?.trim().orEmpty()
-val streamVueUploadKeyPassword = System.getenv("STREAMVUE_ANDROID_KEY_PASSWORD").orEmpty()
-val streamVueSigningValues = listOf(
-    streamVueUploadKeystorePath,
-    streamVueUploadStorePassword,
-    streamVueUploadKeyAlias,
-    streamVueUploadKeyPassword
+val orbitalVueRequireStoreSigning = orbitalVueRequireStoreSigningText == "true"
+val orbitalVueUploadKeystorePath = System.getenv("ORBITALVUE_ANDROID_KEYSTORE_PATH")?.trim().orEmpty()
+val orbitalVueUploadStorePassword = System.getenv("ORBITALVUE_ANDROID_KEYSTORE_PASSWORD").orEmpty()
+val orbitalVueUploadKeyAlias = System.getenv("ORBITALVUE_ANDROID_KEY_ALIAS")?.trim().orEmpty()
+val orbitalVueUploadKeyPassword = System.getenv("ORBITALVUE_ANDROID_KEY_PASSWORD").orEmpty()
+val orbitalVueSigningValues = listOf(
+    orbitalVueUploadKeystorePath,
+    orbitalVueUploadStorePassword,
+    orbitalVueUploadKeyAlias,
+    orbitalVueUploadKeyPassword
 )
-val streamVueHasAnySigningValue = streamVueSigningValues.any(String::isNotEmpty)
-val streamVueHasCompleteSigningValues = streamVueSigningValues.all(String::isNotEmpty)
-require(!streamVueHasAnySigningValue || streamVueHasCompleteSigningValues) {
-    "Android release signing is incomplete. Supply all four STREAMVUE_ANDROID_KEYSTORE_* / KEY_* environment values."
+val orbitalVueHasAnySigningValue = orbitalVueSigningValues.any(String::isNotEmpty)
+val orbitalVueHasCompleteSigningValues = orbitalVueSigningValues.all(String::isNotEmpty)
+require(!orbitalVueHasAnySigningValue || orbitalVueHasCompleteSigningValues) {
+    "Android release signing is incomplete. Supply all four ORBITALVUE_ANDROID_KEYSTORE_* / KEY_* environment values."
 }
-require(!streamVueHasAnySigningValue ||
-    (streamVueDistributionMode == "store" && streamVueRequireStoreSigning)) {
+require(!orbitalVueHasAnySigningValue ||
+    (orbitalVueDistributionMode == "store" && orbitalVueRequireStoreSigning)) {
     "The protected Google Play upload key may be used only for an explicitly required store candidate."
 }
-require(streamVueUploadKeyAlias.isEmpty() ||
-    (streamVueUploadKeyAlias.length <= 256 && streamVueUploadKeyAlias.none(Char::isISOControl))) {
-    "STREAMVUE_ANDROID_KEY_ALIAS is invalid."
+require(orbitalVueUploadKeyAlias.isEmpty() ||
+    (orbitalVueUploadKeyAlias.length <= 256 && orbitalVueUploadKeyAlias.none(Char::isISOControl))) {
+    "ORBITALVUE_ANDROID_KEY_ALIAS is invalid."
 }
-if (streamVueHasCompleteSigningValues) {
-    require(rootProject.file(streamVueUploadKeystorePath).isFile) {
-        "STREAMVUE_ANDROID_KEYSTORE_PATH does not identify a readable keystore file."
+if (orbitalVueHasCompleteSigningValues) {
+    require(rootProject.file(orbitalVueUploadKeystorePath).isFile) {
+        "ORBITALVUE_ANDROID_KEYSTORE_PATH does not identify a readable keystore file."
     }
 }
-if (streamVueRequireStoreSigning) {
-    require(streamVueDistributionMode == "store") {
-        "A required Google Play signing build must use streamVueDistributionMode=store."
+if (orbitalVueRequireStoreSigning) {
+    require(orbitalVueDistributionMode == "store") {
+        "A required Google Play signing build must use orbitalVueDistributionMode=store."
     }
-    require(streamVuePremiumProductId.isNotEmpty() && streamVuePremiumVerificationUrl.isNotEmpty()) {
+    require(orbitalVuePremiumProductId.isNotEmpty() && orbitalVuePremiumVerificationUrl.isNotEmpty()) {
         "A signed Google Play candidate requires the exact premium product ID and HTTPS verifier URL."
     }
-    require(streamVueHasCompleteSigningValues) {
+    require(orbitalVueHasCompleteSigningValues) {
         "A signed Google Play candidate requires the complete upload-keystore environment configuration."
     }
 }
@@ -102,7 +102,7 @@ fun quotedBuildConfig(value: String): String =
     "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
 android {
-    namespace = "com.streamvue.player"
+    namespace = "com.orbitalvue.player"
     compileSdk {
         version = release(37) {
             minorApiLevel = 1
@@ -114,22 +114,22 @@ android {
         applicationId = "com.orbitalvue.player"
         minSdk = 26
         targetSdk = 36
-        versionCode = streamVueVersionCode
-        versionName = streamVueVersionName
-        buildConfigField("String", "DISTRIBUTION_MODE", quotedBuildConfig(streamVueDistributionMode))
-        buildConfigField("String", "PREMIUM_PRODUCT_ID", quotedBuildConfig(streamVuePremiumProductId))
-        buildConfigField("String", "PREMIUM_VERIFICATION_URL", quotedBuildConfig(streamVuePremiumVerificationUrl))
+        versionCode = orbitalVueVersionCode
+        versionName = orbitalVueVersionName
+        buildConfigField("String", "DISTRIBUTION_MODE", quotedBuildConfig(orbitalVueDistributionMode))
+        buildConfigField("String", "PREMIUM_PRODUCT_ID", quotedBuildConfig(orbitalVuePremiumProductId))
+        buildConfigField("String", "PREMIUM_VERIFICATION_URL", quotedBuildConfig(orbitalVuePremiumVerificationUrl))
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
 
-    val streamVueReleaseSigning = if (streamVueHasCompleteSigningValues) {
-        signingConfigs.create("streamVueRelease") {
-            storeFile = rootProject.file(streamVueUploadKeystorePath)
-            storePassword = streamVueUploadStorePassword
-            keyAlias = streamVueUploadKeyAlias
-            keyPassword = streamVueUploadKeyPassword
+    val orbitalVueReleaseSigning = if (orbitalVueHasCompleteSigningValues) {
+        signingConfigs.create("orbitalVueRelease") {
+            storeFile = rootProject.file(orbitalVueUploadKeystorePath)
+            storePassword = orbitalVueUploadStorePassword
+            keyAlias = orbitalVueUploadKeyAlias
+            keyPassword = orbitalVueUploadKeyPassword
         }
     } else {
         null
@@ -139,7 +139,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = streamVueReleaseSigning
+            signingConfig = orbitalVueReleaseSigning
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

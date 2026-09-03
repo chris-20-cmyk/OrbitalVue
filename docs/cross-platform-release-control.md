@@ -1,6 +1,6 @@
 # Cross-platform release control
 
-StreamVue has one optional premium feature, `personal-media-centers`, sold as a one-time non-consumable where a platform has a verified native purchase route. `store/cross-platform-release.json` is the machine-readable map from that product contract to each vendor's application identity, verification provider, candidate artifact, and manual submission workflow.
+OrbitalVue has one optional premium feature, `personal-media-centers`, sold as a one-time non-consumable where a platform has a verified native purchase route. `store/cross-platform-release.json` is the machine-readable map from that product contract to each vendor's application identity, verification provider, candidate artifact, and manual submission workflow.
 
 Run the complete release-control check from the repository root:
 
@@ -29,7 +29,7 @@ No row is marked ready merely because its code compiles. `store/premium-products
 ## What the verifier proves
 
 - All five candidates use the same feature ID and one-time purchase model.
-- Android and Apple retain `com.streamvue.player`; Samsung and LG retain their reviewed television identities; Windows accepts only the identity reserved in Partner Center.
+- Android and Apple retain `com.orbitalvue.player`; Samsung and LG retain their reviewed television identities; Windows accepts only the identity reserved in Partner Center.
 - A ready paid lane uses its exact native verification provider: Microsoft Store license, Google Play Developer API, StoreKit 2 verified transactions, or Samsung DPI purchase history.
 - Android and Samsung candidate URLs exactly match a production verifier deployment whose credentials are secret-manager bound, rate-limited, privacy-reviewed, and proven with real purchase and refund tests.
 - The committed verifier Worker has no public route, disables `workers.dev` and preview URLs, requires four secret bindings, rejects unapproved browser origins, accepts Samsung's documented origin-less TV requests, caps provider-wide bursts, and uses only an HMAC-derived key for per-purchaser limits. A successful dry-run bundle is implementation evidence, not deployment evidence.

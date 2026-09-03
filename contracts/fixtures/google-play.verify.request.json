@@ -2,6 +2,6 @@
   "schemaVersion": 1,
   "platform": "google-play",
   "packageName": "com.orbitalvue.player",
-  "productId": "streamvue.personal_media_centers",
+  "productId": "orbitalvue.personal_media_centers",
   "purchaseToken": "transient-google-play-token"
 }

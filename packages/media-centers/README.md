@@ -1,14 +1,14 @@
-# StreamVue media-center adapters
+# OrbitalVue media-center adapters
 
-This private workspace package is the portable reference layer for Plex and Emby. It maps authenticated library metadata into StreamVue's catalog contract while keeping passwords, account tokens, server tokens, request headers, and playback sessions out of cached JSON.
+This private workspace package is the portable reference layer for Plex and Emby. It maps authenticated library metadata into OrbitalVue's catalog contract while keeping passwords, account tokens, server tokens, request headers, and playback sessions out of cached JSON.
 
 ## Plex
 
 `PlexAccountClient` implements Plex's current signed PIN flow:
 
 1. A platform creates an Ed25519 key in its secure key store and supplies a `PlexDeviceSigner`.
-2. StreamVue creates a strong PIN and opens the returned Plex authorization URL.
-3. StreamVue exchanges a device-signed JWT for the short-lived Plex account token.
+2. OrbitalVue creates a strong PIN and opens the returned Plex authorization URL.
+3. OrbitalVue exchanges a device-signed JWT for the short-lived Plex account token.
 4. The account token discovers available servers and their server-scoped tokens.
 5. Only an opaque `credentialId` is stored in the portable connection. The key and tokens remain in Keychain, Windows protected storage, Android Keystore-backed storage, or the television's protected adapter.
 
