@@ -30,7 +30,8 @@ const [
   releaseContract,
   index,
   privacyPage,
-  supportPage
+  supportPage,
+  updateService
 ] = await Promise.all([
   read("src/OrbitalVue.Player/OrbitalVue.Player.csproj"),
   read("src/OrbitalVue.Player/App.xaml.cs"),
@@ -47,7 +48,8 @@ const [
   read("store/cross-platform-release.json"),
   read("site/index.html"),
   read("site/privacy.html"),
-  read("site/support.html")
+  read("site/support.html"),
+  read("src/OrbitalVue.Player/Services/AppUpdateService.cs")
 ]);
 
 for (const [source, label] of [
@@ -111,5 +113,19 @@ for (const [source, label] of [
   rejectText(source, "Chris.StreamVue", label);
   rejectText(source, "<AssemblyName>StreamVue", label);
 }
+
+// The repository is chris-20-cmyk/OrbitalVue. GitHub still redirects the old name, so a stale
+// URL keeps working and would go unnoticed -- pin it rather than trusting a click to fail.
+const repositoryUrl = "https://github.com/chris-20-cmyk/OrbitalVue";
+for (const [source, label] of [
+  [index, "public overview"],
+  [privacyPage, "public privacy page"],
+  [supportPage, "public support page"],
+  [listing, "Store listing"],
+  [updateService, "in-app update service"]
+]) {
+  rejectText(source, "chris-20-cmyk/StreamVue", label);
+}
+requireText(updateService, `RepositoryUrl = "${repositoryUrl}"`, "in-app repository link");
 
 console.log("OrbitalVue public identity, Windows binary/update identity and backup migration paths: PASS");
