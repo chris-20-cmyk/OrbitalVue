@@ -73,7 +73,7 @@ jobs:
           -IdentityName OrbitalVue.Test.Package
           -Publisher 'CN=00000000-0000-0000-0000-000000000000'
           -PublisherDisplayName 'OrbitalVue Test'
-          -Version 5.7.0.0
+          -Version 5.8.0.0
           -PremiumProductId orbitalvue-test-premium
           -SkipRestore
 
@@ -91,4 +91,4 @@ jobs:
           name: orbitalvue-windows-msix-layout-test-not-for-installation
           if-no-files-found: error
           retention-days: 14
-          path: artifacts/windows-msix/OrbitalVue-5.7.0.0-win-x64-microsoft-store-unsigned.msix
+          path: artifacts/windows-msix/OrbitalVue-5.8.0.0-win-x64-microsoft-store-unsigned.msix

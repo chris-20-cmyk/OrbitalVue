@@ -46,7 +46,7 @@ const MAX_PLAYLIST_BYTES = 64 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 const MEDIA_CENTER_PAGE_SIZE = 200;
 const MAX_MEDIA_CENTER_ITEMS = 20_000;
-const MEDIA_CENTER_VERSION = "5.7.0";
+const MEDIA_CENTER_VERSION = "5.8.0";
 
 export interface CatalogLoadResult {
   catalog: OrbitalVueCatalog;

@@ -72,18 +72,18 @@ if ($properties.PublisherDisplayName -ne $ExpectedPublisherDisplayName -or
     throw 'The MSIX publisher or Windows.Desktop target is invalid.'
 }
 $uap10Namespace = 'http://schemas.microsoft.com/appx/manifest/uap/windows10/10'
-if ($application.GetAttribute('Executable') -ne 'StreamVue.exe' -or
+if ($application.GetAttribute('Executable') -ne 'OrbitalVue.exe' -or
     $application.GetAttribute('RuntimeBehavior', $uap10Namespace) -ne 'packagedClassicApp' -or
     $application.GetAttribute('TrustLevel', $uap10Namespace) -ne 'mediumIL') {
     throw 'The MSIX application is not a medium-integrity packaged classic desktop app.'
 }
 
-foreach ($requiredFile in @('StreamVue.exe', 'StreamVue.dll', 'StreamVue.StoreBuild.json')) {
+foreach ($requiredFile in @('OrbitalVue.exe', 'OrbitalVue.dll', 'OrbitalVue.StoreBuild.json')) {
     if (-not (Test-Path -LiteralPath (Join-Path $unpackDirectory $requiredFile) -PathType Leaf)) {
         throw "The MSIX package is missing $requiredFile."
     }
 }
-$assemblyVersion = (Get-Item -LiteralPath (Join-Path $unpackDirectory 'StreamVue.dll')).VersionInfo
+$assemblyVersion = (Get-Item -LiteralPath (Join-Path $unpackDirectory 'OrbitalVue.dll')).VersionInfo
 if ($assemblyVersion.FileVersion -ne $ExpectedVersion -or
     ($assemblyVersion.ProductVersion -ne $ExpectedVersion -and
      -not $assemblyVersion.ProductVersion.StartsWith($ExpectedVersion + '+', [StringComparison]::Ordinal))) {
@@ -93,7 +93,7 @@ if (Get-ChildItem -LiteralPath $unpackDirectory -File -Recurse | Where-Object { 
     throw 'A Microsoft Store package must not contain Velopack runtime files.'
 }
 
-$audit = Get-Content -LiteralPath (Join-Path $unpackDirectory 'StreamVue.StoreBuild.json') -Raw | ConvertFrom-Json
+$audit = Get-Content -LiteralPath (Join-Path $unpackDirectory 'OrbitalVue.StoreBuild.json') -Raw | ConvertFrom-Json
 $auditKeys = @($audit.PSObject.Properties.Name | Sort-Object)
 $expectedAuditKeys = @('distribution', 'packageIdentityName', 'packageVersion', 'premiumProductId', 'schemaVersion', 'updater')
 if (Compare-Object $expectedAuditKeys $auditKeys) { throw 'The Store build audit contains unexpected fields.' }

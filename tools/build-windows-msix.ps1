@@ -163,7 +163,7 @@ $buildAudit = [ordered]@{
     updater = 'microsoft-store'
 }
 [IO.File]::WriteAllText(
-    (Join-Path $stageDirectory 'StreamVue.StoreBuild.json'),
+    (Join-Path $stageDirectory 'OrbitalVue.StoreBuild.json'),
     ($buildAudit | ConvertTo-Json -Depth 3),
     [Text.UTF8Encoding]::new($false))
 

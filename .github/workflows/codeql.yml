@@ -48,7 +48,7 @@ jobs:
       matrix:
         language: [actions, csharp, javascript-typescript]
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
 
       - name: Initialize CodeQL
@@ -71,7 +71,7 @@ jobs:
       actions: read
       contents: read
     steps:
-      - name: Check out StreamVue
+      - name: Check out OrbitalVue
         uses: actions/checkout@v7
 
       - name: Set up Java
@@ -98,11 +98,29 @@ jobs:
       # Only the debug variant is built: it compiles every main Kotlin source, which
       # is all the extractor needs. Tests, lint and the release bundle stay in
       # android-foundation.yml so this job does not duplicate that work.
+      # --no-build-cache and --rerun-tasks are load-bearing, not tidiness. The Kotlin
+      # extractor is a compiler plugin, so it only sees sources a compiler actually reads.
+      # Let compileDebugKotlin resolve FROM-CACHE and no compiler runs, the database comes
+      # out empty, and `database finalize` dies with exit 32 and "could not process any
+      # code written in Java/Kotlin". That is a warm cache away on any run.
       - name: Compile Android sources for extraction
         run: >-
           bash platforms/android/gradlew -p platforms/android
           assembleDebug
+          --no-build-cache
+          --rerun-tasks
           --stacktrace
+
+      # If that ever regresses it is silent, so assert it here rather than reading exit 32
+      # out of the analyze step and guessing why.
+      - name: Fail if nothing was actually compiled
+        run: |
+          classes=$(find platforms/android/app/build -name '*.class' 2>/dev/null | wc -l)
+          echo "compiled classes under app/build: $classes"
+          if [ "$classes" -eq 0 ]; then
+            echo "::error::assembleDebug produced no classes, so CodeQL would extract nothing"
+            exit 1
+          fi
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v3

@@ -26,7 +26,7 @@ public sealed class AppUpdateService
 {
     // Public Velopack releases are published here. An environment override keeps
     // local feed testing possible without changing the production application.
-    public const string RepositoryUrl = "https://github.com/chris-20-cmyk/StreamVue";
+    public const string RepositoryUrl = "https://github.com/chris-20-cmyk/OrbitalVue";
 
 #if !ORBITALVUE_STORE_BUILD
     private UpdateManager? _manager;

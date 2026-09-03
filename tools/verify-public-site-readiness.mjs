@@ -68,7 +68,7 @@ exactKeys(site.deployment, ["provider", "customDomain", "liveUrlsVerified", "man
 if (!validPublicUrl(site.projectUrl) || !validPublicUrl(site.supportRequestUrl)) {
   fail("projectUrl and supportRequestUrl must be public HTTPS URLs");
 }
-if (site.projectUrl !== "https://github.com/chris-20-cmyk/StreamVue"
+if (site.projectUrl !== "https://github.com/chris-20-cmyk/OrbitalVue"
   || site.supportRequestUrl !== `${site.projectUrl}/issues/new`) {
   fail("project and support-request URLs must remain on the reviewed repository until its separate rename is approved");
 }

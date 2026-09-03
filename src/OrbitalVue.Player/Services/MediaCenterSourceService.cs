@@ -14,7 +14,7 @@ public sealed partial class MediaCenterSourceService
     private const int PageSize = 200;
     private const int MaximumItems = 20_000;
     private const int MaximumResponseBytes = 32 * 1024 * 1024;
-    private const string ClientVersion = "5.7.0";
+    private const string ClientVersion = "5.8.0";
 
     private readonly MediaCenterCredentialStore _credentialStore;
     private readonly HttpClient _http;
