@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.IO.Compression;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -26,7 +26,10 @@ public sealed class OrbitalVueMaintenanceService
     private const string LegacyBackupProduct = "StreamVue";
     private const int BackupFormatVersion = 2;
     private const int MaximumCrashLogBytes = 256 * 1024;
-    private static readonly byte[] BackupEntropy = Encoding.UTF8.GetBytes("StreamVue.PortableBackup.v1");
+    private static readonly byte[] BackupEntropy = Encoding.UTF8.GetBytes("OrbitalVue.PortableBackup.v1");
+    // Backups written before the OrbitalVue rename were sealed with the old entropy. Reads fall
+    // back to it so an existing export still restores; writes always use the current entropy.
+    private static readonly byte[] LegacyBackupEntropy = Encoding.UTF8.GetBytes("StreamVue.PortableBackup.v1");
 
     private static readonly string[] KnownDataFiles =
     [
@@ -255,7 +258,7 @@ public sealed class OrbitalVueMaintenanceService
                 {
                     await using var protectedBuffer = new MemoryStream();
                     await source.CopyToAsync(protectedBuffer, cancellationToken);
-                    var clearBytes = ProtectedData.Unprotect(protectedBuffer.ToArray(), BackupEntropy, DataProtectionScope.CurrentUser);
+                    var clearBytes = UnprotectBackup(protectedBuffer.ToArray());
                     try
                     {
                         await File.WriteAllBytesAsync(stagedPath, clearBytes, cancellationToken);
@@ -416,6 +419,18 @@ public sealed class OrbitalVueMaintenanceService
         if (!string.IsNullOrWhiteSpace(Environment.UserName))
             redacted = redacted.Replace(Environment.UserName, "<user>", StringComparison.OrdinalIgnoreCase);
         return redacted;
+    }
+
+    private static byte[] UnprotectBackup(byte[] protectedBytes)
+    {
+        try
+        {
+            return ProtectedData.Unprotect(protectedBytes, BackupEntropy, DataProtectionScope.CurrentUser);
+        }
+        catch (CryptographicException)
+        {
+            return ProtectedData.Unprotect(protectedBytes, LegacyBackupEntropy, DataProtectionScope.CurrentUser);
+        }
     }
 
     private sealed record BackupManifest(

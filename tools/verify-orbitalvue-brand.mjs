@@ -81,15 +81,35 @@ for (const [source, label] of [
   rejectText(source, "SvTvPlayer.StreamVue", label);
 }
 
-// The first OrbitalVue Windows release must retain these private identifiers so
-// installed StreamVue builds update in place and can still read protected data.
-requireText(windowsProject, "<AssemblyName>StreamVue</AssemblyName>", "Windows bridge assembly");
+// Windows carries the OrbitalVue name all the way down: binary, data directory and update
+// identity. This is a deliberate break -- a Chris.StreamVue install will NOT update across to
+// Chris.OrbitalVue, so the first OrbitalVue build is a fresh install, not an upgrade.
+requireText(windowsProject, "<AssemblyName>OrbitalVue</AssemblyName>", "Windows assembly");
 requireText(windowsProject, "<AssemblyTitle>OrbitalVue</AssemblyTitle>", "Windows file description");
-requireText(windowsApp, 'LocalApplicationData), "StreamVue"', "Windows data directory");
-requireText(maintenance, 'LegacyBackupProduct = "StreamVue"', "legacy backup reader");
-requireText(maintenance, '"StreamVue.PortableBackup.v1"', "backup encryption compatibility");
-requireText(previewWorkflow, "--packId Chris.StreamVue", "Velopack update identity");
-requireText(previewWorkflow, "--mainExe StreamVue.exe", "Windows update executable");
+requireText(windowsApp, 'LocalApplicationData), "OrbitalVue"', "Windows data directory");
+requireText(windowsManifest, 'Executable="OrbitalVue.exe"', "MSIX executable");
+requireText(previewWorkflow, "--packId Chris.OrbitalVue", "Velopack update identity");
+requireText(previewWorkflow, "--mainExe OrbitalVue.exe", "Windows update executable");
 requireText(previewWorkflow, "--packTitle OrbitalVue", "Windows installer title");
 
-console.log("OrbitalVue public identity and Windows in-place update compatibility: PASS");
+// Two old-brand strings survive on purpose, and both are read-only migration paths. They must
+// keep naming the PREVIOUS brand -- a search-and-replace would quietly delete the ability to
+// import anything a user exported before the rename.
+requireText(maintenance, 'BackupProduct = "OrbitalVue"', "current backup product");
+requireText(maintenance, 'LegacyBackupProduct = "StreamVue"', "legacy backup reader");
+requireText(maintenance, 'BackupEntropy = Encoding.UTF8.GetBytes("OrbitalVue.PortableBackup.v1")', "current backup entropy");
+requireText(maintenance, 'LegacyBackupEntropy = Encoding.UTF8.GetBytes("StreamVue.PortableBackup.v1")', "legacy backup entropy");
+
+// Nothing Windows ships may still carry the old binary or data-directory name.
+for (const [source, label] of [
+  [windowsProject, "Windows project metadata"],
+  [windowsApp, "Windows app startup"],
+  [windowsManifest, "Windows Store manifest"],
+  [previewWorkflow, "Windows publish workflow"]
+]) {
+  rejectText(source, "StreamVue.exe", label);
+  rejectText(source, "Chris.StreamVue", label);
+  rejectText(source, "<AssemblyName>StreamVue", label);
+}
+
+console.log("OrbitalVue public identity, Windows binary/update identity and backup migration paths: PASS");
