@@ -1,35 +1,44 @@
-# OrbitalVue 5.7.0 Personal Media Progress Sync
+# OrbitalVue 5.8.0 Music Libraries and OrbitalVue Identity
 
-OrbitalVue 5.7 completes provider-synced Plex and Emby playback progress across Windows, Android and Google TV, iPhone, iPad, Apple TV, Samsung Tizen, and LG webOS. It also brings the dedicated Continue Watching and Recently Added library lanes to every supported platform foundation.
+OrbitalVue 5.8 makes Plex and Emby music libraries playable on every platform, and completes the rename from StreamVue down to the Windows binary, data directory, and update identity.
 
-## Cross-platform Plex and Emby browsing
+## This build does not update in place
 
-- Adds dedicated **Continue Watching** and **Recently Added** groups across Apple, Android/Google TV, Samsung, and LG alongside the existing Windows experience
-- Preserves provider-supplied resume position, watched state, recency, episode metadata, and artwork-safe internal locators
-- Starts Apple playback at the saved Plex or Emby position with either AVKit or KSPlayer
-- Keeps Live, Movies, Series, and provider library groups available beside the editorial lanes
+The Windows update identity changed from `Chris.StreamVue` to `Chris.OrbitalVue`, so an existing personal installation will **not** offer this as an update.
 
-## Provider-synced playback progress
+- Uninstall the previous build, then install `Chris.OrbitalVue-win-Setup.exe` from this release
+- Application data moves from `%LocalAppData%\StreamVue` to `%LocalAppData%\OrbitalVue`, so playlists, guide sources, and Plex/Emby server logins must be entered again
+- The previous folder is left untouched on disk and can be deleted once you are satisfied with the new build
+- Diagnostics backups exported by an earlier build still restore: the reader falls back to the previous encryption entropy
 
-- Sends Plex timeline and Emby session lifecycle reports from every native player foundation
-- Reports start, pause, resume, buffering, ten-second progress, completion, stop, and source changes where the platform exposes those events
-- Uses real AVKit, KSPlayer, Media3, HTML5, and Samsung AVPlay position and duration data rather than estimated time
-- Preserves a reporting session during safe decoder retries so fallback does not falsely mark a title stopped
-- Clamps invalid position, duration, volume, and tick values before they reach a provider
+## Plex and Emby music
 
-## Credential and playback isolation
+- Music libraries now produce channels instead of being silently discarded on every platform
+- Tracks appear badged **MUSIC** in All Channels and in their library group, alongside Live, Movies, Series, Recording, and Replay
+- Plex library requests now ask for the matching item type, so a music library returns tracks rather than an unfiltered listing
+- Continue Watching and Recently Added include music automatically, because those lanes filter on resume state and recency rather than on kind
 
-- Keeps provider tokens in platform-secure storage and sends them only in protected headers
-- Keeps cached catalogs, UI state, and public playback locators free of Plex and Emby credentials
-- Binds progress reports to short-lived server, item, media-source, and playback-session records held behind each platform repository
-- Serializes report delivery and treats provider check-in failures as non-fatal so local playback continues
-- Retains the Store-mode premium boundary: locked builds make no Plex or Emby credential, refresh, artwork, playback, or reporting requests
+Music previously reached the catalog builder as an `audio` item and was mapped to "drop this", once on each of the four platforms. Connecting a music library listed it correctly and then showed zero channels.
+
+## Security fixes
+
+- Session identifiers for Plex and Emby now come from a cryptographic source rather than `Math.random()`, with no silent fallback
+- Removes polynomial backtracking from service-account key parsing: a 1,600-character input went from 534 ms to 0 ms, and a 20,000-character input no longer hangs
+- Replaces a constructed regular expression in the Samsung packaging tool with literal string counting
+- Extends CodeQL coverage to Android Kotlin sources, which no query had previously reached
 
 ## Verification
 
-- Adds Plex playing/stopped timeline tests with session headers and token-free URLs
-- Adds Emby start/progress/pause/stopped payload tests, including tick conversion and value clamping
-- Exercises Android unit tests, lint, APK/AAB packaging, Google Play fail-closed mode, Apple Swift tests, iPhone/iPad and Apple TV builds, television tests, and the cross-platform Store contract
-- Preserves the existing Windows updater identity so current personal installations can update in place without uninstalling
+- Adds catalog coverage asserting every media-center item kind produces a channel, that audio yields `music`, and that channel numbering stays contiguous
+- Adds an Android exhaustiveness test over `MediaCenterItemKind`, and extends the Apple and Windows suites for the music kind
+- The diagnostics backup self-test now seals with the previous encryption entropy and restores with the current one, making it a real migration test rather than a same-value round trip
+- Windows, Android and Google TV, iPhone/iPad/Apple TV, Samsung, LG, the portable catalog contract, and the cross-platform Store contract all pass
+
+`ChannelKind` is persisted as a numeric value in the Windows playlist cache. `Music` is appended last and every member now carries an explicit value, so existing cached channels keep their meaning.
+
+## Known gaps
+
+- The Plex item-type behaviour is derived from the existing Windows client and has not been checked against a live Plex server
+- `orbitalvue-artwork://` locators are generated on Apple, Android, and the TV platforms but only resolved on Windows
 
 This is a prerelease intended for personal testing. Store submission remains locked until the real product, privacy, listing, accessibility, public-site, commerce, licensing, and platform-owner review gates are complete.

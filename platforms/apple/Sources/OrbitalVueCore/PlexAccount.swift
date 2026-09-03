@@ -152,7 +152,7 @@ struct PlexAccountClient: Sendable {
         httpClient: any MediaCenterHTTPClient,
         clientIdentifier: String,
         product: String = "OrbitalVue",
-        version: String = "5.7.0",
+        version: String = "5.8.0",
         now: @escaping @Sendable () -> Date = Date.init
     ) throws {
         self.httpClient = httpClient
@@ -161,7 +161,7 @@ struct PlexAccountClient: Sendable {
             label: "Plex client"
         )
         self.product = MediaCenterHeaderPolicy.applicationValue(product, fallback: "OrbitalVue")
-        self.version = MediaCenterHeaderPolicy.applicationValue(version, fallback: "5.7.0")
+        self.version = MediaCenterHeaderPolicy.applicationValue(version, fallback: "5.8.0")
         self.now = now
     }
 

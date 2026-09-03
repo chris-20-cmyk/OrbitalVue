@@ -907,7 +907,7 @@ internal class MediaCenterService(
         "Accept" to "application/json",
         "X-Plex-Client-Identifier" to safeApplicationValue(device.deviceId, "orbitalvue-android"),
         "X-Plex-Product" to safeApplicationValue(device.client, "OrbitalVue"),
-        "X-Plex-Version" to safeApplicationValue(device.version, "5.7.0"),
+        "X-Plex-Version" to safeApplicationValue(device.version, "5.8.0"),
         "X-Plex-Device" to safeApplicationValue(device.device, "Android")
     )
 
@@ -925,7 +925,7 @@ internal class MediaCenterService(
             "Client" to safeApplicationValue(device.client, "OrbitalVue"),
             "Device" to safeApplicationValue(device.device, "Android"),
             "DeviceId" to safeApplicationValue(device.deviceId, "orbitalvue-android"),
-            "Version" to safeApplicationValue(device.version, "5.7.0")
+            "Version" to safeApplicationValue(device.version, "5.8.0")
         )
         userId?.let { values["UserId"] = MediaCenterUrlPolicy.requireIdentifier(it, "Emby user") }
         return "MediaBrowser " + values.entries.joinToString(", ") { (name, value) -> "$name=\"$value\"" }

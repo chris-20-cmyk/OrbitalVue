@@ -6,11 +6,11 @@ on:
       release_tag:
         description: Prerelease tag to create or update
         required: true
-        default: v5.7.0-alpha.1
+        default: v5.8.0-alpha.1
       release_title:
         description: Public release title
         required: true
-        default: OrbitalVue 5.7 Personal Media Progress Sync
+        default: OrbitalVue 5.8 Music Libraries and OrbitalVue Identity
 
 permissions:
   contents: write
@@ -121,7 +121,7 @@ jobs:
       - name: Upload the reproducible workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: orbitalvue-5.7-cross-platform-foundation
+          name: orbitalvue-5.8-cross-platform-foundation
           if-no-files-found: error
           retention-days: 14
           path: artifacts/platform-foundation/

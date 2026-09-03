@@ -1,6 +1,6 @@
 {
   "name": "@orbitalvue/tv-web",
-  "version": "5.7.0-alpha.1",
+  "version": "5.8.0-alpha.1",
   "private": true,
   "type": "module",
   "scripts": {

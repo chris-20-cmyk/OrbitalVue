@@ -123,7 +123,7 @@ public sealed class XtreamSourceService
     private static HttpClient CreateClient()
     {
         var client = new HttpClient { Timeout = TimeSpan.FromMinutes(3) };
-        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("OrbitalVue", "5.7.0"));
+        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("OrbitalVue", "5.8.0"));
         return client;
     }
 }

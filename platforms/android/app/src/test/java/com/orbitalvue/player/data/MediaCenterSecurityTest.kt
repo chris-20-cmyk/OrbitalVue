@@ -336,7 +336,7 @@ class MediaCenterSecurityTest {
             client = "OrbitalVue",
             device = "Android Test",
             deviceId = "android-test-device",
-            version = "5.7.0"
+            version = "5.8.0"
         )
     }
 }

@@ -420,7 +420,7 @@ struct PlexMediaCenterClient: Sendable {
             ),
             "X-Plex-Version": MediaCenterHeaderPolicy.applicationValue(
                 device.version,
-                fallback: "5.7.0"
+                fallback: "5.8.0"
             ),
             "X-Plex-Platform": "Apple",
             "X-Plex-Pms-Api-Version": "1.2.2"
