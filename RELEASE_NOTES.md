@@ -2,6 +2,25 @@
 
 OrbitalVue 5.8 makes Plex and Emby music libraries playable on every platform, and completes the rename from StreamVue down to the Windows binary, data directory, and update identity.
 
+## Fixed in alpha.4: Plex sign-in reported the wrong reason
+
+Connecting a discovered Plex server could fail with *The source could not be read.
+Verify the address or file and try again* -- a message about playlist URLs, shown while
+Plex itself listed the app as connected.
+
+The sign-in path reports expiry and approval problems as `InvalidOperationException`,
+which was the one exception type `SafeErrorMessage` had no case for, so every one of them
+fell through to that generic playlist wording. The real messages -- *The Plex server
+selection expired. Sign in again.* among them -- are now shown.
+
+Separately, Plex can return the same `clientIdentifier` more than once, for a server that
+is both owned and shared or reachable on several networks. Connections were already
+de-duplicated but servers were not, so selecting one could throw *Sequence contains more
+than one matching element* and surface as that same generic message. Servers are now
+de-duplicated too, and the lookups no longer fail on a duplicate.
+
+The server-selection step is valid for ten minutes after Plex approves the app.
+
 ## Fixed in alpha.3: the header still said StreamVue
 
 The window header renders its wordmark letter-spaced, as `S T R E A M V U E`. Because

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Net.Http;
 using System.Text.Json;
 using OrbitalVue.Player.Models;
@@ -127,10 +127,10 @@ public sealed partial class MediaCenterSourceService
             PrunePlexDiscoverySessions(DateTimeOffset.UtcNow);
             if (!_plexDiscoverySessions.TryGetValue(safeSessionId, out var session))
                 throw new InvalidOperationException("The Plex server selection expired. Sign in again.");
-            selectedServer = session.Servers.SingleOrDefault(value =>
+            selectedServer = session.Servers.FirstOrDefault(value =>
                 string.Equals(value.Server.ServerId, safeServerId, StringComparison.Ordinal))
                 ?? throw new InvalidDataException("The selected Plex server is not part of this account approval.");
-            selectedConnection = selectedServer.Server.Connections.SingleOrDefault(value =>
+            selectedConnection = selectedServer.Server.Connections.FirstOrDefault(value =>
                 string.Equals(value.Url, normalizedUrl, StringComparison.OrdinalIgnoreCase))
                 ?? throw new InvalidDataException("The selected Plex address is not part of this account approval.");
         }
@@ -316,6 +316,11 @@ public sealed partial class MediaCenterSourceService
         return servers
             .OrderByDescending(value => value.Server.IsOwned)
             .ThenBy(value => value.Server.Name, StringComparer.OrdinalIgnoreCase)
+            // Plex can return the same clientIdentifier twice -- owned and shared, or multi-home.
+            // Connections are de-duplicated above; without the same here, the SingleOrDefault in
+            // ConnectDiscoveredPlexServerAsync throws "Sequence contains more than one matching
+            // element", which reaches the user as an unrelated "source could not be read".
+            .DistinctBy(value => value.Server.ServerId, StringComparer.Ordinal)
             .ToList();
     }
 

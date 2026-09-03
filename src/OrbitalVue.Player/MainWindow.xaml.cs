@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -8155,6 +8155,10 @@ public partial class MainWindow : Window
         HttpRequestException => "The provider could not be reached. Check the URL and network connection.",
         ArgumentException argument => argument.Message,
         InvalidDataException invalidData => invalidData.Message,
+        // Media-center sign-in reports expiry and approval problems as InvalidOperationException.
+        // Without this the message became "The source could not be read. Verify the address or
+        // file", which sends the user to check a URL when the real answer is "sign in again".
+        InvalidOperationException invalidOperation => invalidOperation.Message,
         _ => "The source could not be read. Verify the address or file and try again."
     };
 

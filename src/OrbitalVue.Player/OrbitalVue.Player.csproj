@@ -9,8 +9,8 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>OrbitalVue</AssemblyName>
     <RootNamespace>OrbitalVue.Player</RootNamespace>
-    <Version>5.8.0-alpha.3</Version>
-    <FileVersion>5.8.0.3</FileVersion>
+    <Version>5.8.0-alpha.4</Version>
+    <FileVersion>5.8.0.4</FileVersion>
     <AssemblyVersion>5.8.0.0</AssemblyVersion>
     <AssemblyTitle>OrbitalVue</AssemblyTitle>
     <Title>OrbitalVue</Title>

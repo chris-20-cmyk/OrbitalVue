@@ -10,7 +10,7 @@ on:
       version_name:
         description: User-visible release version
         required: true
-        default: 5.8.0-alpha.3
+        default: 5.8.0-alpha.4
 
 permissions:
   contents: read
