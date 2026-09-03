@@ -49,7 +49,7 @@
                         <Border CornerRadius="8" Background="{StaticResource AccentGradient}" />
                         <Path Data="M 9,7 L 9,20 L 20,13.5 Z" Fill="#071110" Stretch="Uniform" Margin="7" />
                     </Grid>
-                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" FontFamily="{StaticResource DisplayFont}" FontWeight="Bold" FontSize="14" Foreground="{StaticResource TextBrush}" Text="S T R E A M V U E" />
+                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" FontFamily="{StaticResource DisplayFont}" FontWeight="Bold" FontSize="14" Foreground="{StaticResource TextBrush}" Text="O R B I T A L V U E" />
                     <Border Margin="10,0,0,0" Padding="7,3" CornerRadius="5" Background="#1A2130">
                         <TextBlock FontSize="9" Foreground="{StaticResource TextMutedBrush}" FontWeight="SemiBold" Text="PLAYBACK IQ" />
                     </Border>

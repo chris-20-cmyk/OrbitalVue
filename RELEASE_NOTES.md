@@ -2,6 +2,16 @@
 
 OrbitalVue 5.8 makes Plex and Emby music libraries playable on every platform, and completes the rename from StreamVue down to the Windows binary, data directory, and update identity.
 
+## Fixed in alpha.3: the header still said StreamVue
+
+The window header renders its wordmark letter-spaced, as `S T R E A M V U E`. Because
+the letters are separated, the string `StreamVue` never appears in the markup, so every
+search during the rename passed straight over it and the old brand shipped in the header
+of alpha.1 and alpha.2.
+
+The wordmark now reads `O R B I T A L V U E`. The brand check strips whitespace before
+matching, so no amount of letter-spacing can hide the old name again.
+
 ## Fixed in alpha.2: crash when a playlist loaded
 
 alpha.1 crashed as soon as a playlist produced channels, and kept crashing on every

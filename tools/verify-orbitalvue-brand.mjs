@@ -31,7 +31,8 @@ const [
   index,
   privacyPage,
   supportPage,
-  updateService
+  updateService,
+  windowsWindow
 ] = await Promise.all([
   read("src/OrbitalVue.Player/OrbitalVue.Player.csproj"),
   read("src/OrbitalVue.Player/App.xaml.cs"),
@@ -49,7 +50,8 @@ const [
   read("site/index.html"),
   read("site/privacy.html"),
   read("site/support.html"),
-  read("src/OrbitalVue.Player/Services/AppUpdateService.cs")
+  read("src/OrbitalVue.Player/Services/AppUpdateService.cs"),
+  read("src/OrbitalVue.Player/MainWindow.xaml")
 ]);
 
 for (const [source, label] of [
@@ -127,5 +129,21 @@ for (const [source, label] of [
   rejectText(source, "chris-20-cmyk/StreamVue", label);
 }
 requireText(updateService, `RepositoryUrl = "${repositoryUrl}"`, "in-app repository link");
+
+// The header wordmark is letter-spaced -- it renders as the brand but the letters are
+// separated, so "S T R E A M V U E" survived every literal search of the rename sweep and
+// shipped in 5.8.0-alpha.1 and alpha.2. Strip whitespace before matching so no amount of
+// spacing can hide the old name again.
+const withoutWhitespace = (text) => [...text].filter((character) => character.trim() !== "").join("");
+for (const [source, label] of [
+  [windowsWindow, "Windows main window"],
+  [index, "public overview"],
+  [privacyPage, "public privacy page"],
+  [supportPage, "public support page"],
+  [listing, "Store listing"]
+]) {
+  rejectText(withoutWhitespace(source).toLowerCase(), "streamvue", `${label} (ignoring whitespace)`);
+}
+requireText(withoutWhitespace(windowsWindow), 'Text="ORBITALVUE"', "Windows header wordmark");
 
 console.log("OrbitalVue public identity, Windows binary/update identity and backup migration paths: PASS");
