@@ -42,7 +42,7 @@ require(orbitalVueVersionCode != null && orbitalVueVersionCode in 1..2_100_000_0
     "orbitalVueVersionCode must be a positive integer no greater than Google Play's 2100000000 limit."
 }
 val orbitalVueVersionName = providers.gradleProperty("orbitalVueVersionName")
-    .orElse("5.8.0-alpha.1")
+    .orElse("5.8.0-alpha.2")
     .get()
     .trim()
 require(Regex("^[0-9A-Za-z][0-9A-Za-z._+-]{0,99}$").matches(orbitalVueVersionName)) {
