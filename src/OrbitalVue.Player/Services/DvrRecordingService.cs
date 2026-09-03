@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using LibVLCSharp.Shared;
@@ -13,7 +13,8 @@ public sealed class DvrRecordingService : IDisposable
     private MediaPlayer? _mediaPlayer;
     private Media? _media;
     private DvrRecordingSnapshot _snapshot = DvrRecordingSnapshot.Idle;
-    private string? _terminalError;
+    // Written from VLC's event thread without taking _gate -- see the handlers below.
+    private volatile string? _terminalError;
     private bool _disposed;
 
     public DvrRecordingSnapshot Snapshot
@@ -298,23 +299,39 @@ public sealed class DvrRecordingService : IDisposable
         return _snapshot;
     }
 
+    // These three run on VLC's event thread. None of them may WAIT on _gate.
+    //
+    // Shutdown holds _gate across MediaPlayer.Stop(), and Stop() blocks until VLC's event
+    // thread drains. A handler already in flight that blocks on _gate therefore deadlocks
+    // the two threads against each other, and the app hangs with no window until the
+    // process is killed. Detaching the handlers first does not help: it cannot recall a
+    // callback that has already been entered. EndReached and EncounteredError fire exactly
+    // when a stream drops, which for live IPTV is routine, so the window is not rare.
+
     private void RecordingPlayer_Playing(object? sender, EventArgs e)
     {
-        lock (_gate)
+        // The state label is cosmetic and Stop reads the real byte count regardless, so
+        // skipping the update under contention costs nothing worth deadlocking for.
+        if (!Monitor.TryEnter(_gate, TimeSpan.FromMilliseconds(50))) return;
+        try
         {
             if (_snapshot.State == DvrRecordingState.Starting)
                 _snapshot = _snapshot with { State = DvrRecordingState.Recording, Message = "Recording live transport stream" };
+        }
+        finally
+        {
+            Monitor.Exit(_gate);
         }
     }
 
     private void RecordingPlayer_EncounteredError(object? sender, EventArgs e)
     {
-        lock (_gate) _terminalError = "The provider closed the recording stream";
+        _terminalError = "The provider closed the recording stream";
     }
 
     private void RecordingPlayer_EndReached(object? sender, EventArgs e)
     {
-        lock (_gate) _terminalError = "The recording stream ended unexpectedly";
+        _terminalError = "The recording stream ended unexpectedly";
     }
 
     private void CleanupPlayer()

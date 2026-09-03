@@ -105,7 +105,12 @@ public sealed partial class MediaCenterSourceService
                 servers.Select(secret => secret.Server).ToList(),
                 expiresAt);
         }
-        throw new TimeoutException("The Plex sign-in request expired. Start a new sign-in.");
+        // Reached only after polling every two seconds for the whole challenge window. The
+        // browser can report a successful sign-in and still land here: with a strong PIN,
+        // Plex withholds the token when the deviceJWT does not match the key the PIN was
+        // created with, and answers with a PIN carrying no authToken rather than an error.
+        throw new TimeoutException(
+            "Plex never released an account token for this approval. If the browser said the sign-in succeeded, remove OrbitalVue from Plex's authorised devices and sign in again to issue this PC a new device key.");
     }
 
     public async Task<PlaylistResult> ConnectDiscoveredPlexServerAsync(
