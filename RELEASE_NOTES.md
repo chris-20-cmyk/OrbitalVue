@@ -100,12 +100,13 @@ Music previously reached the catalog builder as an `audio` item and was mapped t
 - Adds an Android exhaustiveness test over `MediaCenterItemKind`, and extends the Apple and Windows suites for the music kind
 - The diagnostics backup self-test now seals with the previous encryption entropy and restores with the current one, making it a real migration test rather than a same-value round trip
 - Windows, Android and Google TV, iPhone/iPad/Apple TV, Samsung, LG, the portable catalog contract, and the cross-platform Store contract all pass
+- The Plex item-type parameter is confirmed against a live Plex Media Server (1.43.3). Asking a show library for `/library/sections/{id}/all` returns 90 show containers, which are not playable; the same request with `?type=4` returns 1,480 episodes, which are
 
 `ChannelKind` is persisted as a numeric value in the Windows playlist cache. `Music` is appended last and every member now carries an explicit value, so existing cached channels keep their meaning.
 
 ## Known gaps
 
-- The Plex item-type behaviour is derived from the existing Windows client and has not been checked against a live Plex server
+- `type=10` for Plex artist libraries is still unconfirmed. No music library was available to test against, so only the show case above has been measured. Both use the same parameter on the same request, so this rests on Plex's metadata type numbering rather than on a second mechanism
 - `orbitalvue-artwork://` locators are generated on Apple, Android, and the TV platforms but only resolved on Windows
 
 This is a prerelease intended for personal testing. Store submission remains locked until the real product, privacy, listing, accessibility, public-site, commerce, licensing, and platform-owner review gates are complete.
