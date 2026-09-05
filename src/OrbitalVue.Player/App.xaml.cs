@@ -3,6 +3,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Threading;
 using LibVLCSharp.Shared;
+using OrbitalVue.Player.Controls;
 using Application = System.Windows.Application;
 
 namespace OrbitalVue.Player;
@@ -13,6 +14,7 @@ public partial class App : Application
     {
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += (_, args) => WriteCrashLog(args.ExceptionObject as Exception);
+        UiUsabilityService.Enable();
         Core.Initialize();
         base.OnStartup(e);
     }
