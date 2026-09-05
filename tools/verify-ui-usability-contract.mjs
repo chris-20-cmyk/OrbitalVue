@@ -22,7 +22,7 @@ const requireText = (source, text, label) => {
 
 requireText(app, "UiUsabilityService.Enable();", "startup registration");
 requireText(service, "MinimumReadableFontSize = 12d", "12px readability floor");
-requireText(service, "typeof(Control)", "Control readability class handler");
+requireText(service, "typeof(WpfControl)", "WPF Control readability class handler");
 requireText(service, "typeof(TextBlock)", "TextBlock readability class handler");
 requireText(service, "PasswordRevealAdorner", "password reveal adorner");
 requireText(service, "PasswordChanged +=", "live revealed-password refresh");
