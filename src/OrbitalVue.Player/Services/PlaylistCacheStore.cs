@@ -41,7 +41,7 @@ public sealed class PlaylistCacheStore
                 Number = channel.Number,
                 Name = channel.Name,
                 Url = channel.Url,
-                Group = channel.Group,
+                Group = channel.PersistedGroup,
                 LogoUrl = channel.LogoUrl,
                 TvgId = channel.TvgId,
                 TvgName = channel.TvgName,
@@ -54,7 +54,16 @@ public sealed class PlaylistCacheStore
                 DurationMilliseconds = channel.DurationMilliseconds,
                 ResumePositionMilliseconds = channel.ResumePositionMilliseconds,
                 IsPlayed = channel.IsPlayed,
-                Kind = channel.Kind
+                Kind = channel.Kind,
+                SourceId = channel.SourceId,
+                SourceName = channel.SourceName,
+                MediaLibraryTitle = channel.MediaLibraryTitle,
+                SeriesTitle = channel.SeriesTitle,
+                SeasonNumber = channel.SeasonNumber,
+                EpisodeNumber = channel.EpisodeNumber,
+                ReleaseYear = channel.ReleaseYear,
+                AddedAtUtc = channel.AddedAtUtc,
+                LastPlayedAtUtc = channel.LastPlayedAtUtc
             }).ToList()
         };
 
@@ -169,7 +178,16 @@ public sealed class PlaylistCacheStore
                     DurationMilliseconds = channel.DurationMilliseconds,
                     ResumePositionMilliseconds = channel.ResumePositionMilliseconds,
                     IsPlayed = channel.IsPlayed,
-                    Kind = channel.Kind
+                    Kind = channel.Kind,
+                    SourceId = channel.SourceId,
+                    SourceName = channel.SourceName,
+                    MediaLibraryTitle = channel.MediaLibraryTitle,
+                    SeriesTitle = channel.SeriesTitle,
+                    SeasonNumber = channel.SeasonNumber,
+                    EpisodeNumber = channel.EpisodeNumber,
+                    ReleaseYear = channel.ReleaseYear,
+                    AddedAtUtc = channel.AddedAtUtc,
+                    LastPlayedAtUtc = channel.LastPlayedAtUtc
                 }).ToList();
                 return new CachedPlaylist(
                     new PlaylistResult(channels, envelope.DisplayName, "encrypted local cache", envelope.LoadedAt, envelope.GuideSource),
@@ -243,5 +261,14 @@ public sealed class PlaylistCacheStore
         public long ResumePositionMilliseconds { get; set; }
         public bool IsPlayed { get; set; }
         public ChannelKind Kind { get; set; }
+        public Guid? SourceId { get; set; }
+        public string? SourceName { get; set; }
+        public string? MediaLibraryTitle { get; set; }
+        public string? SeriesTitle { get; set; }
+        public int? SeasonNumber { get; set; }
+        public int? EpisodeNumber { get; set; }
+        public int? ReleaseYear { get; set; }
+        public DateTimeOffset? AddedAtUtc { get; set; }
+        public DateTimeOffset? LastPlayedAtUtc { get; set; }
     }
 }
