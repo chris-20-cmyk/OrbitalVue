@@ -322,9 +322,12 @@ public sealed partial class MediaCenterSourceService
             .OrderByDescending(value => value.Server.IsOwned)
             .ThenBy(value => value.Server.Name, StringComparer.OrdinalIgnoreCase)
             // Plex can return the same clientIdentifier twice -- owned and shared, or multi-home.
-            // Connections are de-duplicated above; without the same here, the SingleOrDefault in
-            // ConnectDiscoveredPlexServerAsync throws "Sequence contains more than one matching
-            // element", which reaches the user as an unrelated "source could not be read".
+            // Connections are de-duplicated above; this does the same for servers, so the picker
+            // never lists one server twice and the lookup in ConnectDiscoveredPlexServerAsync stays
+            // unambiguous. That lookup used SingleOrDefault until a duplicate made it throw
+            // "Sequence contains more than one matching element", which reached the user as an
+            // unrelated "source could not be read"; it is FirstOrDefault now, so a duplicate can no
+            // longer fail a connection even if one gets past this.
             .DistinctBy(value => value.Server.ServerId, StringComparer.Ordinal)
             .ToList();
     }
