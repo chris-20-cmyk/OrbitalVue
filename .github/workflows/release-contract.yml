@@ -21,6 +21,9 @@ on:
       - "tools/verify-store-listing-readiness.mjs"
       - "tools/verify-accessibility-readiness.mjs"
       - "tools/verify-public-site-readiness.mjs"
+      - "tools/verify-orbitalvue-brand.mjs"
+      - "tools/verify-xaml-binding-modes.mjs"
+      - "tools/verify-epg-gzip-contract.mjs"
       - "site/**"
       - "tools/generate-release-readiness-report.mjs"
       - "tools/verify-apple-brand-assets.mjs"
@@ -49,7 +52,10 @@ on:
       - "contracts/fixtures/google-play.verify.*.json"
       - "contracts/fixtures/samsung-checkout.status.*.json"
       - "pnpm-lock.yaml"
+      - "src/OrbitalVue.Player/App.xaml"
       - "src/OrbitalVue.Player/App.xaml.cs"
+      - "src/OrbitalVue.Player/MainWindow.xaml"
+      - "src/OrbitalVue.Player/MainWindow.xaml.cs"
       - "src/OrbitalVue.Player/Services/**"
       - "src/OrbitalVue.Player/OrbitalVue.Player.csproj"
       - "package.json"
@@ -69,6 +75,9 @@ on:
       - "tools/verify-store-listing-readiness.mjs"
       - "tools/verify-accessibility-readiness.mjs"
       - "tools/verify-public-site-readiness.mjs"
+      - "tools/verify-orbitalvue-brand.mjs"
+      - "tools/verify-xaml-binding-modes.mjs"
+      - "tools/verify-epg-gzip-contract.mjs"
       - "site/**"
       - "tools/generate-release-readiness-report.mjs"
       - "tools/verify-apple-brand-assets.mjs"
@@ -97,7 +106,10 @@ on:
       - "contracts/fixtures/google-play.verify.*.json"
       - "contracts/fixtures/samsung-checkout.status.*.json"
       - "pnpm-lock.yaml"
+      - "src/OrbitalVue.Player/App.xaml"
       - "src/OrbitalVue.Player/App.xaml.cs"
+      - "src/OrbitalVue.Player/MainWindow.xaml"
+      - "src/OrbitalVue.Player/MainWindow.xaml.cs"
       - "src/OrbitalVue.Player/Services/**"
       - "src/OrbitalVue.Player/OrbitalVue.Player.csproj"
       - "package.json"
@@ -140,6 +152,7 @@ jobs:
           node tools/verify-privacy-readiness.mjs
           node tools/verify-orbitalvue-brand.mjs
           node tools/verify-xaml-binding-modes.mjs
+          node tools/verify-epg-gzip-contract.mjs
           node tools/verify-store-listing-readiness.mjs
           node tools/verify-accessibility-readiness.mjs
           node tools/verify-public-site-readiness.mjs
