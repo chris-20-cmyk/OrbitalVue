@@ -27,6 +27,7 @@ public enum ChannelKind
 public sealed class ChannelItem : INotifyPropertyChanged
 {
     private bool _isFavorite;
+    private string _group = "Uncategorized";
     private string? _currentProgramTitle;
     private string? _nextProgramTitle;
     private string? _currentProgramTime;
@@ -40,7 +41,30 @@ public sealed class ChannelItem : INotifyPropertyChanged
     public required int Number { get; init; }
     public required string Name { get; init; }
     public required string Url { get; init; }
-    public string Group { get; init; } = "Uncategorized";
+
+    // Media-center catalogs used to put a series title in Group, which made the top-level
+    // library browser explode into one group per show. Keep that raw value persisted for stable
+    // channel identity, but expose Source • Library to the UI once media-center metadata exists.
+    [JsonIgnore]
+    public string Group
+    {
+        get
+        {
+            if (!IsProtectedMedia || string.IsNullOrWhiteSpace(MediaLibraryTitle)) return _group;
+            return string.IsNullOrWhiteSpace(SourceName)
+                ? MediaLibraryTitle
+                : $"{SourceName} • {MediaLibraryTitle}";
+        }
+        init => _group = NormalizeGroup(value);
+    }
+
+    [JsonPropertyName("Group")]
+    public string PersistedGroup
+    {
+        get => _group;
+        init => _group = NormalizeGroup(value);
+    }
+
     public string? LogoUrl { get; init; }
     public string? TvgId { get; init; }
     public string? TvgName { get; init; }
@@ -255,8 +279,8 @@ public sealed class ChannelItem : INotifyPropertyChanged
             var queryOrFragment = endpoint.IndexOfAny(['?', '#']);
             if (queryOrFragment >= 0) endpoint = endpoint[..queryOrFragment];
             var identity = !string.IsNullOrWhiteSpace(TvgId)
-                ? $"tvg:{TvgId.Trim().ToUpperInvariant()}|name:{Name.Trim().ToUpperInvariant()}|group:{Group.Trim().ToUpperInvariant()}|endpoint:{endpoint}"
-                : $"name:{Name.Trim().ToUpperInvariant()}|group:{Group.Trim().ToUpperInvariant()}|endpoint:{endpoint}";
+                ? $"tvg:{TvgId.Trim().ToUpperInvariant()}|name:{Name.Trim().ToUpperInvariant()}|group:{_group.Trim().ToUpperInvariant()}|endpoint:{endpoint}"
+                : $"name:{Name.Trim().ToUpperInvariant()}|group:{_group.Trim().ToUpperInvariant()}|endpoint:{endpoint}";
             return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
         }
     }
@@ -266,8 +290,8 @@ public sealed class ChannelItem : INotifyPropertyChanged
         get
         {
             var identity = !string.IsNullOrWhiteSpace(TvgId)
-                ? $"tvg:{TvgId.Trim().ToUpperInvariant()}|name:{Name.Trim().ToUpperInvariant()}|group:{Group.Trim().ToUpperInvariant()}"
-                : $"name:{Name.Trim().ToUpperInvariant()}|group:{Group.Trim().ToUpperInvariant()}";
+                ? $"tvg:{TvgId.Trim().ToUpperInvariant()}|name:{Name.Trim().ToUpperInvariant()}|group:{_group.Trim().ToUpperInvariant()}"
+                : $"name:{Name.Trim().ToUpperInvariant()}|group:{_group.Trim().ToUpperInvariant()}";
             return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
         }
     }
@@ -300,6 +324,9 @@ public sealed class ChannelItem : INotifyPropertyChanged
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
+    private static string NormalizeGroup(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "Uncategorized" : value.Trim();
 
     private static string FormatMinutes(long totalMinutes)
     {

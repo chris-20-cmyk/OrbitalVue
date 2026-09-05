@@ -31,7 +31,7 @@ public sealed class DvrRecordingService : IDisposable
 
     public static string LegacyDefaultRecordingsFolder => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
-        "OrbitalVue Recordings");
+        "StreamVue Recordings");
 
     public DvrRecordingSnapshot Start(
         ChannelItem channel,
