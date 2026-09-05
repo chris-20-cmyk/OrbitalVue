@@ -24,6 +24,7 @@ on:
       - "tools/verify-orbitalvue-brand.mjs"
       - "tools/verify-xaml-binding-modes.mjs"
       - "tools/verify-epg-gzip-contract.mjs"
+      - "tools/verify-media-library-grouping.mjs"
       - "site/**"
       - "tools/generate-release-readiness-report.mjs"
       - "tools/verify-apple-brand-assets.mjs"
@@ -56,6 +57,7 @@ on:
       - "src/OrbitalVue.Player/App.xaml.cs"
       - "src/OrbitalVue.Player/MainWindow.xaml"
       - "src/OrbitalVue.Player/MainWindow.xaml.cs"
+      - "src/OrbitalVue.Player/Models/**"
       - "src/OrbitalVue.Player/Services/**"
       - "src/OrbitalVue.Player/OrbitalVue.Player.csproj"
       - "package.json"
@@ -78,6 +80,7 @@ on:
       - "tools/verify-orbitalvue-brand.mjs"
       - "tools/verify-xaml-binding-modes.mjs"
       - "tools/verify-epg-gzip-contract.mjs"
+      - "tools/verify-media-library-grouping.mjs"
       - "site/**"
       - "tools/generate-release-readiness-report.mjs"
       - "tools/verify-apple-brand-assets.mjs"
@@ -110,6 +113,7 @@ on:
       - "src/OrbitalVue.Player/App.xaml.cs"
       - "src/OrbitalVue.Player/MainWindow.xaml"
       - "src/OrbitalVue.Player/MainWindow.xaml.cs"
+      - "src/OrbitalVue.Player/Models/**"
       - "src/OrbitalVue.Player/Services/**"
       - "src/OrbitalVue.Player/OrbitalVue.Player.csproj"
       - "package.json"
@@ -153,6 +157,7 @@ jobs:
           node tools/verify-orbitalvue-brand.mjs
           node tools/verify-xaml-binding-modes.mjs
           node tools/verify-epg-gzip-contract.mjs
+          node tools/verify-media-library-grouping.mjs
           node tools/verify-store-listing-readiness.mjs
           node tools/verify-accessibility-readiness.mjs
           node tools/verify-public-site-readiness.mjs
