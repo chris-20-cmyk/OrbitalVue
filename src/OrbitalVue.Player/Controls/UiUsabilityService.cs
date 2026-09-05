@@ -3,10 +3,16 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Documents;
-using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Shapes;
 using System.Windows.Threading;
+using WpfApplication = System.Windows.Application;
+using WpfBrush = System.Windows.Media.Brush;
+using WpfBrushes = System.Windows.Media.Brushes;
+using WpfButton = System.Windows.Controls.Button;
+using WpfControl = System.Windows.Controls.Control;
+using WpfCursors = System.Windows.Input.Cursors;
+using WpfPath = System.Windows.Shapes.Path;
+using WpfSize = System.Windows.Size;
 
 namespace OrbitalVue.Player.Controls;
 
@@ -19,7 +25,7 @@ internal static class UiUsabilityService
     public static void Enable()
     {
         EventManager.RegisterClassHandler(
-            typeof(Control),
+            typeof(WpfControl),
             FrameworkElement.LoadedEvent,
             new RoutedEventHandler(Control_Loaded));
         EventManager.RegisterClassHandler(
@@ -34,7 +40,7 @@ internal static class UiUsabilityService
 
     private static void Control_Loaded(object sender, RoutedEventArgs e)
     {
-        if (sender is not Control control) return;
+        if (sender is not WpfControl control) return;
         EnsureReadableFont(control);
         if (control is PasswordBox passwordBox) QueuePasswordReveal(passwordBox);
     }
@@ -45,10 +51,10 @@ internal static class UiUsabilityService
             textBlock.SetCurrentValue(TextBlock.FontSizeProperty, MinimumReadableFontSize);
     }
 
-    private static void EnsureReadableFont(Control control)
+    private static void EnsureReadableFont(WpfControl control)
     {
         if (control.FontSize < MinimumReadableFontSize)
-            control.SetCurrentValue(Control.FontSizeProperty, MinimumReadableFontSize);
+            control.SetCurrentValue(WpfControl.FontSizeProperty, MinimumReadableFontSize);
     }
 
     private static void QueuePasswordReveal(PasswordBox passwordBox)
@@ -57,7 +63,7 @@ internal static class UiUsabilityService
         if (padding.Right < PasswordRevealButtonSpace)
         {
             passwordBox.SetCurrentValue(
-                Control.PaddingProperty,
+                WpfControl.PaddingProperty,
                 new Thickness(padding.Left, padding.Top, PasswordRevealButtonSpace, padding.Bottom));
         }
 
@@ -95,7 +101,7 @@ internal sealed class PasswordRevealAdorner : Adorner, IDisposable
     private readonly PasswordBox _passwordBox;
     private readonly Border _revealSurface;
     private readonly TextBlock _revealedText;
-    private readonly Button _toggleButton;
+    private readonly WpfButton _toggleButton;
     private bool _revealed;
     private bool _disposed;
 
@@ -122,20 +128,20 @@ internal sealed class PasswordRevealAdorner : Adorner, IDisposable
             Child = _revealedText
         };
 
-        _toggleButton = new Button
+        _toggleButton = new WpfButton
         {
             Width = 34,
             Height = 30,
             Padding = new Thickness(7),
-            Background = Brushes.Transparent,
+            Background = WpfBrushes.Transparent,
             BorderThickness = new Thickness(0),
-            Cursor = Cursors.Hand,
+            Cursor = WpfCursors.Hand,
             ToolTip = "Show password",
             Focusable = true,
             Content = CreateEyeGlyph()
         };
 
-        if (Application.Current.TryFindResource("IconButton") is Style iconStyle)
+        if (WpfApplication.Current.TryFindResource("IconButton") is Style iconStyle)
             _toggleButton.Style = iconStyle;
 
         AutomationProperties.SetName(_toggleButton, "Show password");
@@ -150,7 +156,7 @@ internal sealed class PasswordRevealAdorner : Adorner, IDisposable
 
     protected override Visual GetVisualChild(int index) => _visuals[index];
 
-    protected override Size MeasureOverride(Size constraint)
+    protected override WpfSize MeasureOverride(WpfSize constraint)
     {
         for (var index = 0; index < _visuals.Count; index++)
         {
@@ -159,7 +165,7 @@ internal sealed class PasswordRevealAdorner : Adorner, IDisposable
         return constraint;
     }
 
-    protected override Size ArrangeOverride(Size finalSize)
+    protected override WpfSize ArrangeOverride(WpfSize finalSize)
     {
         var contentWidth = Math.Max(0, finalSize.Width - ToggleWidth - 2);
         _revealSurface.Arrange(new Rect(1, 1, contentWidth, Math.Max(0, finalSize.Height - 2)));
@@ -213,15 +219,15 @@ internal sealed class PasswordRevealAdorner : Adorner, IDisposable
         _disposed = true;
     }
 
-    private static Path CreateEyeGlyph()
+    private static WpfPath CreateEyeGlyph()
     {
-        var stroke = Application.Current.TryFindResource("TextMutedBrush") as Brush ?? Brushes.LightGray;
-        return new Path
+        var stroke = WpfApplication.Current.TryFindResource("TextMutedBrush") as WpfBrush ?? WpfBrushes.LightGray;
+        return new WpfPath
         {
             Data = Geometry.Parse("M2,10 C5,5 9,3 14,3 C19,3 23,5 26,10 C23,15 19,17 14,17 C9,17 5,15 2,10 Z M14,7 C12.343,7 11,8.343 11,10 C11,11.657 12.343,13 14,13 C15.657,13 17,11.657 17,10 C17,8.343 15.657,7 14,7 Z"),
             Stroke = stroke,
             StrokeThickness = 1.5,
-            Fill = Brushes.Transparent,
+            Fill = WpfBrushes.Transparent,
             Stretch = Stretch.Uniform
         };
     }
