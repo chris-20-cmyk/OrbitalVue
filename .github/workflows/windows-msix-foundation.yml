@@ -19,6 +19,7 @@ on:
       - "tools/verify-orbitalvue-brand.mjs"
       - "tools/verify-xaml-binding-modes.mjs"
       - "tools/verify-epg-gzip-contract.mjs"
+      - "tools/verify-ui-usability-contract.mjs"
       - "packaging/windows-msix/**"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
@@ -38,6 +39,7 @@ on:
       - "tools/verify-orbitalvue-brand.mjs"
       - "tools/verify-xaml-binding-modes.mjs"
       - "tools/verify-epg-gzip-contract.mjs"
+      - "tools/verify-ui-usability-contract.mjs"
       - "packaging/windows-msix/**"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
@@ -69,6 +71,7 @@ jobs:
           node tools/verify-epg-gzip-contract.mjs
           node tools/verify-media-library-grouping.mjs
           node tools/verify-dvr-migration-contract.mjs
+          node tools/verify-ui-usability-contract.mjs
           node tools/verify-windows-plex-account-foundation.mjs
           node tools/verify-windows-media-center-progress.mjs
           node tools/verify-windows-media-center-artwork.mjs
