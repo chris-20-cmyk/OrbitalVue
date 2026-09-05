@@ -14,6 +14,9 @@ on:
       - "tools/verify-windows-plex-account-foundation.mjs"
       - "tools/verify-windows-media-center-progress.mjs"
       - "tools/verify-windows-media-center-artwork.mjs"
+      - "tools/verify-orbitalvue-brand.mjs"
+      - "tools/verify-xaml-binding-modes.mjs"
+      - "tools/verify-epg-gzip-contract.mjs"
       - "packaging/windows-msix/**"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
@@ -28,6 +31,9 @@ on:
       - "tools/verify-windows-plex-account-foundation.mjs"
       - "tools/verify-windows-media-center-progress.mjs"
       - "tools/verify-windows-media-center-artwork.mjs"
+      - "tools/verify-orbitalvue-brand.mjs"
+      - "tools/verify-xaml-binding-modes.mjs"
+      - "tools/verify-epg-gzip-contract.mjs"
       - "packaging/windows-msix/**"
       - "store/**"
       - "tools/verify-premium-store-readiness.mjs"
@@ -54,6 +60,9 @@ jobs:
       - name: Validate the locked premium and release contracts
         run: |
           node tools/verify-premium-store-readiness.mjs
+          node tools/verify-orbitalvue-brand.mjs
+          node tools/verify-xaml-binding-modes.mjs
+          node tools/verify-epg-gzip-contract.mjs
           node tools/verify-windows-plex-account-foundation.mjs
           node tools/verify-windows-media-center-progress.mjs
           node tools/verify-windows-media-center-artwork.mjs
