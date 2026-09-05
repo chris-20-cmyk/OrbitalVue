@@ -25,6 +25,7 @@ on:
       - "tools/verify-xaml-binding-modes.mjs"
       - "tools/verify-epg-gzip-contract.mjs"
       - "tools/verify-media-library-grouping.mjs"
+      - "tools/verify-dvr-migration-contract.mjs"
       - "site/**"
       - "tools/generate-release-readiness-report.mjs"
       - "tools/verify-apple-brand-assets.mjs"
@@ -81,6 +82,7 @@ on:
       - "tools/verify-xaml-binding-modes.mjs"
       - "tools/verify-epg-gzip-contract.mjs"
       - "tools/verify-media-library-grouping.mjs"
+      - "tools/verify-dvr-migration-contract.mjs"
       - "site/**"
       - "tools/generate-release-readiness-report.mjs"
       - "tools/verify-apple-brand-assets.mjs"
@@ -158,6 +160,7 @@ jobs:
           node tools/verify-xaml-binding-modes.mjs
           node tools/verify-epg-gzip-contract.mjs
           node tools/verify-media-library-grouping.mjs
+          node tools/verify-dvr-migration-contract.mjs
           node tools/verify-store-listing-readiness.mjs
           node tools/verify-accessibility-readiness.mjs
           node tools/verify-public-site-readiness.mjs
