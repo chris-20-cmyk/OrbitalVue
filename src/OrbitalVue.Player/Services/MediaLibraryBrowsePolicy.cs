@@ -9,7 +9,8 @@ public enum MediaLibraryBrowseMode
     RecentlyAdded,
     Live,
     Movies,
-    Series
+    Series,
+    Music
 }
 
 public sealed record MediaLibraryBrowseSummary(
@@ -55,6 +56,7 @@ public static class MediaLibraryBrowsePolicy
             MediaLibraryBrowseMode.Live => item.Kind == ChannelKind.Live,
             MediaLibraryBrowseMode.Movies => item.Kind == ChannelKind.Movie,
             MediaLibraryBrowseMode.Series => item.Kind == ChannelKind.Series,
+            MediaLibraryBrowseMode.Music => item.Kind == ChannelKind.Music,
             _ => false
         };
     }
