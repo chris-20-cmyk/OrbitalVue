@@ -5,6 +5,7 @@ using System.Windows.Data;
 using System.Windows.Threading;
 using OrbitalVue.Player.Models;
 using OrbitalVue.Player.Services;
+using RadioButton = System.Windows.Controls.RadioButton;
 
 namespace OrbitalVue.Player;
 
