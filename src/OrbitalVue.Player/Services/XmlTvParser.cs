@@ -120,11 +120,29 @@ public sealed class XmlTvParser
             pair => pair.Key,
             pair => (IReadOnlyList<EpgProgram>)pair.Value.OrderBy(programme => programme.Start).ToList(),
             StringComparer.Ordinal);
-        if (sorted.Count == 0)
+
+        if (xmlTvChannels == 0 || parsedProgrammes == 0)
             throw new InvalidDataException(
-                $"{displayName} contained no current guide programmes matching this playlist " +
-                $"({xmlTvChannels:N0} guide channels, {acceptedChannelIds.Count:N0} channel matches, " +
-                $"{parsedProgrammes:N0} programmes, {programmesInWindow:N0} in the current window).");
+                $"{displayName} did not contain usable XMLTV channel/programme data " +
+                $"({xmlTvChannels:N0} guide channels, {parsedProgrammes:N0} programmes).");
+
+        if (programmesInWindow == 0)
+            throw new InvalidDataException(
+                $"{displayName} contained XMLTV data, but no programmes overlapped the current guide window " +
+                $"({xmlTvChannels:N0} guide channels, {parsedProgrammes:N0} programmes). The feed may be stale.");
+
+        if (sorted.Count == 0)
+        {
+            progress?.Report(new PlaylistProgress(
+                0,
+                $"Guide downloaded — no automatic channel matches yet • {channelCatalog.Count:N0} XMLTV channels available for mapping"));
+            return new EpgSchedule(
+                new Dictionary<string, IReadOnlyList<EpgProgram>>(StringComparer.Ordinal),
+                aliases,
+                displayName,
+                DateTimeOffset.UtcNow,
+                channelCatalog);
+        }
 
         progress?.Report(new PlaylistProgress(matchedProgrammes, $"Guide ready — {matchedProgrammes:N0} programmes"));
         return new EpgSchedule(sorted, aliases, displayName, DateTimeOffset.UtcNow, channelCatalog);

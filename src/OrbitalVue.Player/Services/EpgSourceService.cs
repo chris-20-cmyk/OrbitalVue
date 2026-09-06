@@ -10,6 +10,7 @@ namespace OrbitalVue.Player.Services;
 public sealed class EpgSourceService
 {
     private static readonly HttpClient HttpClient = CreateHttpClient();
+    private static readonly Uri UsMergedFallback = new("https://vcicio.github.io/US-EPG/merged_epg.xml.gz");
     private readonly XmlTvParser _parser = new();
 
     public Task<EpgSchedule> LoadAsync(
@@ -37,13 +38,53 @@ public sealed class EpgSourceService
         if (!Uri.TryCreate(source, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
             throw new ArgumentException("Enter a complete XMLTV file path or HTTP/HTTPS address.", nameof(source));
 
-        progress?.Report(new PlaylistProgress(0, "Connecting to TV guide provider…"));
+        try
+        {
+            return await LoadHttpSourceAsync(uri, channels, additionalChannelIds, progress, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception primaryFailure) when (ShouldTryUsFallback(uri))
+        {
+            progress?.Report(new PlaylistProgress(0, "Primary US guide source failed — trying resilient merged fallback…"));
+            try
+            {
+                return await LoadHttpSourceAsync(UsMergedFallback, channels, additionalChannelIds, progress, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception fallbackFailure)
+            {
+                throw new InvalidDataException(
+                    $"The primary XMLTV source and the resilient US fallback both failed. Primary: {primaryFailure.Message} Fallback: {fallbackFailure.Message}",
+                    new AggregateException(primaryFailure, fallbackFailure));
+            }
+        }
+    }
+
+    private async Task<EpgSchedule> LoadHttpSourceAsync(
+        Uri uri,
+        IReadOnlyList<ChannelItem> channels,
+        IReadOnlyCollection<string>? additionalChannelIds,
+        IProgress<PlaylistProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        progress?.Report(new PlaylistProgress(0, $"Connecting to TV guide provider • {uri.Host}…"));
         using var response = await HttpClient.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
         await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
         await using var responseContent = await WrapCompressionByHeaderAsync(responseStream, cancellationToken);
         return await _parser.ParseAsync(responseContent, uri.Host, channels, additionalChannelIds, progress, cancellationToken);
     }
+
+    private static bool ShouldTryUsFallback(Uri source) =>
+        !source.Equals(UsMergedFallback) &&
+        source.Host.Equals("epgshare01.online", StringComparison.OrdinalIgnoreCase) &&
+        source.AbsolutePath.Contains("epg_ripper_US", StringComparison.OrdinalIgnoreCase);
 
     private static Stream WrapCompression(Stream stream, string source) =>
         source.EndsWith(".gz", StringComparison.OrdinalIgnoreCase)
