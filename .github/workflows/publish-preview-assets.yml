@@ -6,11 +6,11 @@ on:
       release_tag:
         description: Existing draft release tag
         required: true
-        default: v5.8.0-alpha.5
+        default: v5.8.0-alpha.7
       package_version:
         description: Velopack package version
         required: true
-        default: 5.8.0-alpha.5
+        default: 5.8.0-alpha.7
       base_release_tag:
         description: Previous release containing the base full package (blank to skip delta)
         required: false
@@ -45,16 +45,35 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Validate the requested release version
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_TAG -cne "v$($env:PACKAGE_VERSION)") {
+            throw 'The release tag must match the requested package version.'
+          }
+          if ($env:PACKAGE_VERSION -notmatch '^(\d+\.\d+\.\d+)-(?:alpha|beta|rc)\.(\d+)$') {
+            throw 'Use a numbered alpha, beta, or rc preview version.'
+          }
+          "PREVIEW_FILE_VERSION=$($Matches[1]).$($Matches[2])" >> $env:GITHUB_ENV
+          if ([bool]$env:BASE_RELEASE_TAG -ne [bool]$env:BASE_PACKAGE_NAME) {
+            throw 'Provide both the base release tag and package filename, or neither.'
+          }
+
       - name: Restore dependencies
         run: dotnet restore OrbitalVue.Native.slnx
 
       - name: Verify the release
         shell: pwsh
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           node tools/verify-premium-store-readiness.mjs
           node tools/verify-windows-plex-account-foundation.mjs
           node tools/verify-windows-media-center-progress.mjs
           node tools/verify-windows-media-center-artwork.mjs
+          node tools/verify-xaml-binding-modes.mjs
+          node tools/verify-epg-gzip-contract.mjs
+          node tools/verify-ui-usability-contract.mjs
+          node tools/verify-media-library-browse-hierarchy.mjs
           dotnet build OrbitalVue.Native.slnx -c Release --no-restore
           dotnet restore src/OrbitalVue.Player/OrbitalVue.Player.csproj -p:OrbitalVueDistributionMode=Store
           dotnet build src/OrbitalVue.Player/OrbitalVue.Player.csproj -c Release --no-restore -p:OrbitalVueDistributionMode=Store
@@ -63,8 +82,29 @@ jobs:
           dotnet run --project tools/OrbitalVue.FeatureProbe/OrbitalVue.FeatureProbe.csproj -c Release --no-build
           dotnet run --project tools/OrbitalVue.PlaylistProbe/OrbitalVue.PlaylistProbe.csproj -c Release --no-build -- --routing-scale 70000
 
+      - name: Verify populated guide timelines render in WPF
+        shell: pwsh
+        run: >-
+          dotnet run --project tools/OrbitalVue.FeatureProbe/OrbitalVue.FeatureProbe.csproj -c Release --no-build --
+          --guide-render-self-test artifacts/guide-render
+
+      - name: Upload guide rendering proof
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: orbitalvue-preview-guide-render-proof
+          if-no-files-found: ignore
+          retention-days: 14
+          path: artifacts/guide-render/
+
       - name: Publish the Windows application
-        run: dotnet publish src/OrbitalVue.Player/OrbitalVue.Player.csproj -c Release -r win-x64 --self-contained true --no-restore -o artifacts/orbitalvue-publish
+        shell: pwsh
+        run: |
+          $sourceCommit = git rev-parse HEAD
+          dotnet publish src/OrbitalVue.Player/OrbitalVue.Player.csproj -c Release -r win-x64 --self-contained true --no-restore -o artifacts/orbitalvue-publish `
+            "-p:Version=$env:PACKAGE_VERSION" "-p:FileVersion=$env:PREVIEW_FILE_VERSION" "-p:SourceRevisionId=$sourceCommit"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows application publish failed.' }
+          ./tools/verify-windows-preview-assets.ps1 -PublishDirectory artifacts/orbitalvue-publish -PackageVersion $env:PACKAGE_VERSION -SourceCommit $sourceCommit
 
       - name: Install Velopack
         run: dotnet tool install vpk --version 1.2.0 --tool-path .tools
@@ -88,6 +128,17 @@ jobs:
             --releaseNotes RELEASE_NOTES.md `
             --outputDir $releaseDirectory `
             --runtime win-x64
+          if ($LASTEXITCODE -ne 0) { throw 'Velopack packaging failed.' }
+
+      - name: Verify package versions, contents, and update manifests
+        shell: pwsh
+        run: >-
+          ./tools/verify-windows-preview-assets.ps1
+          -PublishDirectory artifacts/orbitalvue-publish
+          -PackageVersion $env:PACKAGE_VERSION
+          -SourceCommit (git rev-parse HEAD)
+          -ReleaseDirectory artifacts/orbitalvue-releases
+          -RequireDelta:([bool]$env:BASE_PACKAGE_NAME)
 
       - name: Prove the incremental update reconstructs the full package
         if: inputs.base_package_name != ''
@@ -99,6 +150,7 @@ jobs:
           $fullPackage = Join-Path $releaseDirectory "Chris.OrbitalVue-$($env:PACKAGE_VERSION)-full.nupkg"
           $reconstructed = Join-Path $PWD 'artifacts/reconstructed-full.nupkg'
           .\.tools\vpk.exe delta patch --base $basePackage --patch $deltaPackage --output $reconstructed
+          if ($LASTEXITCODE -ne 0) { throw 'Delta reconstruction failed.' }
           $expected = (Get-FileHash -Algorithm SHA256 -LiteralPath $fullPackage).Hash
           $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $reconstructed).Hash
           if ($expected -ne $actual) {

@@ -1,4 +1,16 @@
-# OrbitalVue 5.8.0 Music Libraries and OrbitalVue Identity
+# OrbitalVue 5.8.0-alpha.7 — Windows TV Guide rendering
+
+## Changes in alpha.7
+
+- Includes the merged PR #20 guide rendering change: channel and programme panes receive independent concrete filtered lists, and the empty-state overlay follows the filtered model row count. Removes the periodic rendering recovery workaround.
+- Preserves guide search, category filters, manual mappings, unmatched placeholders, timeline navigation, synchronized scrolling, and Now/Next mode.
+- Includes the merged PR #18 Plex and Emby library browsing improvements.
+- Corrects the Windows application version to match the alpha.7 installer and update package. Release packaging now verifies the application version, source commit, package contents, and update manifests before upload.
+- Runs the WPF guide rendering smoke test in the preview publishing workflow. Automated rendering checks are separate from validating a complete installed-app guide refresh with a live source.
+
+Existing `Chris.OrbitalVue` installations can update in place. The alpha.6 full package is retained as the base for the incremental alpha.7 update.
+
+## Earlier 5.8 changes
 
 OrbitalVue 5.8 makes Plex and Emby music libraries playable on every platform, and completes the rename from StreamVue down to the Windows binary, data directory, and update identity.
 
@@ -69,9 +81,9 @@ shipped in 5.6 and 5.7. A new check, `tools/verify-xaml-binding-modes.mjs`, now 
 the build if any binding onto a two-way-by-default property omits an explicit `Mode`,
 or points a `Mode=TwoWay` at a property with no setter.
 
-## This build does not update in place
+## Upgrading an older StreamVue installation
 
-The Windows update identity changed from `Chris.StreamVue` to `Chris.OrbitalVue`, so an existing personal installation will **not** offer this as an update.
+The Windows update identity changed from `Chris.StreamVue` to `Chris.OrbitalVue`. The following migration steps apply to older StreamVue installations; current OrbitalVue installations keep the same update identity and data directory.
 
 - Uninstall the previous build, then install `Chris.OrbitalVue-win-Setup.exe` from this release
 - Application data moves from `%LocalAppData%\StreamVue` to `%LocalAppData%\OrbitalVue`, so playlists, guide sources, and Plex/Emby server logins must be entered again
