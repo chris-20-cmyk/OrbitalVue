@@ -8,6 +8,9 @@ using OrbitalVue.Player.Models;
 using OrbitalVue.Player.Playback;
 using OrbitalVue.Player.Services;
 
+if (args is ["--guide-render-self-test", ..])
+    return GuideTimelineRenderProbe.Run(args.ElementAtOrDefault(1));
+
 if (args is ["--cast-shortcut-self-test"])
 {
     try
