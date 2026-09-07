@@ -117,6 +117,24 @@ public sealed class ChannelItem : INotifyPropertyChanged
         }
     }
 
+    // These properties are presentation-only. They deliberately do not participate in StableKey
+    // or GuideMappingKey, so changing the media-center browser cannot invalidate cached identity.
+    [JsonIgnore]
+    public string SeriesBrowseGroup => Kind == ChannelKind.Series
+        ? string.IsNullOrWhiteSpace(SeriesTitle) ? "Other series" : SeriesTitle.Trim()
+        : Group;
+
+    [JsonIgnore]
+    public string? SeriesEpisodeLabel => Kind != ChannelKind.Series
+        ? null
+        : SeasonNumber is int season && EpisodeNumber is int episode
+            ? $"S{season:00}E{episode:00}"
+            : SeasonNumber is int standaloneSeason
+                ? $"Season {standaloneSeason}"
+                : EpisodeNumber is int standaloneEpisode
+                    ? $"Episode {standaloneEpisode}"
+                    : null;
+
     public void UpdateMediaPlaybackProgress(
         long positionMilliseconds,
         long durationMilliseconds,
@@ -152,9 +170,16 @@ public sealed class ChannelItem : INotifyPropertyChanged
         get
         {
             if (!IsProtectedMedia) return null;
-            var parts = new List<string>(3);
-            if (Kind == ChannelKind.Series && !string.IsNullOrWhiteSpace(SeriesTitle)) parts.Add(SeriesTitle);
-            else if (!string.IsNullOrWhiteSpace(MediaLibraryTitle)) parts.Add(MediaLibraryTitle);
+            var parts = new List<string>(4);
+            if (Kind == ChannelKind.Series)
+            {
+                if (!string.IsNullOrWhiteSpace(SeriesTitle)) parts.Add(SeriesTitle);
+                if (!string.IsNullOrWhiteSpace(SeriesEpisodeLabel)) parts.Add(SeriesEpisodeLabel);
+            }
+            else if (!string.IsNullOrWhiteSpace(MediaLibraryTitle))
+            {
+                parts.Add(MediaLibraryTitle);
+            }
             if (ReleaseYear is > 1800 and < 3000) parts.Add(ReleaseYear.Value.ToString());
             if (DurationMilliseconds > 0) parts.Add(FormatDuration(DurationMilliseconds));
             return parts.Count == 0 ? Group : string.Join(" • ", parts);
@@ -318,7 +343,7 @@ public sealed class ChannelItem : INotifyPropertyChanged
     };
 
     public string SearchText =>
-        $"{Name}\n{Group}\n{TvgName}\n{SourceName}\n{MediaLibraryTitle}\n{SeriesTitle}\n{ReleaseYear}".ToUpperInvariant();
+        $"{Name}\n{Group}\n{TvgName}\n{SourceName}\n{MediaLibraryTitle}\n{SeriesTitle}\n{SeriesEpisodeLabel}\n{ReleaseYear}".ToUpperInvariant();
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
