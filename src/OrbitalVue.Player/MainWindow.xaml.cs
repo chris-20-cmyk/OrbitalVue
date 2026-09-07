@@ -97,9 +97,7 @@ public partial class MainWindow : Window
     private ChannelItem? _previousChannel;
     private ProgramReminder? _activeReminder;
     private EpgSchedule? _guideSchedule;
-    private ICollectionView? _guideView;
     private IReadOnlyList<GuideChannelRow> _guideRows = [];
-    private ICollectionView? _guideTimelineView;
     private IReadOnlyList<GuideTimelineRow> _guideTimelineRows = [];
     private ICollectionView? _mappingCandidateView;
     private IReadOnlyList<EpgChannelOption> _mappingCandidates = [];
@@ -1728,7 +1726,7 @@ public partial class MainWindow : Window
             {
                 GuideStatusText.Text = "No XMLTV source was advertised. Choose a guide source to add listings.";
                 GuideCoverageText.Text = "Guide source needed";
-                GuideEmptyState.Visibility = Visibility.Visible;
+                RefreshGuideViews();
                 return;
             }
 
@@ -1823,7 +1821,7 @@ public partial class MainWindow : Window
             {
                 GuideStatusText.Text = $"Guide unavailable • {SafeGuideErrorMessage(exception)}";
                 GuideCoverageText.Text = "No listings loaded";
-                GuideEmptyState.Visibility = Visibility.Visible;
+                RefreshGuideViews();
                 FooterStatusText.Text = "TV guide refresh needs attention";
             }
         }
@@ -1844,11 +1842,9 @@ public partial class MainWindow : Window
             .Where(channel => channel.Kind == ChannelKind.Live)
             .Select(channel => BuildGuideRow(channel, schedule, now))
             .ToList();
-        _guideView = CollectionViewSource.GetDefaultView(_guideRows);
-        _guideView.Filter = FilterGuideRow;
-        GuideList.ItemsSource = _guideView;
         RebuildGuideTimeline();
         RefreshGuideViews();
+        UpdateGuideCoveragePresentation();
         var generatedSchedules = MaterializeSeriesRecordingRules();
         if (generatedSchedules > 0)
             _ = _settingsStore.SaveAsync(_settings);
@@ -1915,8 +1911,6 @@ public partial class MainWindow : Window
         if (_guideSchedule is null)
         {
             _guideTimelineRows = [];
-            GuideTimelineChannels.ItemsSource = null;
-            GuideTimelineRows.ItemsSource = null;
             return;
         }
 
@@ -1990,11 +1984,6 @@ public partial class MainWindow : Window
                     mappingStatus);
             })
             .ToList();
-
-        _guideTimelineView = CollectionViewSource.GetDefaultView(_guideTimelineRows);
-        _guideTimelineView.Filter = FilterGuideTimelineRow;
-        GuideTimelineChannels.ItemsSource = _guideTimelineView;
-        GuideTimelineRows.ItemsSource = _guideTimelineView;
     }
 
     private bool FilterGuideTimelineRow(object item)
@@ -2029,23 +2018,35 @@ public partial class MainWindow : Window
 
     private void RefreshGuideViews()
     {
-        _guideView?.Refresh();
-        _guideTimelineView?.Refresh();
-        if (GuideTimelineChannels is null || GuideList is null || GuideEmptyState is null) return;
-        var visibleCount = _guideTimelineMode ? GuideTimelineChannels.Items.Count : GuideList.Items.Count;
+        // Search/filter events can fire while InitializeComponent is still creating the guide.
+        if (GuideTimelineChannels is null || GuideTimelineRows is null || GuideList is null || GuideEmptyState is null) return;
+
+        // Materialize the filter once and bind a separate list to each pane. Every refresh owns
+        // both item sources, so a detached/stale view cannot survive a filter or schedule update.
+        var timelineRows = _guideTimelineRows.Where(FilterGuideTimelineRow).ToList();
+        var listRows = _guideRows.Where(FilterGuideRow).ToList();
+        GuideTimelineChannels.ItemsSource = timelineRows;
+        GuideTimelineRows.ItemsSource = timelineRows.ToList();
+        GuideList.ItemsSource = listRows;
+        var visibleCount = _guideTimelineMode ? timelineRows.Count : listRows.Count;
         GuideEmptyState.Visibility = visibleCount == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void SetGuideReadyStatus(EpgSchedule schedule, string sourceLabel)
+    private void UpdateGuideCoveragePresentation()
     {
         var liveChannels = _channels.Count(channel => channel.Kind == ChannelKind.Live);
         var matched = _channels.Count(channel => channel.Kind == ChannelKind.Live && GetGuideProgrammes(channel).Count > 0);
         var percentage = liveChannels == 0 ? 0 : matched * 100d / liveChannels;
-        GuideStatusText.Text = $"Updated {schedule.LoadedAt.ToLocalTime():h:mm tt} from {sourceLabel} • {schedule.ProgramCount:N0} programmes";
         var manualCount = _guideMappings.Count(mapping => _channels.Any(channel => channel.GuideMappingKey == mapping.Key));
         GuideCoverageText.Text = manualCount > 0
-            ? $"{matched:N0}/{liveChannels:N0} matched • {percentage:0}% • {manualCount:N0} manual"
-            : $"{matched:N0}/{liveChannels:N0} matched • {percentage:0}%";
+            ? $"{matched:N0}/{liveChannels:N0} matched • {percentage:0}% coverage • {manualCount:N0} manual"
+            : $"{matched:N0}/{liveChannels:N0} matched • {percentage:0}% coverage";
+    }
+
+    private void SetGuideReadyStatus(EpgSchedule schedule, string sourceLabel)
+    {
+        var matched = _channels.Count(channel => channel.Kind == ChannelKind.Live && GetGuideProgrammes(channel).Count > 0);
+        GuideStatusText.Text = $"Updated {schedule.LoadedAt.ToLocalTime():h:mm tt} from {sourceLabel} • {schedule.ProgramCount:N0} programmes";
         FooterStatusDot.Fill = LiveBrush;
         FooterStatusText.Text = $"TV guide ready • {matched:N0} matched live channels";
     }
@@ -2276,15 +2277,18 @@ public partial class MainWindow : Window
         if (_guideSchedule is null) throw new InvalidOperationException("The guide smoke test did not load a schedule.");
 
         GuideNavigation.IsChecked = true;
+        SetGuideViewMode(true);
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
         await Task.Delay(500);
         CaptureWindow(capturePath);
 
         var liveChannels = playlist.Channels.Where(channel => channel.Kind == ChannelKind.Live).ToList();
         var matched = liveChannels.Count(channel => _guideSchedule.GetProgrammes(channel, _guideMappings).Count > 0);
+        var rendering = GetGuideTimelineRenderState();
         var report = new
         {
-            passed = matched > 0 && _guideSchedule.ProgramCount > 0,
+            passed = matched > 0 && _guideSchedule.ProgramCount > 0 && rendering.Passed,
+            timelineRender = rendering,
             playlist = Path.GetFileName(playlistPath),
             liveChannels = liveChannels.Count,
             matchedChannels = matched,
@@ -2317,15 +2321,18 @@ public partial class MainWindow : Window
         if (_guideSchedule is null) throw new InvalidOperationException("The guide refresh did not retain a schedule.");
 
         GuideNavigation.IsChecked = true;
+        SetGuideViewMode(true);
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
         await Task.Delay(600);
         CaptureWindow(capturePath);
 
         var liveChannels = cached.Playlist.Channels.Where(channel => channel.Kind == ChannelKind.Live).ToList();
         var matched = liveChannels.Count(channel => _guideSchedule.GetProgrammes(channel, _guideMappings).Count > 0);
+        var rendering = GetGuideTimelineRenderState();
         var report = new
         {
-            passed = matched > 0 && _guideSchedule.ProgramCount > 0 && _guideSchedule.ChannelCatalog.Count > 0,
+            passed = matched > 0 && _guideSchedule.ProgramCount > 0 && _guideSchedule.ChannelCatalog.Count > 0 && rendering.Passed,
+            timelineRender = rendering,
             playlistCache = "Windows-user encrypted",
             liveChannels = liveChannels.Count,
             matchedChannels = matched,

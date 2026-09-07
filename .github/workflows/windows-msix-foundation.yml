@@ -102,6 +102,21 @@ jobs:
           dotnet build OrbitalVue.Native.slnx -c Release --no-restore
           dotnet run --project tools/OrbitalVue.FeatureProbe/OrbitalVue.FeatureProbe.csproj -c Release --no-build
 
+      - name: Verify populated guide timelines render in WPF
+        shell: pwsh
+        run: >-
+          dotnet run --project tools/OrbitalVue.FeatureProbe/OrbitalVue.FeatureProbe.csproj -c Release --no-build --
+          --guide-render-self-test artifacts/guide-render
+
+      - name: Upload the synthetic guide rendering proof
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: orbitalvue-guide-render-proof
+          if-no-files-found: ignore
+          retention-days: 14
+          path: artifacts/guide-render/
+
       - name: Upload the package-layout proof
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v7

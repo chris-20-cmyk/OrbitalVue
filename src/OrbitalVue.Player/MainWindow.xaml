@@ -816,8 +816,9 @@
                         </Border>
 
                         <Border Grid.Row="1" Background="#0D131D" BorderBrush="#273246" BorderThickness="1,0,1,1">
-                            <ScrollViewer x:Name="GuideChannelScroll" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled" ScrollChanged="GuideChannelScroll_ScrollChanged">
+                            <ScrollViewer x:Name="GuideChannelScroll" CanContentScroll="False" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled" ScrollChanged="GuideChannelScroll_ScrollChanged">
                                 <ItemsControl x:Name="GuideTimelineChannels">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Vertical" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <Border x:Name="TimelineChannelCard" Height="76" Padding="12,0" Background="#0D131D" BorderBrush="#1D2837" BorderThickness="0,0,0,1">
@@ -844,8 +845,9 @@
                         </Border>
 
                         <Border Grid.Row="1" Grid.Column="1" Background="#0B1119" BorderBrush="#273246" BorderThickness="0,0,1,1">
-                            <ScrollViewer x:Name="GuideTimelineScroll" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Auto" ScrollChanged="GuideTimelineScroll_ScrollChanged">
+                            <ScrollViewer x:Name="GuideTimelineScroll" CanContentScroll="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Auto" ScrollChanged="GuideTimelineScroll_ScrollChanged">
                                 <ItemsControl x:Name="GuideTimelineRows">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Vertical" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <Canvas Width="{Binding TimelineWidth}" Height="76" Background="#0B1119">
