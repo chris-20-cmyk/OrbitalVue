@@ -9,6 +9,7 @@ namespace OrbitalVue.Player.Services;
 public sealed class DvrRecordingService : IDisposable
 {
     private readonly object _gate = new();
+    private readonly object _lifecycleGate = new();
     private LibVLC? _libVlc;
     private MediaPlayer? _mediaPlayer;
     private Media? _media;
@@ -106,39 +107,57 @@ public sealed class DvrRecordingService : IDisposable
 
     public DvrRecordingSnapshot Poll(DateTimeOffset now)
     {
-        lock (_gate)
+        lock (_lifecycleGate)
         {
-            if (!_snapshot.IsActive) return _snapshot;
+            string? stopMessage = null;
+            var completed = false;
+            lock (_gate)
+            {
+                if (!_snapshot.IsActive) return _snapshot;
 
-            if (!string.IsNullOrWhiteSpace(_terminalError))
-                return StopCore(completed: false, _terminalError);
+                if (!string.IsNullOrWhiteSpace(_terminalError))
+                {
+                    stopMessage = _terminalError;
+                }
+                else
+                {
+                    var bytes = ReadLength(_snapshot.OutputPath);
+                    var state = _mediaPlayer?.IsPlaying == true || bytes > 0
+                        ? DvrRecordingState.Recording
+                        : DvrRecordingState.Starting;
+                    var message = state == DvrRecordingState.Recording
+                        ? "Recording live transport stream"
+                        : "Waiting for the provider stream";
+                    _snapshot = _snapshot with { State = state, BytesWritten = bytes, Message = message };
 
-            var bytes = ReadLength(_snapshot.OutputPath);
-            var state = _mediaPlayer?.IsPlaying == true || bytes > 0
-                ? DvrRecordingState.Recording
-                : DvrRecordingState.Starting;
-            var message = state == DvrRecordingState.Recording
-                ? "Recording live transport stream"
-                : "Waiting for the provider stream";
-            _snapshot = _snapshot with { State = state, BytesWritten = bytes, Message = message };
+                    if (_snapshot.StopUtc is not null && now >= _snapshot.StopUtc.Value)
+                    {
+                        stopMessage = "Scheduled recording complete";
+                        completed = true;
+                    }
+                    else if (_snapshot.StartedUtc is not null &&
+                             now - _snapshot.StartedUtc.Value > TimeSpan.FromSeconds(45) &&
+                             state == DvrRecordingState.Starting && bytes == 0)
+                    {
+                        stopMessage = "The provider did not deliver recordable media in time";
+                    }
+                }
 
-            if (_snapshot.StopUtc is not null && now >= _snapshot.StopUtc.Value)
-                return StopCore(completed: true, "Scheduled recording complete");
+                if (stopMessage is null) return _snapshot;
+            }
 
-            if (_snapshot.StartedUtc is not null &&
-                now - _snapshot.StartedUtc.Value > TimeSpan.FromSeconds(45) &&
-                state == DvrRecordingState.Starting && bytes == 0)
-                return StopCore(completed: false, "The provider did not deliver recordable media in time");
-
-            return _snapshot;
+            return StopCore(completed, stopMessage!);
         }
     }
 
     public DvrRecordingSnapshot Stop(string message = "Recording saved")
     {
-        lock (_gate)
+        lock (_lifecycleGate)
         {
-            if (!_snapshot.IsActive) return _snapshot;
+            lock (_gate)
+            {
+                if (!_snapshot.IsActive) return _snapshot;
+            }
             return StopCore(completed: true, message);
         }
     }
@@ -272,41 +291,64 @@ public sealed class DvrRecordingService : IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
-        lock (_gate)
+        lock (_lifecycleGate)
         {
-            if (_snapshot.IsActive) StopCore(completed: true, "Recording stopped when OrbitalVue closed");
+            lock (_gate)
+            {
+                if (_disposed) return;
+            }
+
+            StopCore(completed: true, "Recording stopped when OrbitalVue closed");
+
+            LibVLC? libVlc;
+            lock (_gate)
+            {
+                if (_disposed) return;
+                libVlc = _libVlc;
+                _libVlc = null;
+                _disposed = true;
+            }
+            // Native teardown can wait for VLC's event thread. Never hold _gate while doing it.
             CleanupPlayer();
-            _libVlc?.Dispose();
-            _libVlc = null;
-            _disposed = true;
+            libVlc?.Dispose();
         }
     }
 
     private DvrRecordingSnapshot StopCore(bool completed, string message)
     {
-        var bytes = ReadLength(_snapshot.OutputPath);
-        _snapshot = _snapshot with { State = DvrRecordingState.Stopping, BytesWritten = bytes, Message = message };
-        CleanupPlayer();
-        bytes = ReadLength(_snapshot.OutputPath);
-        if (bytes == 0) DeleteEmptyOutput(_snapshot.OutputPath);
-        _snapshot = _snapshot with
+        lock (_lifecycleGate)
         {
-            State = completed && bytes > 0 ? DvrRecordingState.Completed : DvrRecordingState.Failed,
-            BytesWritten = bytes,
-            Message = completed && bytes == 0 ? "No recordable media was written" : message
-        };
-        return _snapshot;
+            string? outputPath;
+            long bytes;
+            lock (_gate)
+            {
+                if (!_snapshot.IsActive) return _snapshot;
+                outputPath = _snapshot.OutputPath;
+                bytes = ReadLength(outputPath);
+                _snapshot = _snapshot with { State = DvrRecordingState.Stopping, BytesWritten = bytes, Message = message };
+            }
+
+            CleanupPlayer();
+            bytes = ReadLength(outputPath);
+            if (bytes == 0) DeleteEmptyOutput(outputPath);
+            lock (_gate)
+            {
+                _snapshot = _snapshot with
+                {
+                    State = completed && bytes > 0 ? DvrRecordingState.Completed : DvrRecordingState.Failed,
+                    BytesWritten = bytes,
+                    Message = completed && bytes == 0 ? "No recordable media was written" : message
+                };
+                return _snapshot;
+            }
+        }
     }
 
     // These three run on VLC's event thread. None of them may WAIT on _gate.
     //
-    // Shutdown holds _gate across MediaPlayer.Stop(), and Stop() blocks until VLC's event
-    // thread drains. A handler already in flight that blocks on _gate therefore deadlocks
-    // the two threads against each other, and the app hangs with no window until the
-    // process is killed. Detaching the handlers first does not help: it cannot recall a
-    // callback that has already been entered. EndReached and EncounteredError fire exactly
-    // when a stream drops, which for live IPTV is routine, so the window is not rare.
+    // Native stop/dispose can block until VLC's event thread drains. These callbacks must
+    // never wait on _gate while teardown is in progress. EndReached and EncounteredError
+    // fire exactly when a live IPTV stream drops, which makes this ordering important.
 
     private void RecordingPlayer_Playing(object? sender, EventArgs e)
     {
