@@ -2021,10 +2021,32 @@ public partial class MainWindow : Window
         // Search/filter events can fire while InitializeComponent is still creating the guide.
         if (GuideTimelineChannels is null || GuideTimelineRows is null || GuideList is null || GuideEmptyState is null) return;
 
-        // Materialize the filter once and bind a separate list to each pane. Every refresh owns
-        // both item sources, so a detached/stale view cannot survive a filter or schedule update.
         var timelineRows = _guideTimelineRows.Where(FilterGuideTimelineRow).ToList();
         var listRows = _guideRows.Where(FilterGuideRow).ToList();
+        BindGuideViews(timelineRows, listRows);
+
+        // WPF can finish a previous ItemsControl generation after the model has been refreshed,
+        // leaving a detached control empty until another layout pass. Rebind once at render
+        // priority so the populated model cannot remain hidden behind the preparation overlay.
+        if (IsLoaded && (timelineRows.Count > 0 || listRows.Count > 0))
+            Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
+            {
+                if (GuideTimelineChannels is null || GuideTimelineRows is null || GuideList is null ||
+                    GuideEmptyState is null) return;
+                BindGuideViews(
+                    _guideTimelineRows.Where(FilterGuideTimelineRow).ToList(),
+                    _guideRows.Where(FilterGuideRow).ToList());
+            }));
+    }
+
+    private void BindGuideViews(
+        IReadOnlyList<GuideTimelineRow> timelineRows,
+        IReadOnlyList<GuideChannelRow> listRows)
+    {
+        // Clear first: this also recovers controls whose previous source was detached by WPF.
+        GuideTimelineChannels.ItemsSource = null;
+        GuideTimelineRows.ItemsSource = null;
+        GuideList.ItemsSource = null;
         GuideTimelineChannels.ItemsSource = timelineRows;
         GuideTimelineRows.ItemsSource = timelineRows.ToList();
         GuideList.ItemsSource = listRows;
