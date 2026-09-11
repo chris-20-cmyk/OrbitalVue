@@ -145,6 +145,18 @@ public sealed class EpgSchedule
                 _programsByChannel.TryGetValue(channelId, out var aliased)) return aliased;
         }
 
+        // Older encrypted caches may contain a channel catalog but no persisted aliases.
+        // Reconstruct the same ID/display-name relationship so valid cached programmes
+        // remain usable after an upgrade.
+        foreach (var catalogChannel in _channelCatalog)
+        {
+            if (!CandidateKeys(catalogChannel.Key, catalogChannel.Value)
+                    .Intersect(CandidateKeys(channel.TvgId, channel.TvgName, channel.Name), StringComparer.Ordinal)
+                    .Any()) continue;
+            if (_programsByChannel.TryGetValue(NormalizeKey(catalogChannel.Key), out var catalogProgrammes))
+                return catalogProgrammes;
+        }
+
         return [];
     }
 
