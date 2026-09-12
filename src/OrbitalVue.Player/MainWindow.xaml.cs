@@ -3652,6 +3652,8 @@ public partial class MainWindow : Window
                                   CastOverlay.Visibility == Visibility.Visible || DvrOverlay.Visibility == Visibility.Visible ||
                                   SignalRoutingOverlay.Visibility == Visibility.Visible || MappingOverlay.Visibility == Visibility.Visible;
         RefreshPlayerSurfaceVisibility();
+        if (showGuide)
+            RefreshGuideViews();
     }
 
     private void MultiviewNavigation_Checked(object sender, RoutedEventArgs e)
