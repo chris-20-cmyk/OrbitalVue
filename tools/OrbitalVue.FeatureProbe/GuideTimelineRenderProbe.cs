@@ -95,6 +95,7 @@ internal static class GuideTimelineRenderProbe
             Call(window, "SetGuideReadyStatus", schedule, "synthetic fixture");
             Call(window, "SetGuideMode", true);
             Call(window, "SetGuideViewMode", true);
+            Drain(window);
             AssertRows(window, channels, "schedule loaded before opening guide");
             Check(Find<TextBlock>(window, "GuideCoverageText").Text.Contains("81%"), "Expected 81% coverage.");
             var rows = Get<IReadOnlyList<GuideTimelineRow>>(window, "_guideTimelineRows");
@@ -110,6 +111,7 @@ internal static class GuideTimelineRenderProbe
                 "Clearing a manual mapping did not update the rows and coverage synchronously.");
             Set(window, "_guideMappings", new Dictionary<string, string> { [channels[0].GuideMappingKey] = "TEST0" });
             Call(window, "ApplyGuideSchedule", schedule);
+            Drain(window);
             AssertRows(window, channels, "manual mapping reapplied");
 
             if (artifactDirectory is not null)
@@ -211,6 +213,7 @@ internal static class GuideTimelineRenderProbe
             Find<TextBox>(window, "GuideSearchBox").Clear();
             Call(window, "ApplyGuideSchedule", schedule);
             Call(window, "SetGuideViewMode", true);
+            Drain(window);
             AssertRows(window, channels, "schedule refresh while in Now/Next");
 
             if (artifactDirectory is not null)
@@ -234,16 +237,8 @@ internal static class GuideTimelineRenderProbe
         Drain(window);
         var channels = Find<ItemsControl>(window, "GuideTimelineChannels");
         var programmes = Find<ItemsControl>(window, "GuideTimelineRows");
-        
-        // Force complete rendering of the visual tree before accessing items
-        window.UpdateLayout();
-        Drain(window);
-        
-        var actualChannels = channels.Items.Cast<GuideTimelineRow>().Select(row => row.Channel).ToList();
-        var actualProgrammes = programmes.Items.Cast<GuideTimelineRow>().Select(row => row.Channel).ToList();
-        
-        Check(actualChannels.SequenceEqual(expected), $"{scenario}: channel rows differ. Expected {expected.Count}, got {actualChannels.Count}.");
-        Check(actualProgrammes.SequenceEqual(expected), $"{scenario}: programme rows differ. Expected {expected.Count}, got {actualProgrammes.Count}.");
+        Check(channels.Items.Cast<GuideTimelineRow>().Select(row => row.Channel).SequenceEqual(expected), $"{scenario}: channel rows differ.");
+        Check(programmes.Items.Cast<GuideTimelineRow>().Select(row => row.Channel).SequenceEqual(expected), $"{scenario}: programme rows differ.");
         Check(Find<FrameworkElement>(window, "GuideEmptyState").Visibility == (expected.Count == 0 ? Visibility.Visible : Visibility.Collapsed),
             $"{scenario}: empty-state visibility disagrees with the filtered model.");
         if (expected.Count > 0)
