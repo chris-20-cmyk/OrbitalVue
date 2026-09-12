@@ -130,6 +130,8 @@ public partial class MainWindow : Window
     private SessionRecoverySnapshot? _pendingSessionRecovery;
     private DateTimeOffset _lastSessionHeartbeatUtc = DateTimeOffset.MinValue;
     private bool _synchronizingGuideScroll;
+    private int _guidePresentationVersion;
+    private int _appliedGuidePresentationVersion;
     private string _trackControlSignature = string.Empty;
     private string _learnedProfileSignature = string.Empty;
     private string? _selectedSignalRouteKey;
@@ -1837,38 +1839,103 @@ public partial class MainWindow : Window
     private void ApplyGuideSchedule(EpgSchedule schedule)
     {
         _guideSchedule = schedule;
+        var version = Interlocked.Increment(ref _guidePresentationVersion);
+        var channels = _channels.ToArray();
+        var mappings = _guideMappings;
         var now = DateTimeOffset.UtcNow;
-        foreach (var channel in _channels)
-            channel.ApplyGuide(channel.Kind == ChannelKind.Live ? GetGuideNowNext(channel, now) : null);
+        var windowStart = _guideWindowStart;
+        _ = Task.Run(() => BuildGuidePresentation(channels, schedule, mappings, windowStart, now), CancellationToken.None)
+            .ContinueWith(task =>
+            {
+                if (task.IsCanceled || version != Volatile.Read(ref _guidePresentationVersion)) return;
+                Dispatcher.BeginInvoke(DispatcherPriority.DataBind, new Action(() =>
+                {
+                    if (version != Volatile.Read(ref _guidePresentationVersion)) return;
+                    if (task.IsFaulted)
+                    {
+                        GuideStatusText.Text = $"Guide presentation failed • {SafeGuideErrorMessage(task.Exception?.GetBaseException() ?? new InvalidOperationException())}";
+                        return;
+                    }
+                    ApplyGuidePresentation(schedule, channels, task.Result, now, version);
+                }));
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    }
 
-        _guideRows = _channels
-            .Where(channel => channel.Kind == ChannelKind.Live)
-            .Select(channel => BuildGuideRow(channel, schedule, now))
-            .ToList();
-        RebuildGuideTimeline();
+    private sealed record GuidePresentation(
+        IReadOnlyList<GuideChannelRow> Rows,
+        IReadOnlyList<GuideTimelineRow> TimelineRows,
+        int MatchedChannels,
+        IReadOnlyDictionary<string, EpgNowNext> NowNextByChannel);
+
+    private GuidePresentation BuildGuidePresentation(
+        IReadOnlyList<ChannelItem> channels,
+        EpgSchedule schedule,
+        IReadOnlyDictionary<string, string> mappings,
+        DateTimeOffset windowStart,
+        DateTimeOffset now)
+    {
+        var liveChannels = channels.Where(channel => channel.Kind == ChannelKind.Live).ToList();
+        var nowNextByChannel = liveChannels.ToDictionary(
+            channel => channel.StableKey,
+            channel => SmartSignalRoutingPolicy.GetNowNext(
+                GetGuideProgrammes(channel, schedule, mappings), now),
+            StringComparer.OrdinalIgnoreCase);
+        var rows = liveChannels.Select(channel => BuildGuideRow(channel, schedule, mappings, now)).ToList();
+        var timelineRows = BuildGuideTimelineRows(liveChannels, schedule, mappings, windowStart, now);
+        return new GuidePresentation(rows, timelineRows, rows.Count(row => row.HasSchedule), nowNextByChannel);
+    }
+
+    private void ApplyGuidePresentation(
+        EpgSchedule schedule,
+        IReadOnlyList<ChannelItem> channels,
+        GuidePresentation presentation,
+        DateTimeOffset now,
+        int version)
+    {
+        foreach (var channel in channels)
+        {
+            var nowNext = presentation.NowNextByChannel.TryGetValue(channel.StableKey, out var value)
+                ? value
+                : null;
+            channel.ApplyGuide(channel.Kind == ChannelKind.Live ? nowNext : null);
+        }
+
+        _guideRows = presentation.Rows;
+        _guideTimelineRows = presentation.TimelineRows;
         RefreshGuideViews();
-        UpdateGuideCoveragePresentation();
+        UpdateGuideCoveragePresentation(presentation.MatchedChannels, channels.Count(channel => channel.Kind == ChannelKind.Live));
         var generatedSchedules = MaterializeSeriesRecordingRules();
         if (generatedSchedules > 0)
             _ = _settingsStore.SaveAsync(_settings);
         _lastGuidePresentationUpdate = now;
+        Volatile.Write(ref _appliedGuidePresentationVersion, version);
         UpdateCurrentGuide(_currentChannel);
     }
 
-    private IReadOnlyList<EpgProgram> GetGuideProgrammes(ChannelItem channel)
+    private IReadOnlyList<EpgProgram> GetGuideProgrammes(ChannelItem channel) =>
+        GetGuideProgrammes(channel, _guideSchedule, _guideMappings);
+
+    private IReadOnlyList<EpgProgram> GetGuideProgrammes(
+        ChannelItem channel,
+        EpgSchedule? schedule,
+        IReadOnlyDictionary<string, string> mappings)
     {
-        if (_guideSchedule is null) return [];
+        if (schedule is null) return [];
         var feeds = GetSignalRoute(channel)?.Feeds ?? [channel];
         return SmartSignalRoutingPolicy.MergeProgrammes(
-            feeds.Select(feed => _guideSchedule.GetProgrammes(feed, _guideMappings)));
+            feeds.Select(feed => schedule.GetProgrammes(feed, mappings)));
     }
 
     private EpgNowNext GetGuideNowNext(ChannelItem channel, DateTimeOffset now) =>
         SmartSignalRoutingPolicy.GetNowNext(GetGuideProgrammes(channel), now);
 
-    private GuideChannelRow BuildGuideRow(ChannelItem channel, EpgSchedule schedule, DateTimeOffset now)
+    private GuideChannelRow BuildGuideRow(
+        ChannelItem channel,
+        EpgSchedule schedule,
+        IReadOnlyDictionary<string, string> mappings,
+        DateTimeOffset now)
     {
-        var programmes = GetGuideProgrammes(channel);
+        var programmes = GetGuideProgrammes(channel, schedule, mappings);
         var nowNext = SmartSignalRoutingPolicy.GetNowNext(programmes, now);
         var current = nowNext.Current;
         var next = nowNext.Next;
@@ -1909,52 +1976,29 @@ public partial class MainWindow : Window
                row.NextTitle.Contains(search, StringComparison.OrdinalIgnoreCase);
     }
 
-    private void RebuildGuideTimeline()
+    private IReadOnlyList<GuideTimelineRow> BuildGuideTimelineRows(
+        IReadOnlyList<ChannelItem> channels,
+        EpgSchedule schedule,
+        IReadOnlyDictionary<string, string> mappings,
+        DateTimeOffset windowStart,
+        DateTimeOffset now)
     {
-        if (_guideSchedule is null)
-        {
-            _guideTimelineRows = [];
-            return;
-        }
-
-        var windowEnd = _guideWindowStart.AddMinutes(GuideWindowMinutes);
-        var now = DateTimeOffset.UtcNow;
+        var windowEnd = windowStart.AddMinutes(GuideWindowMinutes);
         var timelineWidth = GuideWindowMinutes * GuidePixelsPerMinute;
-        var nowMarkerLeft = (now - _guideWindowStart).TotalMinutes * GuidePixelsPerMinute;
+        var nowMarkerLeft = (now - windowStart).TotalMinutes * GuidePixelsPerMinute;
         var showNowMarker = nowMarkerLeft >= 0 && nowMarkerLeft <= timelineWidth;
 
-        var markers = new List<GuideTimeMarker>();
-        for (var minute = 0; minute < GuideWindowMinutes; minute += 30)
-        {
-            var markerTime = _guideWindowStart.AddMinutes(minute).ToLocalTime();
-            markers.Add(new GuideTimeMarker(
-                minute * GuidePixelsPerMinute,
-                30 * GuidePixelsPerMinute,
-                markerTime.ToString("h:mm tt"),
-                markerTime.ToString("ddd MMM d"),
-                markerTime.Minute == 0));
-        }
-
-        GuideTimeHeader.Width = timelineWidth;
-        GuideTimeHeader.ItemsSource = markers;
-        var localStart = _guideWindowStart.ToLocalTime();
-        var localEnd = windowEnd.ToLocalTime();
-        GuideWindowText.Text = localStart.Date == localEnd.Date
-            ? $"{localStart:ddd, MMM d}  •  {localStart:h:mm tt} – {localEnd:h:mm tt}"
-            : $"{localStart:ddd h:mm tt} – {localEnd:ddd h:mm tt}";
-
-        _guideTimelineRows = _channels
-            .Where(channel => channel.Kind == ChannelKind.Live)
+        return channels
             .Select(channel =>
             {
-                var programmes = GetGuideProgrammes(channel);
+                var programmes = GetGuideProgrammes(channel, schedule, mappings);
                 var blocks = programmes
-                    .Where(programme => programme.Stop > _guideWindowStart && programme.Start < windowEnd)
+                    .Where(programme => programme.Stop > windowStart && programme.Start < windowEnd)
                     .Select(programme =>
                     {
-                        var clippedStart = programme.Start < _guideWindowStart ? _guideWindowStart : programme.Start;
+                        var clippedStart = programme.Start < windowStart ? windowStart : programme.Start;
                         var clippedStop = programme.Stop > windowEnd ? windowEnd : programme.Stop;
-                        var left = (clippedStart - _guideWindowStart).TotalMinutes * GuidePixelsPerMinute;
+                        var left = (clippedStart - windowStart).TotalMinutes * GuidePixelsPerMinute;
                         var width = Math.Max(28, (clippedStop - clippedStart).TotalMinutes * GuidePixelsPerMinute - 3);
                         return new GuideProgrammeBlock(
                             channel,
@@ -1975,7 +2019,7 @@ public partial class MainWindow : Window
                 }
 
                 var mappingStatus = hasSchedule
-                    ? _guideMappings.ContainsKey(channel.GuideMappingKey) ? "MANUAL MATCH" : "GUIDE READY"
+                    ? mappings.ContainsKey(channel.GuideMappingKey) ? "MANUAL MATCH" : "GUIDE READY"
                     : IsTemporaryEventFeed(channel) ? "EVENT FEED" : "MAP LISTING";
                 return new GuideTimelineRow(
                     channel,
@@ -1987,6 +2031,37 @@ public partial class MainWindow : Window
                     mappingStatus);
             })
             .ToList();
+    }
+
+    private void RebuildGuideTimeline()
+    {
+        if (_guideSchedule is null)
+        {
+            _guideTimelineRows = [];
+            return;
+        }
+
+        var timelineWidth = GuideWindowMinutes * GuidePixelsPerMinute;
+        var markers = Enumerable.Range(0, GuideWindowMinutes / 30)
+            .Select(index =>
+            {
+                var markerTime = _guideWindowStart.AddMinutes(index * 30).ToLocalTime();
+                return new GuideTimeMarker(index * 30 * GuidePixelsPerMinute, 30 * GuidePixelsPerMinute,
+                    markerTime.ToString("h:mm tt"), markerTime.ToString("ddd MMM d"), markerTime.Minute == 0);
+            }).ToList();
+        GuideTimeHeader.Width = timelineWidth;
+        GuideTimeHeader.ItemsSource = markers;
+        var localStart = _guideWindowStart.ToLocalTime();
+        var localEnd = _guideWindowStart.AddMinutes(GuideWindowMinutes).ToLocalTime();
+        GuideWindowText.Text = localStart.Date == localEnd.Date
+            ? $"{localStart:ddd, MMM d}  •  {localStart:h:mm tt} – {localEnd:h:mm tt}"
+            : $"{localStart:ddd h:mm tt} – {localEnd:ddd h:mm tt}";
+        _guideTimelineRows = BuildGuideTimelineRows(
+            _channels.Where(channel => channel.Kind == ChannelKind.Live).ToList(),
+            _guideSchedule,
+            _guideMappings,
+            _guideWindowStart,
+            DateTimeOffset.UtcNow);
     }
 
     private bool FilterGuideTimelineRow(object item)
@@ -2027,19 +2102,6 @@ public partial class MainWindow : Window
         var timelineRows = _guideTimelineRows.Where(FilterGuideTimelineRow).ToList();
         var listRows = _guideRows.Where(FilterGuideRow).ToList();
         BindGuideViews(timelineRows, listRows);
-
-        // WPF can finish a previous ItemsControl generation after the model has been refreshed,
-        // leaving a detached control empty until another layout pass. Rebind once at render
-        // priority so the populated model cannot remain hidden behind the preparation overlay.
-        if (IsLoaded && (timelineRows.Count > 0 || listRows.Count > 0))
-            Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
-            {
-                if (GuideTimelineChannels is null || GuideTimelineRows is null || GuideList is null ||
-                    GuideEmptyState is null) return;
-                BindGuideViews(
-                    _guideTimelineRows.Where(FilterGuideTimelineRow).ToList(),
-                    _guideRows.Where(FilterGuideRow).ToList());
-            }));
     }
 
     private void BindGuideViews(
@@ -2061,6 +2123,11 @@ public partial class MainWindow : Window
     {
         var liveChannels = _channels.Count(channel => channel.Kind == ChannelKind.Live);
         var matched = _channels.Count(channel => channel.Kind == ChannelKind.Live && GetGuideProgrammes(channel).Count > 0);
+        UpdateGuideCoveragePresentation(matched, liveChannels);
+    }
+
+    private void UpdateGuideCoveragePresentation(int matched, int liveChannels)
+    {
         var percentage = liveChannels == 0 ? 0 : matched * 100d / liveChannels;
         var manualCount = _guideMappings.Count(mapping => _channels.Any(channel => channel.GuideMappingKey == mapping.Key));
         GuideCoverageText.Text = manualCount > 0
@@ -2070,7 +2137,7 @@ public partial class MainWindow : Window
 
     private void SetGuideReadyStatus(EpgSchedule schedule, string sourceLabel)
     {
-        var matched = _channels.Count(channel => channel.Kind == ChannelKind.Live && GetGuideProgrammes(channel).Count > 0);
+        var matched = _guideRows.Count(row => row.HasSchedule);
         GuideStatusText.Text = $"Updated {schedule.LoadedAt.ToLocalTime():h:mm tt} from {sourceLabel} • {schedule.ProgramCount:N0} programmes";
         FooterStatusDot.Fill = LiveBrush;
         FooterStatusText.Text = $"TV guide ready • {matched:N0} matched live channels";

@@ -105,7 +105,7 @@ internal static class GuideTimelineRenderProbe
 
             Set(window, "_guideMappings", new Dictionary<string, string>());
             Call(window, "ApplyGuideSchedule", schedule);
-            Drain(window);
+            WaitForGuidePresentation(window, 139, "manual mapping cleared");
             Check(!Get<IReadOnlyList<GuideTimelineRow>>(window, "_guideTimelineRows")[0].HasSchedule &&
                   !Find<TextBlock>(window, "GuideCoverageText").Text.Contains("manual"),
                 "Clearing a manual mapping did not update the rows and coverage synchronously.");
@@ -234,7 +234,7 @@ internal static class GuideTimelineRenderProbe
 
     private static void AssertRows(MainWindow window, IReadOnlyList<ChannelItem> expected, string scenario)
     {
-        Drain(window);
+        WaitForGuidePresentation(window, expected.Count, scenario);
         var channels = Find<ItemsControl>(window, "GuideTimelineChannels");
         var programmes = Find<ItemsControl>(window, "GuideTimelineRows");
         Check(channels.Items.Cast<GuideTimelineRow>().Select(row => row.Channel).SequenceEqual(expected), $"{scenario}: channel rows differ.");
@@ -258,6 +258,27 @@ internal static class GuideTimelineRenderProbe
                 $"{scenario}: no programme/placeholder cards were rendered.");
         }
         Console.WriteLine($"Guide render: {scenario}: {expected.Count} channel and programme rows; overlay {(expected.Count == 0 ? "visible" : "collapsed")}.");
+    }
+
+    private static void WaitForGuidePresentation(MainWindow window, int expectedRows, string scenario)
+    {
+        var expectedVersion = Get<int>(window, "_guidePresentationVersion");
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            Drain(window);
+            var rows = Get<IReadOnlyList<GuideTimelineRow>>(window, "_guideTimelineRows");
+            var channels = Find<ItemsControl>(window, "GuideTimelineChannels");
+            var programmes = Find<ItemsControl>(window, "GuideTimelineRows");
+            if (expectedVersion == Get<int>(window, "_appliedGuidePresentationVersion") &&
+                rows.Count > 0 &&
+                channels.Items.Count == expectedRows &&
+                programmes.Items.Count == expectedRows)
+                return;
+            Thread.Sleep(10);
+        }
+
+        throw new InvalidOperationException($"{scenario}: guide presentation did not complete within 10 seconds.");
     }
 
     private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
