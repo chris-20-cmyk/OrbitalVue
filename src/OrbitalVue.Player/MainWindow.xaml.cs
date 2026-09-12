@@ -131,6 +131,7 @@ public partial class MainWindow : Window
     private DateTimeOffset _lastSessionHeartbeatUtc = DateTimeOffset.MinValue;
     private bool _synchronizingGuideScroll;
     private int _guidePresentationVersion;
+    private int _appliedGuidePresentationVersion;
     private string _trackControlSignature = string.Empty;
     private string _learnedProfileSignature = string.Empty;
     private string? _selectedSignalRouteKey;
@@ -1855,7 +1856,7 @@ public partial class MainWindow : Window
                         GuideStatusText.Text = $"Guide presentation failed • {SafeGuideErrorMessage(task.Exception?.GetBaseException() ?? new InvalidOperationException())}";
                         return;
                     }
-                    ApplyGuidePresentation(schedule, channels, task.Result, now);
+                    ApplyGuidePresentation(schedule, channels, task.Result, now, version);
                 }));
             }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
@@ -1888,7 +1889,8 @@ public partial class MainWindow : Window
         EpgSchedule schedule,
         IReadOnlyList<ChannelItem> channels,
         GuidePresentation presentation,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        int version)
     {
         foreach (var channel in channels)
         {
@@ -1906,6 +1908,7 @@ public partial class MainWindow : Window
         if (generatedSchedules > 0)
             _ = _settingsStore.SaveAsync(_settings);
         _lastGuidePresentationUpdate = now;
+        Volatile.Write(ref _appliedGuidePresentationVersion, version);
         UpdateCurrentGuide(_currentChannel);
     }
 

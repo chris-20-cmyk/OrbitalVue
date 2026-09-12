@@ -262,6 +262,7 @@ internal static class GuideTimelineRenderProbe
 
     private static void WaitForGuidePresentation(MainWindow window, int expectedRows, string scenario)
     {
+        var expectedVersion = Get<int>(window, "_guidePresentationVersion");
         var deadline = DateTime.UtcNow.AddSeconds(10);
         while (DateTime.UtcNow < deadline)
         {
@@ -269,7 +270,8 @@ internal static class GuideTimelineRenderProbe
             var rows = Get<IReadOnlyList<GuideTimelineRow>>(window, "_guideTimelineRows");
             var channels = Find<ItemsControl>(window, "GuideTimelineChannels");
             var programmes = Find<ItemsControl>(window, "GuideTimelineRows");
-            if (rows.Count > 0 &&
+            if (expectedVersion == Get<int>(window, "_appliedGuidePresentationVersion") &&
+                rows.Count > 0 &&
                 channels.Items.Count == expectedRows &&
                 programmes.Items.Count == expectedRows)
                 return;
