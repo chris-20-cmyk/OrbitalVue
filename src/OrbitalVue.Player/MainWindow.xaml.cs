@@ -157,6 +157,9 @@ public partial class MainWindow : Window
     private DateTimeOffset _lastMediaPlaybackReportUtc = DateTimeOffset.MinValue;
     private bool _seekingRecording;
     private bool _allowFinalClose;
+    private bool _shutdownInProgress;
+    private bool _nativeShutdownComplete;
+    private bool _shutdownFinalizationComplete;
     private bool _hiddenToTray;
     private bool _trayNoticeShown;
     private readonly bool _backgroundLaunch;
@@ -8126,28 +8129,40 @@ public partial class MainWindow : Window
                 _allowFinalClose = false;
                 return;
             }
-            var snapshot = _dvrRecording.Stop("Recording stopped when OrbitalVue closed");
-            ApplyDvrScheduleState(snapshot);
-            _ = _settingsStore.SaveAsync(_settings);
         }
 
-        if (_isFullscreen) ExitFullscreen();
-        using var mediaStopCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-        var mediaStop = EndCurrentMediaPlaybackReporting(
-            _playback?.GetSnapshot(),
-            mediaStopCancellation.Token);
-        try
+        if (!_nativeShutdownComplete)
         {
-            mediaStop.GetAwaiter().GetResult();
+            e.Cancel = true;
+            if (!_shutdownInProgress)
+            {
+                _shutdownInProgress = true;
+                IsEnabled = false;
+                _ = CompleteNativeShutdownAsync();
+            }
+            return;
         }
-        catch
+
+        if (!_shutdownFinalizationComplete)
         {
-            // App shutdown must not be held open by an unavailable media server.
+            if (_isFullscreen) ExitFullscreen();
+            using var mediaStopCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            var mediaStop = EndCurrentMediaPlaybackReporting(
+                _playback?.GetSnapshot(),
+                mediaStopCancellation.Token);
+            try
+            {
+                mediaStop.GetAwaiter().GetResult();
+            }
+            catch
+            {
+                // App shutdown must not be held open by an unavailable media server.
+            }
+            _mediaCenterSource.CancelAllPlaybackReportingSessions();
+            ResetArtworkLoading();
+            if (!_automationRun)
+                _sessionRecoveryService.CompleteAsync(CreateSessionSnapshot()).GetAwaiter().GetResult();
         }
-        _mediaCenterSource.CancelAllPlaybackReportingSessions();
-        ResetArtworkLoading();
-        if (!_automationRun)
-            _sessionRecoveryService.CompleteAsync(CreateSessionSnapshot()).GetAwaiter().GetResult();
         _telemetryTimer.Stop();
         _fullscreenChromeTimer.Stop();
         _sleepTimer.Stop();
@@ -8175,6 +8190,66 @@ public partial class MainWindow : Window
             _trayIcon.ContextMenuStrip?.Dispose();
             _trayIcon.Dispose();
             _trayIcon = null;
+        }
+    }
+
+    private async Task CompleteNativeShutdownAsync()
+    {
+        try
+        {
+            var playbackSnapshot = _playback?.GetSnapshot();
+            using var mediaStopCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            var mediaStop = EndCurrentMediaPlaybackReporting(playbackSnapshot, mediaStopCancellation.Token);
+            var sessionSnapshot = !_automationRun ? CreateSessionSnapshot() : null;
+            var sessionComplete = sessionSnapshot is null
+                ? Task.CompletedTask
+                : _sessionRecoveryService.CompleteAsync(sessionSnapshot);
+
+            var snapshot = await Task.Run(() =>
+            {
+                _multiviewSession?.Dispose();
+                _playback?.Dispose();
+                _dvrRecording.Dispose();
+                return _dvrRecording.Snapshot;
+            });
+            try
+            {
+                await mediaStop;
+            }
+            catch
+            {
+                // Shutdown must not be held open by an unavailable media server.
+            }
+            _mediaCenterSource.CancelAllPlaybackReportingSessions();
+            await sessionComplete;
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                ApplyDvrScheduleState(snapshot);
+                _ = _settingsStore.SaveAsync(_settings);
+                if (_isFullscreen) ExitFullscreen();
+                ResetArtworkLoading();
+                _multiviewSession = null;
+                _playback = null;
+                _shutdownFinalizationComplete = true;
+                _nativeShutdownComplete = true;
+                IsEnabled = true;
+                Close();
+            });
+        }
+        catch (Exception exception)
+        {
+            _shutdownInProgress = false;
+            await Dispatcher.InvokeAsync(() =>
+            {
+                IsEnabled = true;
+                MessageBox.Show(
+                    this,
+                    $"OrbitalVue could not finish closing cleanly.\n\n{exception.Message}",
+                    "Shutdown failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            });
         }
     }
 
