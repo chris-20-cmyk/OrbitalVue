@@ -34,9 +34,9 @@
     "tv:build": "pnpm media-centers:build && pnpm --filter @orbitalvue/tv-web build"
   },
   "devDependencies": {
-    "@webos-tools/cli": "3.2.5",
+    "@webos-tools/cli": "3.2.6",
     "typescript": "7.0.2",
-    "vite": "8.2.2",
+    "vite": "8.3.0",
     "vitest": "4.1.11"
   }
 }
