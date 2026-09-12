@@ -947,7 +947,7 @@
                         </ListBox>
                     </Grid>
 
-                    <StackPanel x:Name="GuideEmptyState" Panel.ZIndex="10" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="430">
+                    <StackPanel x:Name="GuideEmptyState" Panel.ZIndex="10" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="430" Visibility="Collapsed">
                         <TextBlock HorizontalAlignment="Center" Foreground="{StaticResource AccentBrush}" FontSize="36" Text="▦" />
                         <TextBlock Margin="0,12,0,0" HorizontalAlignment="Center" FontFamily="{StaticResource DisplayFont}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="Guide data is being prepared" />
                         <TextBlock Margin="0,7,0,0" TextAlignment="Center" Foreground="{StaticResource TextMutedBrush}" FontSize="11" LineHeight="17" Text="OrbitalVue can use an advertised XMLTV source, a local file, or the verified US guide pack." TextWrapping="Wrap" />
