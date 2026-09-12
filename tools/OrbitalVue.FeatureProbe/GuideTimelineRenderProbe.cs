@@ -234,8 +234,16 @@ internal static class GuideTimelineRenderProbe
         Drain(window);
         var channels = Find<ItemsControl>(window, "GuideTimelineChannels");
         var programmes = Find<ItemsControl>(window, "GuideTimelineRows");
-        Check(channels.Items.Cast<GuideTimelineRow>().Select(row => row.Channel).SequenceEqual(expected), $"{scenario}: channel rows differ.");
-        Check(programmes.Items.Cast<GuideTimelineRow>().Select(row => row.Channel).SequenceEqual(expected), $"{scenario}: programme rows differ.");
+        
+        // Force complete rendering of the visual tree before accessing items
+        window.UpdateLayout();
+        Drain(window);
+        
+        var actualChannels = channels.Items.Cast<GuideTimelineRow>().Select(row => row.Channel).ToList();
+        var actualProgrammes = programmes.Items.Cast<GuideTimelineRow>().Select(row => row.Channel).ToList();
+        
+        Check(actualChannels.SequenceEqual(expected), $"{scenario}: channel rows differ. Expected {expected.Count}, got {actualChannels.Count}.");
+        Check(actualProgrammes.SequenceEqual(expected), $"{scenario}: programme rows differ. Expected {expected.Count}, got {actualProgrammes.Count}.");
         Check(Find<FrameworkElement>(window, "GuideEmptyState").Visibility == (expected.Count == 0 ? Visibility.Visible : Visibility.Collapsed),
             $"{scenario}: empty-state visibility disagrees with the filtered model.");
         if (expected.Count > 0)
