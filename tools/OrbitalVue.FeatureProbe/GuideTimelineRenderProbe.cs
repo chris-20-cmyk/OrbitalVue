@@ -104,6 +104,7 @@ internal static class GuideTimelineRenderProbe
 
             Set(window, "_guideMappings", new Dictionary<string, string>());
             Call(window, "ApplyGuideSchedule", schedule);
+            Drain(window);
             Check(!Get<IReadOnlyList<GuideTimelineRow>>(window, "_guideTimelineRows")[0].HasSchedule &&
                   !Find<TextBlock>(window, "GuideCoverageText").Text.Contains("manual"),
                 "Clearing a manual mapping did not update the rows and coverage synchronously.");
