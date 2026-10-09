@@ -117,6 +117,24 @@ jobs:
           if ($env:BASE_PACKAGE_NAME) {
             gh release download $env:BASE_RELEASE_TAG --repo $env:GITHUB_REPOSITORY --pattern $env:BASE_PACKAGE_NAME --dir $releaseDirectory
           }
+          
+          # Prepare signing parameters if certificate is available
+          $signParams = @()
+          $certPath = $null
+          if ($env:WINDOWS_CERTIFICATE_BASE64) {
+            Write-Host "Code signing certificate detected, packages will be signed"
+            $certPath = Join-Path $PWD 'temp-cert.pfx'
+            $certBytes = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64)
+            [IO.File]::WriteAllBytes($certPath, $certBytes)
+            
+            $signParams = @(
+              '--signParams',
+              "/f `"$certPath`" /p `"$env:WINDOWS_CERTIFICATE_PASSWORD`" /fd sha256 /tr http://timestamp.digicert.com /td sha256"
+            )
+          } else {
+            Write-Warning "No code signing certificate configured. Packages will not be signed."
+            Write-Warning "Production releases require WINDOWS_CERTIFICATE_BASE64 and WINDOWS_CERTIFICATE_PASSWORD secrets."
+          }
           .\.tools\vpk.exe pack `
             --packId Chris.OrbitalVue `
             --packVersion $env:PACKAGE_VERSION `
@@ -127,8 +145,17 @@ jobs:
             --icon src/OrbitalVue.Player/Assets/orbitalvue.ico `
             --releaseNotes RELEASE_NOTES.md `
             --outputDir $releaseDirectory `
-            --runtime win-x64
+            --runtime win-x64 `
+            @signParams
           if ($LASTEXITCODE -ne 0) { throw 'Velopack packaging failed.' }
+          
+          # Clean up certificate file if it was created
+          if ($certPath -and (Test-Path $certPath)) {
+            Remove-Item $certPath -Force
+          }
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.ORBITALVUE_WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.ORBITALVUE_WINDOWS_CERTIFICATE_PASSWORD }}
 
       - name: Verify package versions, contents, and update manifests
         shell: pwsh
