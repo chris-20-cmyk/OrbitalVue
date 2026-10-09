@@ -28,7 +28,7 @@ jobs:
       APPLE_BUILD_NUMBER: ${{ inputs.build_number }}
     steps:
       - name: Check out OrbitalVue
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Require exact App Store, premium, and software-license readiness
         shell: bash
@@ -418,7 +418,7 @@ jobs:
             "$profile_ledger"
 
       - name: Upload manual App Store Connect candidates
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: orbitalvue-apple-${{ inputs.marketing_version }}-${{ inputs.build_number }}
           if-no-files-found: error
